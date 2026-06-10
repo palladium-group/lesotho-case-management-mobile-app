@@ -27,7 +27,7 @@ if (flutterVersionName == null) {
 android {
 
 
-    compileSdkVersion flutter.compileSdkVersion
+    compileSdkVersion 36
     namespace 'org.palladiumdatafi.lncmis_mobile_app'
     ndkVersion'27.0.12077973'
     compileOptions {
