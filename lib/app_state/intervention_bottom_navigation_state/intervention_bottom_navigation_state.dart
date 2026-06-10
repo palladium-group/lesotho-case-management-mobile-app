@@ -35,7 +35,7 @@ class InterventionBottomNavigationState with ChangeNotifier {
         InterventionBottomNavigation.getInterventionNavigationButtons(
       activeInterventionProgram,
     );
-    if (['LCMIS Social Worker']
+    if (['LNCMIS Social Worker']
         .contains(implementingPartner)) {
       interventionBottomNavigations = interventionBottomNavigations
           .where((interventionBottomNavigation) =>

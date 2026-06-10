@@ -11,7 +11,7 @@ class DeviceConnectivityProvider {
   StreamSubscription checkChangeOfDeviceConnectionStatus(BuildContext context) {
     return Connectivity()
         .onConnectivityChanged
-        .listen((ConnectivityResult connectivityResult) async {
+        .listen((connectivityResult) async {
       if (connectivityResult == ConnectivityResult.wifi ||
           connectivityResult == ConnectivityResult.mobile) {
         Provider.of<DeviceConnectivityState>(context, listen: false)

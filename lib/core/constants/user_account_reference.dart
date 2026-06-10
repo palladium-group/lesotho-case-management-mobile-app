@@ -10,6 +10,6 @@ class UserAccountReference {
   static const String serviceProviderAttribute = 'DdnlE8kmIkT';
 
   static const List<String> superUserIpNames = ['Super user'];
-  static const String kbFacilitySocialWorker = 'LCMIS Social Worker';
+  static const String kbFacilitySocialWorker = 'LNCMIS Social Worker';
   static const List<String> allowedGroupsForDataEntry = <String>[];
 }
