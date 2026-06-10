@@ -52,8 +52,8 @@ class InterventionCard {
     return [
       InterventionCard(
         id: 'mgysd',
-        name: 'Lesotho Case Management Information System',
-        shortName: 'LCMIS',
+        name: 'LNCMIS Case Management',
+        shortName: 'LNCMIS',
         svgIcon: 'assets/icons/add-beneficiary.svg',
         enrollmentIcon: 'assets/icons/add-beneficiary.svg',
         primaryColor: const Color(0xFF0D47A1),
