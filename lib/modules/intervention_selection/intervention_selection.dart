@@ -95,7 +95,7 @@ class _InterventionSelectionState extends State<InterventionSelection> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              mgysd.name ?? 'LNCMIS Case Management',
+                              'Lesotho Case Management Infornmation System',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: mgysd.primaryColor,
@@ -118,7 +118,7 @@ class _InterventionSelectionState extends State<InterventionSelection> {
                               ),
                               onPressed: _openMgysd,
                               icon: const Icon(Icons.arrow_forward),
-                              label: const Text('Open LNCMIS'),
+                              label: const Text('Open LCMIS'),
                             ),
                           ],
                         ),

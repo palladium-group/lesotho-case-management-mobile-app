@@ -4,7 +4,9 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
-def localProperties = new Properties()
+def localProperties
+def properties = localProperties = new Properties()
+properties
 def localPropertiesFile = rootProject.file('local.properties')
 if (localPropertiesFile.exists()) {
     localPropertiesFile.withReader('UTF-8') { reader ->
@@ -27,7 +29,7 @@ if (flutterVersionName == null) {
 android {
 
 
-    compileSdkVersion flutter.compileSdkVersion
+    compileSdkVersion 36
     namespace 'org.palladiumdatafi.lncmis_mobile_app'
     ndkVersion'27.0.12077973'
     compileOptions {
