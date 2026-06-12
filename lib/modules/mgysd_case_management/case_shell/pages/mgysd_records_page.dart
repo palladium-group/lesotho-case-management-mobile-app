@@ -1,10 +1,10 @@
-
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:lncmis_mobile_app/core/offline_db/offline_db_provider.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/enrollment/pages/mgysd_new_case_page.dart';
+import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
 import 'package:sqflite/sqflite.dart';
 
 class MgysdRecordsPage extends StatefulWidget {
@@ -20,6 +20,7 @@ class MgysdRecordsPage extends StatefulWidget {
 }
 
 enum _RecordsFilter { all, reportedOnly, enrolledOnly }
+enum _RecordsSort { newest, oldest, clientName, priority }
 
 class _OfflineReportedCase {
   final String dbRowId;
@@ -71,6 +72,39 @@ class _OfflineReportedCase {
     return full.isEmpty ? '(No client name)' : full;
   }
 
+  String get statusLabel => isEnrolled ? 'Enrolled' : 'Reported only';
+
+  bool get hasConcern => concernReason.trim().isNotEmpty;
+  bool get hasIncidentNarrative => incidentDescription.trim().isNotEmpty;
+  bool get hasPhone => clientPhone.trim().isNotEmpty;
+
+  int get priorityScore {
+    if (!isEnrolled) return 100;
+    if (!hasPhone) return 35;
+    if (!hasIncidentNarrative) return 25;
+    return 10;
+  }
+
+  String get nextActionTitle {
+    if (!isEnrolled) return 'Open intake and assess household';
+    if (!hasPhone) return 'Review client contact details';
+    if (!hasIncidentNarrative) return 'Review report narrative';
+    return 'Report already linked to household case';
+  }
+
+  String get nextActionSubtitle {
+    if (!isEnrolled) {
+      return 'This report has not yet been converted into Intake and Initial Risk Assessment.';
+    }
+    if (!hasPhone) {
+      return 'The primary client has no phone number captured in the report.';
+    }
+    if (!hasIncidentNarrative) {
+      return 'The report has limited incident description. Verify details during follow-up.';
+    }
+    return 'Use the household case record for investigation, care planning and services.';
+  }
+
   String get searchableText {
     return [
       eventId,
@@ -82,7 +116,8 @@ class _OfflineReportedCase {
       concernReasonOther,
       incidentLocation,
       incidentDescription,
-      isEnrolled ? 'enrolled' : 'reported',
+      isEnrolled ? 'enrolled' : 'reported only not enrolled',
+      nextActionTitle,
     ].join(' ').toLowerCase();
   }
 }
@@ -90,31 +125,42 @@ class _OfflineReportedCase {
 class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
   late Future<List<_OfflineReportedCase>> _future;
   final TextEditingController _searchController = TextEditingController();
+
   _RecordsFilter _filter = _RecordsFilter.all;
+  _RecordsSort _sort = _RecordsSort.priority;
+  bool _showFilters = false;
 
-  static const String mgysdReportProgramUid = 'MGYSD_REPORT_EVENT_PROGRAM_UID';
-  static const String mgysdReportStageUid = 'MGYSD_REPORT_STAGE_UID';
+  static const String mgysdReportProgramUid =
+      MgysdDhis2Uids.reportedCasesEventProgram;
+  static const String mgysdReportStageUid =
+      MgysdDhis2Uids.reportedCasesProgramStage;
 
-  static const String deClientsJson = 'DE_CLIENTS_JSON';
-  static const String dePeopleInvolvedJson = 'DE_PEOPLE_INVOLVED_JSON';
+  static const String deClientsJson = MgysdDhis2Uids.deClientsJson;
+  static const String dePeopleInvolvedJson =
+      MgysdDhis2Uids.dePeopleInvolvedJson;
 
-  static const String deConcernReason = 'UJIrqEgPMn1';
-  static const String deConcernReasonOther = 'UJIrqEgPMn1_OTHER';
-  static const String deWhenHappened = 'DE_WHEN_HAPPENED';
-  static const String deIncidentLocation = 'DE_INCIDENT_LOCATION';
-  static const String deIncidentDescription = 'DE_INCIDENT_DESCRIPTION';
+  static const String deConcernReason = MgysdDhis2Uids.deConcernReason;
+  static const String deConcernReasonOther =
+      MgysdDhis2Uids.deConcernReasonOther;
+  static const String deWhenHappened = MgysdDhis2Uids.deWhenHappened;
+  static const String deIncidentLocation = MgysdDhis2Uids.deIncidentLocation;
+  static const String deIncidentDescription =
+      MgysdDhis2Uids.deIncidentDescription;
 
-  static const String deFirstClientFirstName = 'MGYSD_CLIENT_FIRST_NAME';
-  static const String deFirstClientLastName = 'MGYSD_CLIENT_LAST_NAME';
-  static const String deFirstClientPhone = 'MGYSD_CLIENT_PHONE';
-  static const String deFirstClientSex = 'MGYSD_CLIENT_SEX';
-  static const String deFirstClientDistrict = 'MGYSD_CLIENT_DISTRICT';
+  static const String deFirstClientFirstName =
+      MgysdDhis2Uids.deFirstClientFirstName;
+  static const String deFirstClientLastName =
+      MgysdDhis2Uids.deFirstClientLastName;
+  static const String deFirstClientPhone = MgysdDhis2Uids.deFirstClientPhone;
+  static const String deFirstClientSex = MgysdDhis2Uids.deFirstClientSex;
+  static const String deFirstClientDistrict =
+      MgysdDhis2Uids.deFirstClientDistrict;
 
   static const Map<String, String> concernLabels = {
     'PHYSICAL': 'Physical violence',
     'SEXUAL': 'Sexual violence',
     'SOCIO_ECON': 'Low socio-economic status',
-    'ISSN_NISSA': 'Exclusion/inclusion error',
+    'ISSN_NISSA': 'Exclusion / inclusion error',
     'WORK_EXP': 'Work exploitation',
     'EMOTIONAL': 'Emotional violence',
     'CHILD_MARRIAGE': 'Child marriage',
@@ -148,6 +194,18 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
     return dbClient;
   }
 
+  Future<bool> _tableExists(Database db, String tableName) async {
+    try {
+      final rows = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        [tableName],
+      );
+      return rows.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<Map<String, String>> _loadEventDataValuesAsMap(
       Database db,
       String eventId,
@@ -173,6 +231,10 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
   Future<Map<String, Map<String, String>>> _loadLinksByReportEvent(
       Database db,
       ) async {
+    if (!await _tableExists(db, 'mgysd_report_intake_link')) {
+      return <String, Map<String, String>>{};
+    }
+
     final rows = await db.query(
       'mgysd_report_intake_link',
       columns: ['reportEvent', 'tei', 'enrollment'],
@@ -333,17 +395,39 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
     }
 
     if (query.isNotEmpty) {
-      filtered = filtered.where(
-            (item) => item.searchableText.contains(query),
-      );
+      filtered = filtered.where((item) => item.searchableText.contains(query));
     }
 
-    return filtered.toList();
+    final list = filtered.toList();
+
+    switch (_sort) {
+      case _RecordsSort.oldest:
+        list.sort((a, b) => a.eventDate.compareTo(b.eventDate));
+        break;
+      case _RecordsSort.clientName:
+        list.sort(
+              (a, b) => a.displayName.toLowerCase().compareTo(
+            b.displayName.toLowerCase(),
+          ),
+        );
+        break;
+      case _RecordsSort.priority:
+        list.sort((a, b) {
+          final score = b.priorityScore.compareTo(a.priorityScore);
+          if (score != 0) return score;
+          return b.eventDate.compareTo(a.eventDate);
+        });
+        break;
+      case _RecordsSort.newest:
+      default:
+        list.sort((a, b) => b.eventDate.compareTo(a.eventDate));
+        break;
+    }
+
+    return list;
   }
 
   Future<void> _openEnrollForm(_OfflineReportedCase item) async {
-    if (item.isEnrolled) return;
-
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -361,6 +445,238 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
     );
 
     await _refresh();
+  }
+
+  void _showRecordDetails(_OfflineReportedCase item) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.86,
+          minChildSize: 0.45,
+          maxChildSize: 0.96,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Color(0xFFF7F9FC),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+              ),
+              child: ListView(
+                controller: scrollController,
+                padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
+                children: [
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: Colors.blueGrey.withOpacity(0.25),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 25,
+                        backgroundColor: (item.isEnrolled ? Colors.green : widget.color)
+                            .withOpacity(0.12),
+                        child: Icon(
+                          item.isEnrolled
+                              ? Icons.verified_user_outlined
+                              : Icons.report_outlined,
+                          color: item.isEnrolled ? Colors.green : widget.color,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          item.displayName,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  _decisionBox(item),
+                  const SizedBox(height: 14),
+                  _detailSection(
+                    title: 'Report Summary',
+                    icon: Icons.article_outlined,
+                    children: [
+                      _detailRow('Status', item.statusLabel),
+                      _detailRow('Report Date', item.eventDate),
+                      _detailRow('Incident Date', item.incidentDate),
+                      _detailRow('Concern', item.concernReason),
+                      _detailRow('Incident Location', item.incidentLocation),
+                      _detailRow('Report Event', item.eventId),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _detailSection(
+                    title: 'Client Details',
+                    icon: Icons.person_outline,
+                    children: [
+                      _detailRow('Client Name', item.displayName),
+                      _detailRow('Phone', item.clientPhone),
+                      _detailRow('Sex', item.clientSex),
+                      _detailRow('District', item.clientDistrict),
+                      _detailRow('Clients Captured', item.clientsCount.toString()),
+                      _detailRow(
+                        'People Involved',
+                        item.peopleInvolvedCount.toString(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _detailSection(
+                    title: 'Incident Description',
+                    icon: Icons.notes_outlined,
+                    children: [
+                      Text(
+                        item.incidentDescription.trim().isEmpty
+                            ? 'No incident description captured.'
+                            : item.incidentDescription.trim(),
+                        style: const TextStyle(
+                          color: Colors.black87,
+                          height: 1.4,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (item.isEnrolled) ...[
+                    const SizedBox(height: 12),
+                    _detailSection(
+                      title: 'Linked Intake / Household',
+                      icon: Icons.link_outlined,
+                      children: [
+                        _detailRow('Linked TEI', item.linkedTei),
+                        _detailRow('Linked Enrollment', item.linkedEnrollment),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close),
+                          label: const Text('Close'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: item.isEnrolled
+                              ? null
+                              : () async {
+                            Navigator.pop(context);
+                            await _openEnrollForm(item);
+                          },
+                          icon: Icon(
+                            item.isEnrolled
+                                ? Icons.check_circle_outline
+                                : Icons.edit_outlined,
+                          ),
+                          label: Text(
+                            item.isEnrolled ? 'Already Enrolled' : 'Edit / Intake',
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: widget.color,
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor:
+                            Colors.blueGrey.withOpacity(0.18),
+                            disabledForegroundColor: Colors.blueGrey,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _detailSection({
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.blueGrey.withOpacity(0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: widget.color),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    final v = value.trim().isEmpty ? 'Not captured' : value.trim();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 9),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 122,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.blueGrey,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              v,
+              style: TextStyle(
+                color: value.trim().isEmpty ? Colors.blueGrey : Colors.black87,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _chip(
@@ -393,7 +709,7 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
               style: TextStyle(
                 color: c,
                 fontSize: 12,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w800,
               ),
               overflow: TextOverflow.ellipsis,
             ),
@@ -410,25 +726,103 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
       label: Text(label),
       selected: selected,
       onSelected: (_) {
-        setState(() {
-          _filter = value;
-        });
+        setState(() => _filter = value);
       },
       selectedColor: widget.color.withOpacity(0.16),
       backgroundColor: Colors.white,
       labelStyle: TextStyle(
         color: selected ? widget.color : Colors.blueGrey,
-        fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+        fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
       ),
       side: BorderSide(
         color: selected
             ? widget.color.withOpacity(0.35)
             : Colors.blueGrey.withOpacity(0.16),
       ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(999),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+    );
+  }
+
+  Widget _summaryTile({
+    required String label,
+    required String value,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(11),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.07),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.12)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value,
+                    style: TextStyle(
+                      color: color,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Text(
+                    label,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.blueGrey,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  String _headerMessage({
+    required int reportedCount,
+    required int enrolledCount,
+  }) {
+    if (reportedCount > 0) {
+      return '$reportedCount reported case${reportedCount == 1 ? '' : 's'} still need Intake and Initial Risk Assessment.';
+    }
+    if (enrolledCount > 0) {
+      return 'All visible reports have been converted into household cases.';
+    }
+    return 'No report records are available yet.';
+  }
+
+  int _activeFilterCount() {
+    int count = 0;
+    if (_filter != _RecordsFilter.all) count++;
+    if (_sort != _RecordsSort.priority) count++;
+    if (_searchController.text.trim().isNotEmpty) count++;
+    return count;
+  }
+
+  String _sortLabel() {
+    switch (_sort) {
+      case _RecordsSort.newest:
+        return 'Newest';
+      case _RecordsSort.oldest:
+        return 'Oldest';
+      case _RecordsSort.clientName:
+        return 'Client name';
+      case _RecordsSort.priority:
+        return 'Priority';
+    }
   }
 
   Widget _searchAndFilters({
@@ -437,6 +831,8 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
     required int reportedCount,
     required int enrolledCount,
   }) {
+    final activeFilters = _activeFilterCount();
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
       decoration: BoxDecoration(
@@ -476,14 +872,199 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
             ),
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _filterChip('All $allCount', _RecordsFilter.all),
-              _filterChip('Reported $reportedCount', _RecordsFilter.reportedOnly),
-              _filterChip('Enrolled $enrolledCount', _RecordsFilter.enrolledOnly),
-            ],
+          Container(
+            padding: const EdgeInsets.all(13),
+            decoration: BoxDecoration(
+              color: widget.color.withOpacity(0.07),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: widget.color.withOpacity(0.12)),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor: widget.color.withOpacity(0.12),
+                      child: Icon(
+                        Icons.support_agent_outlined,
+                        color: widget.color,
+                      ),
+                    ),
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Records Decision Support',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 14.5,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _headerMessage(
+                              reportedCount: reportedCount,
+                              enrolledCount: enrolledCount,
+                            ),
+                            style: const TextStyle(
+                              color: Colors.blueGrey,
+                              fontSize: 12.4,
+                              height: 1.28,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 11),
+                Row(
+                  children: [
+                    _summaryTile(
+                      label: 'Reports',
+                      value: allCount.toString(),
+                      icon: Icons.assignment_outlined,
+                      color: widget.color,
+                    ),
+                    const SizedBox(width: 8),
+                    _summaryTile(
+                      label: 'Need Intake',
+                      value: reportedCount.toString(),
+                      icon: Icons.priority_high_outlined,
+                      color: Colors.deepOrange,
+                    ),
+                    const SizedBox(width: 8),
+                    _summaryTile(
+                      label: 'Enrolled',
+                      value: enrolledCount.toString(),
+                      icon: Icons.verified_user_outlined,
+                      color: Colors.green,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => setState(() => _showFilters = !_showFilters),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF7F9FC),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.blueGrey.withOpacity(0.12)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.filter_alt_outlined, color: widget.color, size: 19),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      activeFilters == 0
+                          ? 'Filters hidden • Sorted by ${_sortLabel()}'
+                          : '$activeFilters active filter${activeFilters == 1 ? '' : 's'} • ${_sortLabel()}',
+                      style: const TextStyle(
+                        color: Colors.blueGrey,
+                        fontSize: 12.8,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  if (activeFilters > 0)
+                    TextButton(
+                      onPressed: () {
+                        _searchController.clear();
+                        _filter = _RecordsFilter.all;
+                        _sort = _RecordsSort.priority;
+                        setState(() {});
+                      },
+                      child: const Text('Clear'),
+                    ),
+                  Icon(
+                    _showFilters
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    color: Colors.blueGrey,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            firstChild: const SizedBox.shrink(),
+            secondChild: Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _filterChip('All $allCount', _RecordsFilter.all),
+                      _filterChip(
+                        'Need Intake $reportedCount',
+                        _RecordsFilter.reportedOnly,
+                      ),
+                      _filterChip(
+                        'Enrolled $enrolledCount',
+                        _RecordsFilter.enrolledOnly,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: Colors.blueGrey.withOpacity(0.14),
+                      ),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<_RecordsSort>(
+                        value: _sort,
+                        isExpanded: true,
+                        icon: const Icon(Icons.keyboard_arrow_down),
+                        items: const [
+                          DropdownMenuItem(
+                            value: _RecordsSort.priority,
+                            child: Text('Sort by priority'),
+                          ),
+                          DropdownMenuItem(
+                            value: _RecordsSort.newest,
+                            child: Text('Sort by newest'),
+                          ),
+                          DropdownMenuItem(
+                            value: _RecordsSort.oldest,
+                            child: Text('Sort by oldest'),
+                          ),
+                          DropdownMenuItem(
+                            value: _RecordsSort.clientName,
+                            child: Text('Sort by client name'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() => _sort = value);
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            crossFadeState: _showFilters
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 180),
           ),
           const SizedBox(height: 8),
           Text(
@@ -529,9 +1110,55 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
     );
   }
 
+  Widget _decisionBox(_OfflineReportedCase item) {
+    final color = item.isEnrolled ? Colors.green : Colors.deepOrange;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(11),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.075),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: color.withOpacity(0.14)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.tips_and_updates_outlined, color: color, size: 19),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.nextActionTitle,
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13.2,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  item.nextActionSubtitle,
+                  style: const TextStyle(
+                    color: Colors.blueGrey,
+                    fontWeight: FontWeight.w600,
+                    height: 1.28,
+                    fontSize: 12.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _recordCard(_OfflineReportedCase item) {
     final statusColor = item.isEnrolled ? Colors.green : widget.color;
-    final statusText = item.isEnrolled ? 'Enrolled' : 'Reported';
+    final statusText = item.isEnrolled ? 'Enrolled' : 'Need Intake';
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -541,137 +1168,196 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
         border: Border.all(color: Colors.blueGrey.withOpacity(0.08)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.035),
+            color: Colors.black.withOpacity(item.isEnrolled ? 0.03 : 0.05),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: statusColor.withOpacity(0.12),
-                  child: Icon(
-                    item.isEnrolled
-                        ? Icons.verified_user_outlined
-                        : Icons.report_outlined,
-                    color: statusColor,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: () => _showRecordDetails(item),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: statusColor.withOpacity(0.12),
+                    child: Icon(
+                      item.isEnrolled
+                          ? Icons.verified_user_outlined
+                          : Icons.report_outlined,
+                      color: statusColor,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 11),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.displayName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 15.8,
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.displayName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 15.8,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        overflow: TextOverflow.ellipsis,
+                        const SizedBox(height: 5),
+                        Wrap(
+                          spacing: 7,
+                          runSpacing: 7,
+                          children: [
+                            _chip(statusText, color: statusColor, strong: true),
+                            if (item.eventDate.isNotEmpty)
+                              _chip(item.eventDate, icon: Icons.event_outlined),
+                            if (item.clientsCount > 1)
+                              _chip(
+                                '${item.clientsCount} clients',
+                                icon: Icons.groups_outlined,
+                              ),
+                            if (item.peopleInvolvedCount > 0)
+                              _chip(
+                                '${item.peopleInvolvedCount} involved',
+                                icon: Icons.people_outline,
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: 'Actions',
+                    onSelected: (value) async {
+                      if (value == 'view') {
+                        _showRecordDetails(item);
+                      }
+                      if (value == 'edit') {
+                        await _openEnrollForm(item);
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(
+                        value: 'view',
+                        child: Row(
+                          children: [
+                            Icon(Icons.visibility_outlined),
+                            SizedBox(width: 10),
+                            Text('View details'),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 5),
-                      Wrap(
-                        spacing: 7,
-                        runSpacing: 7,
-                        children: [
-                          _chip(statusText, color: statusColor, strong: true),
-                          if (item.eventDate.isNotEmpty)
-                            _chip(item.eventDate, icon: Icons.event_outlined),
-                          if (item.clientsCount > 1)
-                            _chip('${item.clientsCount} clients',
-                                icon: Icons.groups_outlined),
-                          if (item.peopleInvolvedCount > 0)
-                            _chip('${item.peopleInvolvedCount} involved',
-                                icon: Icons.people_outline),
-                        ],
+                      PopupMenuItem(
+                        value: 'edit',
+                        enabled: !item.isEnrolled,
+                        child: Row(
+                          children: [
+                            Icon(
+                              item.isEnrolled
+                                  ? Icons.lock_outline
+                                  : Icons.edit_outlined,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              item.isEnrolled
+                                  ? 'Already enrolled'
+                                  : 'Edit / open intake',
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (item.concernReason.isNotEmpty)
+                Text(
+                  item.concernReason,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: Colors.black87,
+                  ),
+                ),
+              if (item.incidentDescription.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  item.incidentDescription,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.blueGrey,
+                    height: 1.35,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ],
-            ),
-            const SizedBox(height: 12),
-            if (item.concernReason.isNotEmpty)
-              Text(
-                item.concernReason,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: Colors.black87,
-                ),
-              ),
-            if (item.incidentDescription.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(
-                item.incidentDescription,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.blueGrey,
-                  height: 1.35,
-                ),
-              ),
-            ],
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                if (item.clientPhone.isNotEmpty)
-                  _chip(item.clientPhone, icon: Icons.phone_outlined),
-                if (item.clientDistrict.isNotEmpty)
-                  _chip(item.clientDistrict, icon: Icons.place_outlined),
-                if (item.clientSex.isNotEmpty)
-                  _chip(item.clientSex, icon: Icons.person_outline),
-                if (item.incidentLocation.isNotEmpty)
-                  _chip(item.incidentLocation, icon: Icons.location_on_outlined),
-              ],
-            ),
-            if (item.isEnrolled && item.linkedTei.isNotEmpty) ...[
               const SizedBox(height: 10),
-              Text(
-                'Linked TEI: ${item.linkedTei}',
-                style: const TextStyle(color: Colors.blueGrey, fontSize: 12),
-                overflow: TextOverflow.ellipsis,
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (item.clientPhone.isNotEmpty)
+                    _chip(item.clientPhone, icon: Icons.phone_outlined),
+                  if (item.clientDistrict.isNotEmpty)
+                    _chip(item.clientDistrict, icon: Icons.place_outlined),
+                  if (item.clientSex.isNotEmpty)
+                    _chip(item.clientSex, icon: Icons.person_outline),
+                  if (item.incidentLocation.isNotEmpty)
+                    _chip(item.incidentLocation,
+                        icon: Icons.location_on_outlined),
+                ],
               ),
+              const SizedBox(height: 11),
+              _decisionBox(item),
+              const SizedBox(height: 2),
             ],
-            const SizedBox(height: 13),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: item.isEnrolled ? null : () => _openEnrollForm(item),
-                icon: Icon(
-                  item.isEnrolled
-                      ? Icons.check_circle_outline
-                      : Icons.how_to_reg_outlined,
-                ),
-                label: Text(item.isEnrolled ? 'Already Enrolled' : 'Open Intake'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: item.isEnrolled ? Colors.blueGrey : widget.color,
-                  side: BorderSide(
-                    color: item.isEnrolled
-                        ? Colors.blueGrey.withOpacity(0.25)
-                        : widget.color.withOpacity(0.45),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  textStyle: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _loadingState() {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: const [
+        SizedBox(height: 140),
+        Center(child: CircularProgressIndicator()),
+        SizedBox(height: 12),
+        Center(
+          child: Text(
+            'Loading reported cases...',
+            style: TextStyle(color: Colors.blueGrey),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _errorState(Object error) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.red.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.red.withOpacity(0.18)),
+          ),
+          child: Text(
+            'Failed to load MGYSD records:\n$error',
+            style: const TextStyle(color: Colors.red),
+          ),
+        ),
+      ],
     );
   }
 
@@ -683,41 +1369,11 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              children: const [
-                SizedBox(height: 140),
-                Center(child: CircularProgressIndicator()),
-                SizedBox(height: 12),
-                Center(
-                  child: Text(
-                    'Loading reported cases...',
-                    style: TextStyle(color: Colors.blueGrey),
-                  ),
-                ),
-              ],
-            );
+            return _loadingState();
           }
 
           if (snapshot.hasError) {
-            return ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.06),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: Colors.red.withOpacity(0.18)),
-                  ),
-                  child: Text(
-                    'Failed to load MGYSD records:\n${snapshot.error}',
-                    style: const TextStyle(color: Colors.red),
-                  ),
-                ),
-              ],
-            );
+            return _errorState(snapshot.error!);
           }
 
           final all = snapshot.data ?? <_OfflineReportedCase>[];
@@ -731,21 +1387,6 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
             );
           }
 
-          if (filtered.isEmpty) {
-            return ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              children: [
-                _searchAndFilters(
-                  allCount: all.length,
-                  filteredCount: 0,
-                  reportedCount: reportedCount,
-                  enrolledCount: enrolledCount,
-                ),
-                _emptyState('No reports match the selected filter or search.'),
-              ],
-            );
-          }
-
           return ListView(
             physics: const AlwaysScrollableScrollPhysics(),
             children: [
@@ -755,9 +1396,13 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
                 reportedCount: reportedCount,
                 enrolledCount: enrolledCount,
               ),
-              const SizedBox(height: 14),
-              ...filtered.map(_recordCard),
-              const SizedBox(height: 16),
+              if (filtered.isEmpty)
+                _emptyState('No reports match the selected filter or search.')
+              else ...[
+                const SizedBox(height: 14),
+                ...filtered.map(_recordCard),
+                const SizedBox(height: 16),
+              ],
             ],
           );
         },
