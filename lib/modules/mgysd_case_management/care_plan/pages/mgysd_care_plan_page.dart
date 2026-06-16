@@ -66,6 +66,7 @@ class _CareGoal {
   final String id;
   final String carePlanId;
   final String socialInvestigationId;
+  final String goalGroup;
   final String term;
   final String subjectId;
   final String subjectTei;
@@ -79,6 +80,7 @@ class _CareGoal {
     required this.id,
     required this.carePlanId,
     required this.socialInvestigationId,
+    required this.goalGroup,
     required this.term,
     required this.subjectId,
     required this.subjectTei,
@@ -94,6 +96,7 @@ class _CareGoal {
       'id': id,
       'carePlanId': carePlanId,
       'socialInvestigationId': socialInvestigationId,
+      'goalGroup': goalGroup,
       'term': term,
       'subjectId': subjectId,
       'subjectTei': subjectTei,
@@ -106,10 +109,14 @@ class _CareGoal {
   }
 
   static _CareGoal fromRow(Map<String, dynamic> row) {
+    final rawGoalGroup =
+    (row['goalGroup'] ?? row['ownerType'] ?? '').toString().trim();
+
     return _CareGoal(
       id: (row['id'] ?? '').toString(),
       carePlanId: (row['carePlanId'] ?? '').toString(),
       socialInvestigationId: (row['socialInvestigationId'] ?? '').toString(),
+      goalGroup: rawGoalGroup.isEmpty ? 'SOCIAL_WORKER' : rawGoalGroup,
       term: (row['term'] ?? row['goalCategory'] ?? '').toString(),
       subjectId: (row['subjectId'] ?? '').toString(),
       subjectTei: (row['subjectTei'] ?? row['targetTei'] ?? '').toString(),
@@ -122,23 +129,123 @@ class _CareGoal {
   }
 }
 
+
+class _DisagreementEntry {
+  final TextEditingController fullNamesController = TextEditingController();
+  final TextEditingController signatureController = TextEditingController();
+  final TextEditingController dateController = TextEditingController();
+  final TextEditingController reasonsController = TextEditingController();
+
+  _DisagreementEntry();
+
+  factory _DisagreementEntry.fromJson(Map<String, dynamic> json) {
+    final entry = _DisagreementEntry();
+    entry.fullNamesController.text = (json['fullNames'] ?? '').toString();
+    entry.signatureController.text = (json['signature'] ?? '').toString();
+    entry.dateController.text = (json['date'] ?? '').toString();
+    entry.reasonsController.text = (json['reasons'] ?? '').toString();
+    return entry;
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'fullNames': fullNamesController.text.trim(),
+      'signature': signatureController.text.trim(),
+      'date': dateController.text.trim(),
+      'reasons': reasonsController.text.trim(),
+    };
+  }
+
+  bool get hasValue {
+    return fullNamesController.text.trim().isNotEmpty ||
+        signatureController.text.trim().isNotEmpty ||
+        dateController.text.trim().isNotEmpty ||
+        reasonsController.text.trim().isNotEmpty;
+  }
+
+  void dispose() {
+    fullNamesController.dispose();
+    signatureController.dispose();
+    dateController.dispose();
+    reasonsController.dispose();
+  }
+}
+
+class _PlanParticipantEntry {
+  final TextEditingController firstNameController = TextEditingController();
+  final TextEditingController lastNameController = TextEditingController();
+  String role = '';
+
+  _PlanParticipantEntry();
+
+  factory _PlanParticipantEntry.fromJson(Map<String, dynamic> json) {
+    final entry = _PlanParticipantEntry();
+    entry.firstNameController.text = (json['firstName'] ?? '').toString();
+    entry.lastNameController.text = (json['lastName'] ?? '').toString();
+    entry.role = (json['role'] ?? '').toString();
+    return entry;
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'firstName': firstNameController.text.trim(),
+      'lastName': lastNameController.text.trim(),
+      'role': role.trim(),
+    };
+  }
+
+  bool get hasValue {
+    return firstNameController.text.trim().isNotEmpty ||
+        lastNameController.text.trim().isNotEmpty ||
+        role.trim().isNotEmpty;
+  }
+
+  void dispose() {
+    firstNameController.dispose();
+    lastNameController.dispose();
+  }
+}
+
 class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
   bool _loading = true;
   bool _saving = false;
   String _status = 'DRAFT';
 
-  final TextEditingController _shortGoalController = TextEditingController();
-  final TextEditingController _mediumGoalController = TextEditingController();
-  final TextEditingController _longGoalController = TextEditingController();
+  final Map<String, TextEditingController> _goalControllers = {};
+  final Map<String, String> _selectedSubjectIds = {};
 
-  String _selectedShortSubjectId = '';
-  String _selectedMediumSubjectId = '';
-  String _selectedLongSubjectId = '';
+  final TextEditingController _agreedPlanActionController =
+  TextEditingController();
+
+  final List<_PlanParticipantEntry> _planParticipants = [
+    _PlanParticipantEntry(),
+  ];
+
+  final List<_DisagreementEntry> _disagreementEntries = [
+    _DisagreementEntry(),
+  ];
 
   List<_GoalSubject> _subjects = [];
+  List<_CareGoal> _allGoals = [];
   List<_CareGoal> _shortGoals = [];
   List<_CareGoal> _mediumGoals = [];
   List<_CareGoal> _longGoals = [];
+
+  static const String goalGroupClient = 'CLIENT';
+  static const String goalGroupParentGuardian = 'PARENT_GUARDIAN';
+  static const String goalGroupSocialWorker = 'SOCIAL_WORKER';
+
+  static const List<String> goalGroups = [
+    goalGroupClient,
+    goalGroupParentGuardian,
+    goalGroupSocialWorker,
+  ];
+
+  static const List<String> goalTerms = [
+    'SHORT_TERM',
+    'MEDIUM_TERM',
+    'LONG_TERM',
+  ];
 
   static const String tableCarePlan = 'mgysd_care_plan';
   static const String tableCarePlanGoals = 'mgysd_care_plan_goal';
@@ -157,9 +264,20 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
 
   @override
   void dispose() {
-    _shortGoalController.dispose();
-    _mediumGoalController.dispose();
-    _longGoalController.dispose();
+    for (final controller in _goalControllers.values) {
+      controller.dispose();
+    }
+
+    _agreedPlanActionController.dispose();
+
+    for (final entry in _planParticipants) {
+      entry.dispose();
+    }
+
+    for (final entry in _disagreementEntries) {
+      entry.dispose();
+    }
+
     super.dispose();
   }
 
@@ -240,6 +358,9 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
         householdTei TEXT,
         planDate TEXT,
         status TEXT,
+        agreedPlanAction TEXT,
+        personsInvolvedInPlanJson TEXT,
+        disagreementDetailsJson TEXT,
         payloadJson TEXT,
         updatedAt TEXT,
         syncStatus TEXT
@@ -253,6 +374,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
         socialInvestigationId TEXT,
         caseId TEXT,
         householdTei TEXT,
+        goalGroup TEXT,
         term TEXT,
         subjectId TEXT,
         subjectTei TEXT,
@@ -302,12 +424,31 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       'createdAt',
       "ALTER TABLE $tableCarePlan ADD COLUMN createdAt TEXT DEFAULT ''",
     );
+    await _addColumnIfMissing(
+      db,
+      tableCarePlan,
+      'agreedPlanAction',
+      "ALTER TABLE $tableCarePlan ADD COLUMN agreedPlanAction TEXT DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      tableCarePlan,
+      'personsInvolvedInPlanJson',
+      "ALTER TABLE $tableCarePlan ADD COLUMN personsInvolvedInPlanJson TEXT DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      tableCarePlan,
+      'disagreementDetailsJson',
+      "ALTER TABLE $tableCarePlan ADD COLUMN disagreementDetailsJson TEXT DEFAULT ''",
+    );
 
     final goalColumns = <String, String>{
       'carePlanId': "ALTER TABLE $tableCarePlanGoals ADD COLUMN carePlanId TEXT DEFAULT ''",
       'socialInvestigationId': "ALTER TABLE $tableCarePlanGoals ADD COLUMN socialInvestigationId TEXT DEFAULT ''",
       'caseId': "ALTER TABLE $tableCarePlanGoals ADD COLUMN caseId TEXT DEFAULT ''",
       'householdTei': "ALTER TABLE $tableCarePlanGoals ADD COLUMN householdTei TEXT DEFAULT ''",
+      'goalGroup': "ALTER TABLE $tableCarePlanGoals ADD COLUMN goalGroup TEXT DEFAULT 'SOCIAL_WORKER'",
       'term': "ALTER TABLE $tableCarePlanGoals ADD COLUMN term TEXT DEFAULT ''",
       'subjectId': "ALTER TABLE $tableCarePlanGoals ADD COLUMN subjectId TEXT DEFAULT ''",
       'subjectTei': "ALTER TABLE $tableCarePlanGoals ADD COLUMN subjectTei TEXT DEFAULT ''",
@@ -319,6 +460,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       'updatedAt': "ALTER TABLE $tableCarePlanGoals ADD COLUMN updatedAt TEXT DEFAULT ''",
       'syncStatus': "ALTER TABLE $tableCarePlanGoals ADD COLUMN syncStatus TEXT DEFAULT 'not-synced'",
       // Compatibility with previous service-provision reader.
+      'ownerType': "ALTER TABLE $tableCarePlanGoals ADD COLUMN ownerType TEXT DEFAULT 'SOCIAL_WORKER'",
       'goalCategory': "ALTER TABLE $tableCarePlanGoals ADD COLUMN goalCategory TEXT DEFAULT ''",
       'targetType': "ALTER TABLE $tableCarePlanGoals ADD COLUMN targetType TEXT DEFAULT ''",
       'targetTei': "ALTER TABLE $tableCarePlanGoals ADD COLUMN targetTei TEXT DEFAULT ''",
@@ -458,6 +600,69 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
 
     if (rows.isNotEmpty) {
       _status = (rows.first['status'] ?? 'DRAFT').toString();
+
+      final agreedPlanAction =
+      (rows.first['agreedPlanAction'] ?? '').toString().trim();
+
+      if (agreedPlanAction.isNotEmpty) {
+        _agreedPlanActionController.text = agreedPlanAction;
+      } else {
+        final payloadJson = (rows.first['payloadJson'] ?? '').toString();
+
+        if (payloadJson.trim().isNotEmpty) {
+          try {
+            final payload = jsonDecode(payloadJson);
+            final savedAgreedPlanAction =
+            (payload['agreedPlanAction'] ?? '').toString();
+
+            if (savedAgreedPlanAction.trim().isNotEmpty) {
+              _agreedPlanActionController.text =
+                  savedAgreedPlanAction.trim();
+            }
+          } catch (_) {}
+        }
+      }
+
+      final personsInvolvedInPlanJson =
+      (rows.first['personsInvolvedInPlanJson'] ?? '').toString().trim();
+
+      if (personsInvolvedInPlanJson.isNotEmpty) {
+        _loadPlanParticipants(personsInvolvedInPlanJson);
+      } else {
+        final payloadJson = (rows.first['payloadJson'] ?? '').toString();
+
+        if (payloadJson.trim().isNotEmpty) {
+          try {
+            final payload = jsonDecode(payloadJson);
+            final savedPersonsInvolved =
+            payload['personsInvolvedInMakingPlan'];
+
+            if (savedPersonsInvolved is List) {
+              _loadPlanParticipants(jsonEncode(savedPersonsInvolved));
+            }
+          } catch (_) {}
+        }
+      }
+
+      final disagreementDetailsJson =
+      (rows.first['disagreementDetailsJson'] ?? '').toString().trim();
+
+      if (disagreementDetailsJson.isNotEmpty) {
+        _loadDisagreementDetails(disagreementDetailsJson);
+      } else {
+        final payloadJson = (rows.first['payloadJson'] ?? '').toString();
+
+        if (payloadJson.trim().isNotEmpty) {
+          try {
+            final payload = jsonDecode(payloadJson);
+            final savedDisagreementDetails = payload['disagreementDetails'];
+
+            if (savedDisagreementDetails is List) {
+              _loadDisagreementDetails(jsonEncode(savedDisagreementDetails));
+            }
+          } catch (_) {}
+        }
+      }
     }
 
     final goalRows = await db.query(
@@ -468,6 +673,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     );
 
     final allGoals = goalRows.map(_CareGoal.fromRow).toList();
+    _allGoals = allGoals;
     _shortGoals = allGoals.where((g) => g.term == 'SHORT_TERM').toList();
     _mediumGoals = allGoals.where((g) => g.term == 'MEDIUM_TERM').toList();
     _longGoals = allGoals.where((g) => g.term == 'LONG_TERM').toList();
@@ -485,9 +691,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       setState(() {
         _subjects = subjects;
         if (_subjects.isNotEmpty) {
-          _selectedShortSubjectId = _subjects.first.id;
-          _selectedMediumSubjectId = _subjects.first.id;
-          _selectedLongSubjectId = _subjects.first.id;
+          _initialiseSelectedSubjects();
         }
         _loading = false;
       });
@@ -518,7 +722,14 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     }
   }
 
+  List<_CareGoal> _goalsByGroupAndTerm(String goalGroup, String term) {
+    return _allGoals
+        .where((goal) => goal.goalGroup == goalGroup && goal.term == term)
+        .toList();
+  }
+
   Future<void> _addGoal({
+    required String goalGroup,
     required String term,
     required TextEditingController controller,
     required String selectedSubjectId,
@@ -550,6 +761,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
         id: id,
         carePlanId: _carePlanId,
         socialInvestigationId: _socialInvestigationId,
+        goalGroup: goalGroup,
         term: term,
         subjectId: subject.id,
         subjectTei: subject.tei,
@@ -568,6 +780,8 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
           'socialInvestigationId': goal.socialInvestigationId,
           'caseId': _caseRootId,
           'householdTei': householdTei,
+          'goalGroup': goal.goalGroup,
+          'ownerType': goal.goalGroup,
           'term': goal.term,
           'goalCategory': goal.term,
           'subjectId': goal.subjectId,
@@ -587,9 +801,9 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
 
-      await _saveCarePlanShell(db: db, status: _status);
       controller.clear();
       await _loadCarePlan(db);
+      await _saveCarePlanShell(db: db, status: _status);
 
       if (!mounted) return;
       setState(() => _saving = false);
@@ -612,6 +826,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       );
 
       await _loadCarePlan(db);
+      await _saveCarePlanShell(db: db, status: _status);
 
       if (!mounted) return;
       setState(() => _saving = false);
@@ -669,11 +884,12 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       'clientName': widget.clientName,
       'status': status,
       'carePlanStatus': lifecycleStatus,
-      'socialWorkerGoals': {
-        'shortTerm': _shortGoals.map((g) => g.toJson()).toList(),
-        'mediumTerm': _mediumGoals.map((g) => g.toJson()).toList(),
-        'longTerm': _longGoals.map((g) => g.toJson()).toList(),
-      },
+      'agreedPlanAction': _agreedPlanActionController.text.trim(),
+      'personsInvolvedInMakingPlan': _planParticipantsPayload(),
+      'disagreementDetails': _disagreementDetailsPayload(),
+      'clientGoals': _payloadForGoalGroup(goalGroupClient),
+      'parentGuardianGoals': _payloadForGoalGroup(goalGroupParentGuardian),
+      'socialWorkerGoals': _payloadForGoalGroup(goalGroupSocialWorker),
       'updatedAt': nowIso,
     };
 
@@ -688,6 +904,9 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
         'planDate': nowIso.substring(0, 10),
         'status': status,
         'carePlanStatus': lifecycleStatus,
+        'agreedPlanAction': _agreedPlanActionController.text.trim(),
+        'personsInvolvedInPlanJson': jsonEncode(_planParticipantsPayload()),
+        'disagreementDetailsJson': jsonEncode(_disagreementDetailsPayload()),
         'payloadJson': jsonEncode(payload),
         'createdAt': createdAt,
         'updatedAt': nowIso,
@@ -719,8 +938,8 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
   }
 
   Future<void> _markComplete() async {
-    if (_shortGoals.isEmpty && _mediumGoals.isEmpty && _longGoals.isEmpty) {
-      _showSnack('Please add at least one social worker goal.');
+    if (_allGoals.isEmpty) {
+      _showSnack('Please add at least one care plan goal.');
       return;
     }
 
@@ -795,46 +1014,214 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     }
   }
 
-  TextEditingController _controllerForTerm(String term) {
-    switch (term) {
-      case 'SHORT_TERM':
-        return _shortGoalController;
-      case 'MEDIUM_TERM':
-        return _mediumGoalController;
-      case 'LONG_TERM':
-        return _longGoalController;
-      default:
-        return _shortGoalController;
-    }
+  String _goalKey(String goalGroup, String term) => '$goalGroup::$term';
+
+  TextEditingController _controllerForGoal(String goalGroup, String term) {
+    final key = _goalKey(goalGroup, term);
+    return _goalControllers.putIfAbsent(key, () => TextEditingController());
   }
 
-  String _selectedSubjectForTerm(String term) {
-    switch (term) {
-      case 'SHORT_TERM':
-        return _selectedShortSubjectId;
-      case 'MEDIUM_TERM':
-        return _selectedMediumSubjectId;
-      case 'LONG_TERM':
-        return _selectedLongSubjectId;
-      default:
-        return '';
+  String _selectedSubjectForGoal(String goalGroup, String term) {
+    final key = _goalKey(goalGroup, term);
+    final selected = _selectedSubjectIds[key] ?? '';
+
+    if (_subjects.any((subject) => subject.id == selected)) {
+      return selected;
     }
+
+    final fallback = _defaultSubjectIdForGoalGroup(goalGroup);
+    if (fallback.isNotEmpty) {
+      _selectedSubjectIds[key] = fallback;
+    }
+    return fallback;
   }
 
-  void _setSelectedSubjectForTerm(String term, String value) {
+  void _setSelectedSubjectForGoal(
+      String goalGroup,
+      String term,
+      String value,
+      ) {
     setState(() {
-      switch (term) {
-        case 'SHORT_TERM':
-          _selectedShortSubjectId = value;
-          break;
-        case 'MEDIUM_TERM':
-          _selectedMediumSubjectId = value;
-          break;
-        case 'LONG_TERM':
-          _selectedLongSubjectId = value;
-          break;
-      }
+      _selectedSubjectIds[_goalKey(goalGroup, term)] = value;
     });
+  }
+
+  void _initialiseSelectedSubjects() {
+    for (final goalGroup in goalGroups) {
+      final fallback = _defaultSubjectIdForGoalGroup(goalGroup);
+      for (final term in goalTerms) {
+        _selectedSubjectIds.putIfAbsent(_goalKey(goalGroup, term), () => fallback);
+      }
+    }
+  }
+
+  String _defaultSubjectIdForGoalGroup(String goalGroup) {
+    if (_subjects.isEmpty) return '';
+
+    bool roleContains(_GoalSubject subject, List<String> values) {
+      final role = subject.displayRole.toUpperCase();
+      return values.any((value) => role.contains(value));
+    }
+
+    if (goalGroup == goalGroupClient) {
+      for (final subject in _subjects) {
+        if (roleContains(subject, ['CLIENT'])) return subject.id;
+      }
+      for (final subject in _subjects) {
+        if (!subject.isHousehold) return subject.id;
+      }
+    }
+
+    if (goalGroup == goalGroupParentGuardian) {
+      for (final subject in _subjects) {
+        if (roleContains(subject, [
+          'PARENT',
+          'GUARDIAN',
+          'MOTHER',
+          'FATHER',
+          'CAREGIVER',
+        ])) {
+          return subject.id;
+        }
+      }
+    }
+
+    return _subjects.first.id;
+  }
+
+  Map<String, dynamic> _payloadForGoalGroup(String goalGroup) {
+    return {
+      'shortTerm': _goalsByGroupAndTerm(goalGroup, 'SHORT_TERM')
+          .map((g) => g.toJson())
+          .toList(),
+      'mediumTerm': _goalsByGroupAndTerm(goalGroup, 'MEDIUM_TERM')
+          .map((g) => g.toJson())
+          .toList(),
+      'longTerm': _goalsByGroupAndTerm(goalGroup, 'LONG_TERM')
+          .map((g) => g.toJson())
+          .toList(),
+    };
+  }
+
+
+  List<Map<String, dynamic>> _planParticipantsPayload() {
+    return _planParticipants
+        .where((entry) => entry.hasValue)
+        .map((entry) => entry.toJson())
+        .toList();
+  }
+
+  void _loadPlanParticipants(String rawJson) {
+    if (rawJson.trim().isEmpty) return;
+
+    try {
+      final decoded = jsonDecode(rawJson);
+
+      if (decoded is! List) return;
+
+      final loadedEntries = decoded
+          .whereType<Map>()
+          .map(
+            (entry) => _PlanParticipantEntry.fromJson(
+          Map<String, dynamic>.from(entry),
+        ),
+      )
+          .toList();
+
+      if (loadedEntries.isEmpty) return;
+
+      for (final entry in _planParticipants) {
+        entry.dispose();
+      }
+
+      _planParticipants
+        ..clear()
+        ..addAll(loadedEntries);
+    } catch (_) {}
+  }
+
+  void _addPlanParticipant() {
+    setState(() {
+      _planParticipants.add(_PlanParticipantEntry());
+    });
+  }
+
+  void _removePlanParticipant(int index) {
+    if (_planParticipants.length <= 1) return;
+
+    setState(() {
+      final removed = _planParticipants.removeAt(index);
+      removed.dispose();
+    });
+  }
+
+  List<Map<String, dynamic>> _disagreementDetailsPayload() {
+    return _disagreementEntries
+        .where((entry) => entry.hasValue)
+        .map((entry) => entry.toJson())
+        .toList();
+  }
+
+  void _loadDisagreementDetails(String rawJson) {
+    if (rawJson.trim().isEmpty) return;
+
+    try {
+      final decoded = jsonDecode(rawJson);
+
+      if (decoded is! List) return;
+
+      final loadedEntries = decoded
+          .whereType<Map>()
+          .map(
+            (entry) => _DisagreementEntry.fromJson(
+          Map<String, dynamic>.from(entry),
+        ),
+      )
+          .toList();
+
+      if (loadedEntries.isEmpty) return;
+
+      for (final entry in _disagreementEntries) {
+        entry.dispose();
+      }
+
+      _disagreementEntries
+        ..clear()
+        ..addAll(loadedEntries);
+    } catch (_) {}
+  }
+
+  void _addDisagreementEntry() {
+    setState(() {
+      _disagreementEntries.add(_DisagreementEntry());
+    });
+  }
+
+  void _removeDisagreementEntry(int index) {
+    if (_disagreementEntries.length <= 1) return;
+
+    setState(() {
+      final removed = _disagreementEntries.removeAt(index);
+      removed.dispose();
+    });
+  }
+
+  Future<void> _pickDisagreementDate(_DisagreementEntry entry) async {
+    final now = DateTime.now();
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: DateTime(1900),
+      lastDate: DateTime(now.year + 5),
+    );
+
+    if (picked == null) return;
+
+    entry.dateController.text =
+    '${picked.year.toString().padLeft(4, '0')}-'
+        '${picked.month.toString().padLeft(2, '0')}-'
+        '${picked.day.toString().padLeft(2, '0')}';
   }
 
   Widget _statusChip() {
@@ -925,8 +1312,11 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     );
   }
 
-  Widget _subjectDropdown({required String term}) {
-    final selected = _selectedSubjectForTerm(term);
+  Widget _subjectDropdown({
+    required String goalGroup,
+    required String term,
+  }) {
+    final selected = _selectedSubjectForGoal(goalGroup, term);
     final safeValue = _subjects.any((subject) => subject.id == selected)
         ? selected
         : (_subjects.isEmpty ? null : _subjects.first.id);
@@ -945,7 +1335,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       }).toList(),
       onChanged: (value) {
         if (value == null) return;
-        _setSelectedSubjectForTerm(term, value);
+        _setSelectedSubjectForGoal(goalGroup, term, value);
       },
       decoration: InputDecoration(
         labelText: 'Goal is for',
@@ -957,16 +1347,19 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     );
   }
 
-  Widget _goalInputCard(String term) {
-    final controller = _controllerForTerm(term);
-    final selectedSubject = _selectedSubjectForTerm(term);
+  Widget _goalInputCard({
+    required String goalGroup,
+    required String term,
+  }) {
+    final controller = _controllerForGoal(goalGroup, term);
+    final selectedSubject = _selectedSubjectForGoal(goalGroup, term);
 
     return _card(
       color: const Color(0xFFFBFCFE),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _subjectDropdown(term: term),
+          _subjectDropdown(goalGroup: goalGroup, term: term),
           const SizedBox(height: 10),
           TextFormField(
             controller: controller,
@@ -989,6 +1382,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
               onPressed: _saving
                   ? null
                   : () => _addGoal(
+                goalGroup: goalGroup,
                 term: term,
                 controller: controller,
                 selectedSubjectId: selectedSubject,
@@ -1083,10 +1477,53 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     );
   }
 
-  Widget _goalTermSection(String term) {
-    final goals = _goalsByTerm(term);
+  String _goalGroupTitle(String goalGroup) {
+    switch (goalGroup) {
+      case goalGroupClient:
+        return 'Client’s goals';
+      case goalGroupParentGuardian:
+        return 'Parent/Guardian goals (if appropriate)';
+      case goalGroupSocialWorker:
+        return 'Social worker goals';
+      default:
+        return goalGroup;
+    }
+  }
+
+  String _goalGroupSubtitle(String goalGroup) {
+    switch (goalGroup) {
+      case goalGroupClient:
+        return 'Goals agreed with or directly related to the client.';
+      case goalGroupParentGuardian:
+        return 'Goals for the parent, caregiver, or guardian where relevant.';
+      case goalGroupSocialWorker:
+        return 'Goals and actions planned by the social worker.';
+      default:
+        return '';
+    }
+  }
+
+  IconData _goalGroupIcon(String goalGroup) {
+    switch (goalGroup) {
+      case goalGroupClient:
+        return Icons.person_outline;
+      case goalGroupParentGuardian:
+        return Icons.groups_2_outlined;
+      case goalGroupSocialWorker:
+        return Icons.badge_outlined;
+      default:
+        return Icons.track_changes_outlined;
+    }
+  }
+
+  Widget _goalTermSection({
+    required String goalGroup,
+    required String term,
+  }) {
+    final goals = _goalsByGroupAndTerm(goalGroup, term);
 
     return _card(
+      color: const Color(0xFFFBFCFE),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1100,7 +1537,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
                 : Icons.flag_outlined,
           ),
           const SizedBox(height: 12),
-          _goalInputCard(term),
+          _goalInputCard(goalGroup: goalGroup, term: term),
           if (goals.isEmpty)
             Container(
               width: double.infinity,
@@ -1116,6 +1553,300 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
             )
           else
             Column(children: goals.map(_goalTile).toList()),
+        ],
+      ),
+    );
+  }
+
+  Widget _goalGroupSection(String goalGroup) {
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle(
+            title: _goalGroupTitle(goalGroup),
+            subtitle: _goalGroupSubtitle(goalGroup),
+            icon: _goalGroupIcon(goalGroup),
+          ),
+          const SizedBox(height: 14),
+          _goalTermSection(goalGroup: goalGroup, term: 'SHORT_TERM'),
+          _goalTermSection(goalGroup: goalGroup, term: 'MEDIUM_TERM'),
+          _goalTermSection(goalGroup: goalGroup, term: 'LONG_TERM'),
+        ],
+      ),
+    );
+  }
+
+
+  Widget _agreedPlanActionSection() {
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle(
+            title: 'Agreed plan of action (support plan - summary)',
+            subtitle:
+            'Give deliverables, milestone outcomes, and results for interval review.',
+            icon: Icons.fact_check_outlined,
+          ),
+          const SizedBox(height: 14),
+          TextFormField(
+            controller: _agreedPlanActionController,
+            maxLines: 5,
+            textInputAction: TextInputAction.newline,
+            decoration: InputDecoration(
+              labelText: 'Agreed plan of action',
+              hintText:
+              'Give deliverables and milestone outcomes and results for interval review...',
+              alignLabelWithHint: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              filled: true,
+              fillColor: const Color(0xFFF9FBFD),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _personsInvolvedInPlanSection() {
+    const roleOptions = ['Mother', 'Father', 'Daughter'];
+
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle(
+            title: 'Persons involved in making the plan',
+            subtitle: 'Record people who participated in making this care plan.',
+            icon: Icons.people_alt_outlined,
+          ),
+          const SizedBox(height: 14),
+          ..._planParticipants.asMap().entries.map((entryMap) {
+            final index = entryMap.key;
+            final entry = entryMap.value;
+            final safeRole =
+            roleOptions.contains(entry.role) ? entry.role : null;
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFBFCFE),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Colors.blueGrey.withOpacity(0.10),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Person ${index + 1}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: entry.firstNameController,
+                          decoration: InputDecoration(
+                            labelText: 'First name',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            filled: true,
+                            fillColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextFormField(
+                          controller: entry.lastNameController,
+                          decoration: InputDecoration(
+                            labelText: 'Last name',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            filled: true,
+                            fillColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: safeRole,
+                    isExpanded: true,
+                    items: roleOptions.map((role) {
+                      return DropdownMenuItem<String>(
+                        value: role,
+                        child: Text(role),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        entry.role = value ?? '';
+                      });
+                    },
+                    decoration: InputDecoration(
+                      labelText: 'Relationship to Client',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                  ),
+                  if (_planParticipants.length > 1) ...[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: () => _removePlanParticipant(index),
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('Remove'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.redAccent,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }).toList(),
+          TextButton.icon(
+            onPressed: _addPlanParticipant,
+            icon: const Icon(Icons.add),
+            label: const Text('Add another person'),
+            style: TextButton.styleFrom(
+              foregroundColor: widget.color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _disagreementDetailsSection() {
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle(
+            title: 'Details of anyone who disagrees with the plan and why',
+            subtitle:
+            'Record the person, signature, date, and reasons for disagreement.',
+            icon: Icons.report_problem_outlined,
+          ),
+          const SizedBox(height: 14),
+          ..._disagreementEntries.asMap().entries.map((entryMap) {
+            final index = entryMap.key;
+            final entry = entryMap.value;
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFBFCFE),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Colors.blueGrey.withOpacity(0.10),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Person ${index + 1}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: entry.fullNamesController,
+                          decoration: InputDecoration(
+                            labelText: 'First name',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            filled: true,
+                            fillColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextFormField(
+                          controller: entry.signatureController,
+                          decoration: InputDecoration(
+                            labelText: 'Last name',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            filled: true,
+                            fillColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: entry.reasonsController,
+                    maxLines: 4,
+                    decoration: InputDecoration(
+                      labelText: 'Reasons',
+                      hintText:
+                      'Explain why this person disagrees with the plan...',
+                      alignLabelWithHint: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                  ),
+                  if (_disagreementEntries.length > 1) ...[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: () => _removeDisagreementEntry(index),
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('Remove'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.redAccent,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }).toList(),
+          TextButton.icon(
+            onPressed: _addDisagreementEntry,
+            icon: const Icon(Icons.add),
+            label: const Text('Add another person'),
+            style: TextButton.styleFrom(
+              foregroundColor: widget.color,
+            ),
+          ),
         ],
       ),
     );
@@ -1324,7 +2055,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
 
   @override
   Widget build(BuildContext context) {
-    final totalGoals = _shortGoals.length + _mediumGoals.length + _longGoals.length;
+    final totalGoals = _allGoals.length;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9FC),
@@ -1388,9 +2119,12 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
               if (_subjects.isEmpty)
                 _emptySubjects()
               else ...[
-                _goalTermSection('SHORT_TERM'),
-                _goalTermSection('MEDIUM_TERM'),
-                _goalTermSection('LONG_TERM'),
+                _goalGroupSection(goalGroupClient),
+                _goalGroupSection(goalGroupParentGuardian),
+                _goalGroupSection(goalGroupSocialWorker),
+                _agreedPlanActionSection(),
+                _personsInvolvedInPlanSection(),
+                _disagreementDetailsSection(),
               ],
               const SizedBox(height: 4),
               _bottomButtons(),
