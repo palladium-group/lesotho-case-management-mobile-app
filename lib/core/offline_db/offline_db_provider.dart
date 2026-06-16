@@ -136,7 +136,9 @@ class OfflineDbProvider {
 
     "ALTER TABLE mgysd_service_provision ADD COLUMN parentCaseId TEXT DEFAULT ''",
     "ALTER TABLE mgysd_service_provision ADD COLUMN rootCaseId TEXT DEFAULT ''",
-    "ALTER TABLE mgysd_service_provision ADD COLUMN stageKey TEXT DEFAULT ''"
+    "ALTER TABLE mgysd_service_provision ADD COLUMN stageKey TEXT DEFAULT ''",
+    ////
+    "ALTER TABLE mgysd_monitoring ADD COLUMN personsInterviewedJson TEXT DEFAULT ''",
   ];
 
   Future<Database?> get db async {
@@ -153,7 +155,7 @@ class OfflineDbProvider {
 
     return await openDatabase(
       path,
-      version: 105,
+      version: 106,
       onUpgrade: onUpgrade,
       onConfigure: onConfigure,
       onCreate: onCreate,

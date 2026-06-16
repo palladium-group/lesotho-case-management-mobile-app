@@ -86,6 +86,35 @@ class _GoalReviewControllers {
   }
 }
 
+// CHANGE 1 — _PersonInterviewedEntry class
+class _PersonInterviewedEntry {
+  final String localId;
+  final TextEditingController nameController;
+  final TextEditingController roleController;
+  final TextEditingController purposeController;
+
+  _PersonInterviewedEntry({
+    required this.localId,
+    String name = '',
+    String role = '',
+    String purpose = '',
+  })  : nameController = TextEditingController(text: name),
+        roleController = TextEditingController(text: role),
+        purposeController = TextEditingController(text: purpose);
+
+  void dispose() {
+    nameController.dispose();
+    roleController.dispose();
+    purposeController.dispose();
+  }
+
+  Map<String, dynamic> toJson() => {
+    'name': nameController.text.trim(),
+    'roleOrRelationship': roleController.text.trim(),
+    'purposeOfInterview': purposeController.text.trim(),
+  };
+}
+
 class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
@@ -116,6 +145,9 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
 
   final List<_MonitoringGoal> _goals = [];
   final Map<String, _GoalReviewControllers> _goalReviews = {};
+
+  // CHANGE 2 — _personsInterviewed list
+  final List<_PersonInterviewedEntry> _personsInterviewed = [];
 
   static const List<String> _monitoringReasons = [
     'ROUTINE_MONITORING',
@@ -165,6 +197,10 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
     _reassessmentImmediateActionsController.dispose();
     for (final review in _goalReviews.values) {
       review.dispose();
+    }
+    // CHANGE 8 — dispose persons interviewed
+    for (final entry in _personsInterviewed) {
+      entry.dispose();
     }
     super.dispose();
   }
@@ -469,6 +505,21 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
         _reassessmentRiskLevelController.text = _text(payload['reassessmentRiskLevel']);
         _reassessmentFindingsController.text = _text(payload['reassessmentFindings']);
         _reassessmentImmediateActionsController.text = _text(payload['reassessmentImmediateActions']);
+
+        // CHANGE 4 — restore persons interviewed
+        final list = payload['personsInterviewed'] as List<dynamic>? ?? [];
+        if (list.isNotEmpty) {
+          _personsInterviewed.clear();
+          for (final item in list) {
+            final m = item as Map<String, dynamic>;
+            _personsInterviewed.add(_PersonInterviewedEntry(
+              localId: DateTime.now().microsecondsSinceEpoch.toString(),
+              name: _text(m['name']),
+              role: _text(m['roleOrRelationship']),
+              purpose: _text(m['purposeOfInterview']),
+            ));
+          }
+        }
       }
     } catch (_) {}
 
@@ -502,11 +553,31 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
       await _loadActiveCarePlan(db);
       await _loadGoals(db);
       await _loadSavedMonitoring(db);
+      // CHANGE 3 — seed one blank entry if nothing was restored
+      if (_personsInterviewed.isEmpty) _addPersonInterviewed();
     } catch (e) {
       _showSnack('Failed to load monitoring: $e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  // CHANGE 2 — add/remove helpers
+  void _addPersonInterviewed() {
+    setState(() {
+      _personsInterviewed.add(
+        _PersonInterviewedEntry(
+          localId: DateTime.now().microsecondsSinceEpoch.toString(),
+        ),
+      );
+    });
+  }
+
+  void _removePersonInterviewed(int index) {
+    setState(() {
+      _personsInterviewed[index].dispose();
+      _personsInterviewed.removeAt(index);
+    });
   }
 
   Map<String, dynamic> _payload(String status) {
@@ -528,6 +599,8 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
       'reassessmentRiskLevel': _reassessmentRiskLevelController.text.trim(),
       'reassessmentFindings': _reassessmentFindingsController.text.trim(),
       'reassessmentImmediateActions': _reassessmentImmediateActionsController.text.trim(),
+      // CHANGE 6 — include personsInterviewed in payload
+      'personsInterviewed': _personsInterviewed.map((e) => e.toJson()).toList(),
       'goals': _goals.map((goal) {
         final review = _goalReviews[goal.id];
         return {
@@ -597,6 +670,9 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
           'stageKey': 'monitoring',
           'status': status,
           'payloadJson': jsonEncode(_payload(status)),
+          // CHANGE 7 — persist personsInterviewedJson column
+          'personsInterviewedJson': jsonEncode(
+              _personsInterviewed.map((e) => e.toJson()).toList()),
           'updatedAt': now,
           'syncStatus': 'not-synced',
         },
@@ -1005,6 +1081,64 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
     );
   }
 
+  // CHANGE 5 — _personsInterviewedSection widget method
+  Widget _personsInterviewedSection() {
+    return _surface(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle(
+            'Persons interviewed',
+            'People interviewed during this monitoring visit and the purpose of each interview.',
+            Icons.people_alt_outlined,
+          ),
+          ..._personsInterviewed.asMap().entries.map((e) {
+            final idx = e.key;
+            final entry = e.value;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FBFD),
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: Colors.blueGrey.withOpacity(0.10)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Person ${idx + 1}',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  _two(
+                    _input(entry.nameController, 'First name'),
+                    _input(entry.roleController, 'Role / Relationship'),
+                  ),
+                  _input(entry.purposeController, 'Purpose of interview', maxLines: 2),
+                  if (_personsInterviewed.length > 1)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: () => _removePersonInterviewed(idx),
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        label: const Text('Remove', style: TextStyle(color: Colors.red)),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }),
+          TextButton.icon(
+            onPressed: _addPersonInterviewed,
+            icon: const Icon(Icons.add),
+            label: const Text('Add another person interviewed'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _carePlanSummary() {
     return _surface(
       child: Column(
@@ -1285,6 +1419,10 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
             children: [
               _header(),
               _monitoringReasonSection(),
+              // CHANGE 5 — placed between monitoring reason and care plan summary
+              const SizedBox(height: 12),
+              _personsInterviewedSection(),
+              const SizedBox(height: 12),
               _carePlanSummary(),
               _routineMonitoringSection(),
               _goalsSection(),
