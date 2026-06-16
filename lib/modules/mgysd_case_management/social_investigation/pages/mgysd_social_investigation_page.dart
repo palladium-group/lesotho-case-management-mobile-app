@@ -64,6 +64,21 @@ class _PersonSummary {
   }
 }
 
+
+class _OrgUnitOption {
+  final String id;
+  final String name;
+  final String parent;
+  final int level;
+
+  const _OrgUnitOption({
+    required this.id,
+    required this.name,
+    required this.parent,
+    required this.level,
+  });
+}
+
 class _ChildWellbeingEntry {
   final String id;
   final TextEditingController childNameController;
@@ -185,6 +200,10 @@ class _MgysdSocialInvestigationPageState
   String _caseOrgUnit = '';
   String _householdTei = '';
 
+  List<_OrgUnitOption> _allOrgUnits = [];
+  List<_OrgUnitOption> _districtOrgUnits = [];
+  List<_OrgUnitOption> _communityCouncilOrgUnits = [];
+
   final TextEditingController _householdFileNumberController = TextEditingController();
   final TextEditingController _householdDistrictController = TextEditingController();
   final TextEditingController _householdCommunityCouncilController = TextEditingController();
@@ -281,10 +300,111 @@ class _MgysdSocialInvestigationPageState
 
   final List<_ChildWellbeingEntry> _childWellbeingEntries = [];
 
+  bool _showChildWellbeingIndicators = false;
+  bool _showChildVoiceSection = false;
+
   static const String _stageKey = 'social_investigation';
   static const String _tableName = 'mgysd_social_investigation';
 
   static const List<String> _yesNoOptions = ['YES', 'NO'];
+  static const Map<String, String> _yesNoLabels = {
+    'YES': 'Yes',
+    'NO': 'No',
+  };
+
+  static const List<String> _sexOptions = ['MALE', 'FEMALE'];
+  static const Map<String, String> _sexLabels = {
+    'MALE': 'Male',
+    'FEMALE': 'Female',
+  };
+
+  static const List<String> _disabilityOptions = ['YES', 'NO'];
+
+
+  static const List<String> _nationalityOptions = [
+    'Lesotho',
+    'South African',
+    'Other',
+  ];
+  static const Map<String, String> _nationalityLabels = {
+    'Lesotho': 'Lesotho',
+    'South African': 'South African',
+    'Other': 'Other',
+  };
+
+  static const List<String> _homeLanguageOptions = [
+    'Sesotho',
+    'English',
+    'Xhosa',
+    'Other',
+  ];
+  static const Map<String, String> _homeLanguageLabels = {
+    'Sesotho': 'Sesotho',
+    'English': 'English',
+    'Xhosa': 'Xhosa',
+    'Other': 'Other',
+  };
+
+  static const List<String> _clientCategoryOptions = [
+    'CHILD',
+    'ADULT_ELDERLY_PERSON',
+  ];
+  static const Map<String, String> _clientCategoryLabels = {
+    'CHILD': 'Child',
+    'ADULT_ELDERLY_PERSON': 'Adult / Elderly Person',
+  };
+
+  static const List<String> _relationshipToClientOptions = [
+    'CLIENT',
+    'MOTHER',
+    'FATHER',
+    'CAREGIVER',
+    'GUARDIAN',
+    'PERSONAL_ASSISTANT',
+    'SIBLING',
+    'GRANDPARENT',
+    'AUNT_UNCLE',
+    'OTHER_HOUSEHOLD_MEMBER',
+    'OTHER',
+  ];
+  static const Map<String, String> _relationshipToClientLabels = {
+    'CLIENT': 'Client',
+    'MOTHER': 'Mother',
+    'FATHER': 'Father',
+    'CAREGIVER': 'Caregiver',
+    'GUARDIAN': 'Guardian',
+    'PERSONAL_ASSISTANT': 'Personal Assistant',
+    'SIBLING': 'Sibling',
+    'GRANDPARENT': 'Grandparent',
+    'AUNT_UNCLE': 'Aunt / Uncle',
+    'OTHER_HOUSEHOLD_MEMBER': 'Other household member',
+    'OTHER': 'Other',
+  };
+
+  static const List<String> _gradeOptions = [
+    '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11',
+  ];
+
+  static const List<String> _schoolAttendanceOptions = [
+    'GOOD_ATTENDANCE',
+    'POOR_ATTENDANCE',
+    'NO_LONGER_IN_SCHOOL',
+    'NEVER_ATTENDED_SCHOOL',
+  ];
+  static const Map<String, String> _schoolAttendanceLabels = {
+    'GOOD_ATTENDANCE': 'Good attendance',
+    'POOR_ATTENDANCE': 'Poor attendance',
+    'NO_LONGER_IN_SCHOOL': 'No longer in school',
+    'NEVER_ATTENDED_SCHOOL': 'Never attended school',
+  };
+
+  static const List<String> _aliveOptions = ['YES', 'NO', 'UNKNOWN'];
+  static const Map<String, String> _aliveLabels = {
+    'YES': 'Yes',
+    'NO': 'No',
+    'UNKNOWN': 'Unknown',
+  };
+
   static const List<String> _incidentPatternOptions = ['SPECIFIC_DAY', 'LONG_TERM_ONGOING'];
   static const Map<String, String> _incidentPatternLabels = {
     'SPECIFIC_DAY': 'Specific day',
@@ -410,7 +530,6 @@ class _MgysdSocialInvestigationPageState
     _parentCaseId = widget.mgysdCase.id.split('__').first;
     _eventId = _resolveEventId(widget.mgysdCase.id);
     _eventDateController.text = _today();
-    _childWellbeingEntries.add(_ChildWellbeingEntry(id: AppUtil.getUid(), date: _today()));
     _loadData();
   }
 
@@ -520,6 +639,69 @@ class _MgysdSocialInvestigationPageState
     if (picked != null) setState(() => controller.text = _formatDate(picked));
   }
 
+  int _calculateAgeFromDob(String dobText) {
+    final dob = DateTime.tryParse(dobText.trim());
+    if (dob == null) return 0;
+    final today = DateTime.now();
+    int age = today.year - dob.year;
+    if (today.month < dob.month ||
+        (today.month == dob.month && today.day < dob.day)) {
+      age--;
+    }
+    return age < 0 ? 0 : age;
+  }
+
+  Future<void> _pickDobAndCalculateAge(_PersonSummary member) async {
+    final dobController = member.controllers['dob'];
+    final ageController = member.controllers['age'];
+    if (dobController == null || ageController == null) return;
+    await _pickDate(dobController);
+    final age = _calculateAgeFromDob(dobController.text);
+    setState(() => ageController.text = age == 0 ? '' : age.toString());
+  }
+
+  String _normaliseOptionValue(String value, List<String> options) {
+    final v = value.trim();
+    if (v.isEmpty) return '';
+    if (options.contains(v)) return v;
+    final upper = v.toUpperCase().replaceAll(' ', '_').replaceAll('/', '_');
+    for (final option in options) {
+      if (option.toUpperCase() == upper) return option;
+    }
+    for (final option in options) {
+      if (option.toUpperCase().replaceAll('_', ' ') == v.toUpperCase()) {
+        return option;
+      }
+    }
+    return v;
+  }
+
+
+  String _normaliseNationality(String value) {
+    final v = value.trim();
+    if (v.isEmpty) return '';
+    final upper = v.toUpperCase().replaceAll('_', ' ');
+    if (upper == 'LESOTHO' || upper == 'MOSOTHO' || upper == 'BASOTHO') {
+      return 'Lesotho';
+    }
+    if (upper == 'SOUTH AFRICAN' || upper == 'SOUTH AFRICA' || upper == 'RSA') {
+      return 'South African';
+    }
+    if (upper == 'OTHER') return 'Other';
+    return _nationalityOptions.contains(v) ? v : 'Other';
+  }
+
+  String _normaliseHomeLanguage(String value) {
+    final v = value.trim();
+    if (v.isEmpty) return '';
+    final upper = v.toUpperCase().replaceAll('_', ' ');
+    if (upper == 'SESOTHO') return 'Sesotho';
+    if (upper == 'ENGLISH') return 'English';
+    if (upper == 'XHOSA') return 'Xhosa';
+    if (upper == 'OTHER') return 'Other';
+    return _homeLanguageOptions.contains(v) ? v : 'Other';
+  }
+
   String _text(dynamic value) => (value ?? '').toString().trim();
   TextEditingController _c([String value = '']) => TextEditingController(text: value);
 
@@ -609,6 +791,123 @@ class _MgysdSocialInvestigationPageState
     return _clientTei.trim();
   }
 
+
+  String _pickUserField(Map<String, Object?> row, List<String> keys) {
+    for (final key in keys) {
+      final value = _text(row[key]);
+      if (value.isNotEmpty) return value;
+    }
+    return '';
+  }
+
+  Future<void> _loadCurrentUserIntoSocialWorker(Database db) async {
+    try {
+      final rows = await db.query('current_user');
+      if (rows.isEmpty) return;
+
+      Map<String, Object?> row = rows.first;
+      for (final candidate in rows) {
+        final login = _text(candidate['isLogin']).toLowerCase();
+        if (login == '1' || login == 'true' || login == 'yes') {
+          row = candidate;
+          break;
+        }
+      }
+
+      final fullName = _pickUserField(row, [
+        'name',
+        'displayName',
+        'fullName',
+        'username',
+      ]);
+      final phone = _pickUserField(row, [
+        'phoneNumber',
+        'phone',
+        'telephone',
+        'mobile',
+      ]);
+
+      final firstNameFromColumn = _pickUserField(row, [
+        'firstName',
+        'firstname',
+        'givenName',
+      ]);
+      final surnameFromColumn = _pickUserField(row, [
+        'surname',
+        'lastName',
+        'lastname',
+        'familyName',
+      ]);
+
+      final parts = fullName.split(' ').where((p) => p.trim().isNotEmpty).toList();
+      final firstName = firstNameFromColumn.isNotEmpty
+          ? firstNameFromColumn
+          : (parts.isNotEmpty ? parts.first : _text(row['username']));
+      final surname = surnameFromColumn.isNotEmpty
+          ? surnameFromColumn
+          : (parts.length > 1 ? parts.sublist(1).join(' ') : '');
+
+      // Current user is the allocated social worker. Always refresh these
+      // fields from the logged-in user so saved drafts do not keep stale names.
+      _socialWorkerFirstNameController.text = firstName;
+      _socialWorkerSurnameController.text = surname;
+      _socialWorkerPhoneController.text = phone;
+    } catch (_) {}
+  }
+
+  Future<void> _loadOfflineOrgUnits(Database db) async {
+    try {
+      final rows = await db.query(
+        'organisation_unit',
+        columns: ['id', 'name', 'parent', 'level'],
+        orderBy: 'level ASC, name ASC',
+      );
+
+      final units = rows.map((row) {
+        return _OrgUnitOption(
+          id: _text(row['id']),
+          name: _text(row['name']),
+          parent: _text(row['parent']),
+          level: int.tryParse(_text(row['level'])) ?? 0,
+        );
+      }).where((unit) => unit.id.isNotEmpty && unit.name.isNotEmpty).toList();
+
+      if (units.isEmpty) return;
+
+      final levels = units.map((u) => u.level).where((l) => l > 0).toSet().toList()
+        ..sort();
+
+      int districtLevel = levels.length >= 2 ? levels[1] : levels.first;
+      int ccLevel = levels.length >= 3 ? levels[2] : districtLevel + 1;
+
+      _allOrgUnits = units;
+      _districtOrgUnits = units.where((u) => u.level == districtLevel).toList();
+      _communityCouncilOrgUnits = units.where((u) => u.level == ccLevel).toList();
+
+      if (_districtOrgUnits.isEmpty) _districtOrgUnits = units;
+      if (_communityCouncilOrgUnits.isEmpty) _communityCouncilOrgUnits = units;
+    } catch (_) {}
+  }
+
+  List<_OrgUnitOption> _communityCouncilsFor(String districtNameOrId) {
+    final selected = districtNameOrId.trim();
+    if (selected.isEmpty) return _communityCouncilOrgUnits;
+
+    _OrgUnitOption? district;
+    for (final item in _districtOrgUnits) {
+      if (item.id == selected || item.name.toLowerCase() == selected.toLowerCase()) {
+        district = item;
+        break;
+      }
+    }
+
+    if (district == null) return _communityCouncilOrgUnits;
+    final children = _communityCouncilOrgUnits
+        .where((item) => item.parent == district!.id)
+        .toList();
+    return children.isEmpty ? _communityCouncilOrgUnits : children;
+  }
+
   Future<void> _loadData() async {
     try {
       final db = await _db();
@@ -661,9 +960,11 @@ class _MgysdSocialInvestigationPageState
         _clientTei = await _primaryClientTeiFromHousehold(db, _householdTei);
       }
 
+      await _loadOfflineOrgUnits(db);
       await _loadHouseholdSummary(db);
       await _loadIntakeSummary(db);
       await _loadSavedForm(db);
+      await _loadCurrentUserIntoSocialWorker(db);
     } catch (e) {
       _showSnack('Failed to load social investigation: $e');
     } finally {
@@ -712,29 +1013,33 @@ class _MgysdSocialInvestigationPageState
         'firstName': _c(attrs[MgysdDhis2Uids.attFirstName] ?? ''),
         'surname': _c(attrs[MgysdDhis2Uids.attLastName] ?? ''),
         'dob': _c(attrs[MgysdDhis2Uids.attDob] ?? ''),
-        'age': _c(attrs[MgysdDhis2Uids.attAge] ?? ''),
-        'sex': _c(attrs[MgysdDhis2Uids.attSex] ?? ''),
+        'age': _c((attrs[MgysdDhis2Uids.attAge] ?? '').trim().isNotEmpty
+            ? attrs[MgysdDhis2Uids.attAge] ?? ''
+            : (_calculateAgeFromDob(attrs[MgysdDhis2Uids.attDob] ?? '') == 0
+            ? ''
+            : _calculateAgeFromDob(attrs[MgysdDhis2Uids.attDob] ?? '').toString())),
+        'sex': _c(_normaliseOptionValue(attrs[MgysdDhis2Uids.attSex] ?? '', _sexOptions)),
         'phone': _c(attrs[MgysdDhis2Uids.attPhone] ?? ''),
         'alternativePhone': _c(attrs[MgysdDhis2Uids.attAlternativePhone] ?? ''),
         'occupation': _c(attrs[MgysdDhis2Uids.attOccupation] ?? ''),
-        'relationshipToClient': _c(attrs[MgysdDhis2Uids.attRelationshipToClient] ?? role),
-        'hasDisability': _c(attrs[MgysdDhis2Uids.attHasDisability] ?? attrs[MgysdDhis2Uids.attIsDisabled] ?? ''),
+        'relationshipToClient': _c(_normaliseOptionValue(attrs[MgysdDhis2Uids.attRelationshipToClient] ?? role, _relationshipToClientOptions)),
+        'hasDisability': _c(_normaliseOptionValue(attrs[MgysdDhis2Uids.attHasDisability] ?? attrs[MgysdDhis2Uids.attIsDisabled] ?? '', _disabilityOptions)),
         'disabilitySpecify': _c(attrs[MgysdDhis2Uids.attDisabilitySpecify] ?? ''),
-        'clientCategory': _c(attrs[MgysdDhis2Uids.attClientCategory] ?? ''),
+        'clientCategory': _c(_normaliseOptionValue(attrs[MgysdDhis2Uids.attClientCategory] ?? '', _clientCategoryOptions)),
         'identityNumber': _c(attrs[MgysdDhis2Uids.attIdentityNumber] ?? ''),
-        'nationality': _c(attrs[MgysdDhis2Uids.attNationality] ?? ''),
-        'homeLanguage': _c(attrs[MgysdDhis2Uids.attHomeLanguage] ?? ''),
-        'isClientInSchool': _c(attrs[MgysdDhis2Uids.attIsClientInSchool] ?? ''),
+        'nationality': _c(_normaliseNationality(attrs[MgysdDhis2Uids.attNationality] ?? '')),
+        'homeLanguage': _c(_normaliseHomeLanguage(attrs[MgysdDhis2Uids.attHomeLanguage] ?? '')),
+        'isClientInSchool': _c(_normaliseOptionValue(attrs[MgysdDhis2Uids.attIsClientInSchool] ?? '', _yesNoOptions)),
         'schoolName': _c(attrs[MgysdDhis2Uids.attSchoolName] ?? ''),
         'grade': _c(attrs[MgysdDhis2Uids.attGrade] ?? ''),
-        'schoolAttendanceStatus': _c(attrs[MgysdDhis2Uids.attSchoolAttendanceStatus] ?? ''),
-        'isAdultEmployed': _c(attrs[MgysdDhis2Uids.attIsAdultEmployed] ?? ''),
+        'schoolAttendanceStatus': _c(_normaliseOptionValue(attrs[MgysdDhis2Uids.attSchoolAttendanceStatus] ?? '', _schoolAttendanceOptions)),
+        'isAdultEmployed': _c(_normaliseOptionValue(attrs[MgysdDhis2Uids.attIsAdultEmployed] ?? '', _yesNoOptions)),
         'employerName': _c(attrs[MgysdDhis2Uids.attEmployerName] ?? ''),
-        'fatherAlive': _c(attrs[MgysdDhis2Uids.attFatherAlive] ?? ''),
-        'fatherLivingWithChild': _c(attrs[MgysdDhis2Uids.attFatherLivingWithChild] ?? ''),
+        'fatherAlive': _c(_normaliseOptionValue(attrs[MgysdDhis2Uids.attFatherAlive] ?? '', _aliveOptions)),
+        'fatherLivingWithChild': _c(_normaliseOptionValue(attrs[MgysdDhis2Uids.attFatherLivingWithChild] ?? '', _aliveOptions)),
         'fatherWhyNotLiving': _c(attrs[MgysdDhis2Uids.attFatherWhyNotLiving] ?? ''),
-        'motherAlive': _c(attrs[MgysdDhis2Uids.attMotherAlive] ?? ''),
-        'motherLivingWithChild': _c(attrs[MgysdDhis2Uids.attMotherLivingWithChild] ?? ''),
+        'motherAlive': _c(_normaliseOptionValue(attrs[MgysdDhis2Uids.attMotherAlive] ?? '', _aliveOptions)),
+        'motherLivingWithChild': _c(_normaliseOptionValue(attrs[MgysdDhis2Uids.attMotherLivingWithChild] ?? '', _aliveOptions)),
         'motherWhyNotLiving': _c(attrs[MgysdDhis2Uids.attMotherWhyNotLiving] ?? ''),
       },
     );
@@ -788,9 +1093,14 @@ class _MgysdSocialInvestigationPageState
     _childCarePreferenceController.text = _text(part4['carePreference']);
     _childFutureSafetyIdeasController.text = _text(part4['futureSafetyIdeas']);
     _childCommunicationConsiderationsController.text = _text(part4['communicationConsiderations']);
+    _showChildVoiceSection = _childOverallSafetyController.text.trim().isNotEmpty ||
+        _childCarePreferenceController.text.trim().isNotEmpty ||
+        _childFutureSafetyIdeasController.text.trim().isNotEmpty ||
+        _childCommunicationConsiderationsController.text.trim().isNotEmpty;
 
     final children = (payload['childWellbeing'] ?? []) as List<dynamic>;
     if (children.isNotEmpty) {
+      _showChildWellbeingIndicators = true;
       for (final entry in _childWellbeingEntries) { entry.dispose(); }
       _childWellbeingEntries.clear();
       for (final raw in children) {
@@ -1113,7 +1423,10 @@ class _MgysdSocialInvestigationPageState
   }
 
   void _addChildWellbeingEntry() {
-    setState(() => _childWellbeingEntries.add(_ChildWellbeingEntry(id: AppUtil.getUid(), date: _today())));
+    setState(() {
+      _showChildWellbeingIndicators = true;
+      _childWellbeingEntries.add(_ChildWellbeingEntry(id: AppUtil.getUid(), date: _today()));
+    });
   }
 
   void _removeChildWellbeingEntry(int index) {
@@ -1121,8 +1434,22 @@ class _MgysdSocialInvestigationPageState
       final item = _childWellbeingEntries.removeAt(index);
       item.dispose();
       if (_childWellbeingEntries.isEmpty) {
-        _childWellbeingEntries.add(_ChildWellbeingEntry(id: AppUtil.getUid(), date: _today()));
+        _showChildWellbeingIndicators = false;
       }
+    });
+  }
+
+  void _addChildVoiceSection() {
+    setState(() => _showChildVoiceSection = true);
+  }
+
+  void _removeChildVoiceSection() {
+    setState(() {
+      _showChildVoiceSection = false;
+      _childOverallSafetyController.clear();
+      _childCarePreferenceController.clear();
+      _childFutureSafetyIdeasController.clear();
+      _childCommunicationConsiderationsController.clear();
     });
   }
 
@@ -1195,6 +1522,100 @@ class _MgysdSocialInvestigationPageState
     );
   }
 
+
+  Widget _controllerDropdown({
+    required TextEditingController controller,
+    required String label,
+    required List<String> options,
+    required Map<String, String> labels,
+    bool requiredField = false,
+  }) {
+    final value = options.contains(controller.text.trim()) ? controller.text.trim() : null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: DropdownButtonFormField<String>(
+        value: value,
+        isExpanded: true,
+        items: options
+            .map((option) => DropdownMenuItem<String>(
+          value: option,
+          child: Text(labels[option] ?? option, overflow: TextOverflow.ellipsis),
+        ))
+            .toList(),
+        onChanged: (v) {
+          if (v == null) return;
+          setState(() => controller.text = v);
+        },
+        validator: (v) {
+          if (!requiredField) return null;
+          if ((v ?? '').trim().isEmpty) return 'Required';
+          return null;
+        },
+        decoration: InputDecoration(
+          labelText: label,
+          filled: true,
+          fillColor: const Color(0xFFF9FBFD),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(13)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
+      ),
+    );
+  }
+
+  Widget _orgUnitDropdown({
+    required TextEditingController controller,
+    required String label,
+    required List<_OrgUnitOption> options,
+    bool requiredField = false,
+    VoidCallback? afterChanged,
+  }) {
+    final current = controller.text.trim();
+    String? value;
+    for (final item in options) {
+      if (item.id == current || item.name.toLowerCase() == current.toLowerCase()) {
+        value = item.name;
+        break;
+      }
+    }
+
+    if (options.isEmpty) {
+      return _input(controller, label, validator: requiredField ? (v) => (v ?? '').trim().isEmpty ? 'Required' : null : null);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: DropdownButtonFormField<String>(
+        value: value,
+        isExpanded: true,
+        items: options
+            .map((option) => DropdownMenuItem<String>(
+          value: option.name,
+          child: Text(option.name, overflow: TextOverflow.ellipsis),
+        ))
+            .toList(),
+        onChanged: (v) {
+          if (v == null) return;
+          setState(() {
+            controller.text = v;
+            if (afterChanged != null) afterChanged();
+          });
+        },
+        validator: (v) {
+          if (!requiredField) return null;
+          if ((v ?? '').trim().isEmpty) return 'Required';
+          return null;
+        },
+        decoration: InputDecoration(
+          labelText: label,
+          filled: true,
+          fillColor: const Color(0xFFF9FBFD),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(13)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
+      ),
+    );
+  }
+
   Widget _two(Widget a, Widget b) {
     return LayoutBuilder(builder: (context, constraints) {
       if (constraints.maxWidth < 620) return Column(children: [a, b]);
@@ -1227,8 +1648,11 @@ class _MgysdSocialInvestigationPageState
   Widget _part1() {
     return _surface(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _sectionTitle('Part 1: Summary Data', 'This form is completed for all clients who have been assessed using the intake and risk assessment form and have been assigned to a social worker for protective services.'),
-      _two(_input(_socialWorkerFirstNameController, 'Name of Social Worker Allocated to case', validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null), _input(_socialWorkerSurnameController, 'Surname of Social Worker Allocated to case', validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null)),
-      _input(_socialWorkerPhoneController, 'Phone Number of Social Worker Allocated to case', keyboardType: TextInputType.phone),
+      _two(
+        _input(_socialWorkerFirstNameController, 'Name of Social Worker Allocated to case', readOnly: true, validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null),
+        _input(_socialWorkerSurnameController, 'Surname of Social Worker Allocated to case', readOnly: true, validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null),
+      ),
+      _input(_socialWorkerPhoneController, 'Phone Number of Social Worker Allocated to case', keyboardType: TextInputType.phone, readOnly: true),
       _two(_input(_supervisorFirstNameController, "Name of Social Worker's Supervisor"), _input(_supervisorSurnameController, "Surname of Social Worker's Supervisor")),
       _input(_supervisorPhoneController, "Phone Number of Social Worker's Supervisor", keyboardType: TextInputType.phone),
       const SizedBox(height: 10),
@@ -1265,8 +1689,17 @@ class _MgysdSocialInvestigationPageState
         children: [
           _input(_householdFileNumberController, 'File Number'),
           _two(
-            _input(_householdDistrictController, 'District / Org Unit'),
-            _input(_householdCommunityCouncilController, 'Community Council / Org Unit'),
+            _orgUnitDropdown(
+              controller: _householdDistrictController,
+              label: 'District / Org Unit',
+              options: _districtOrgUnits,
+              afterChanged: () => _householdCommunityCouncilController.clear(),
+            ),
+            _orgUnitDropdown(
+              controller: _householdCommunityCouncilController,
+              label: 'Community Council / Org Unit',
+              options: _communityCouncilsFor(_householdDistrictController.text),
+            ),
           ),
           _input(_householdVillageController, 'Village'),
           _input(_householdAddressController, 'Physical Address', maxLines: 3),
@@ -1287,22 +1720,60 @@ class _MgysdSocialInvestigationPageState
         title: Text(member.fullName, style: const TextStyle(fontWeight: FontWeight.w900)),
         subtitle: Text(title),
         children: [
-          _two(_input(member.controllers['firstName']!, 'First Name'), _input(member.controllers['surname']!, 'Surname')),
-          _two(_input(member.controllers['dob']!, 'Date of Birth', readOnly: true, onTap: () => _pickDate(member.controllers['dob']!)), _input(member.controllers['age']!, 'Age', keyboardType: TextInputType.number)),
-          _two(_input(member.controllers['sex']!, 'Sex'), _input(member.controllers['phone']!, 'Phone Number', keyboardType: TextInputType.phone)),
-          _two(_input(member.controllers['occupation']!, 'Occupation'), _input(member.controllers['relationshipToClient']!, 'Relationship to Client')),
-          _two(_input(member.controllers['hasDisability']!, 'Disability'), _input(member.controllers['disabilitySpecify']!, 'Disability Specify', maxLines: 2)),
+          _two(
+            _input(member.controllers['firstName']!, 'First Name', validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null),
+            _input(member.controllers['surname']!, 'Surname', validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null),
+          ),
+          _two(
+            _input(member.controllers['dob']!, 'Date of Birth', readOnly: true, onTap: () => _pickDobAndCalculateAge(member), validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null),
+            _input(member.controllers['age']!, 'Age', keyboardType: TextInputType.number, readOnly: true),
+          ),
+          _two(
+            _controllerDropdown(controller: member.controllers['sex']!, label: 'Sex', options: _sexOptions, labels: _sexLabels, requiredField: true),
+            _input(member.controllers['phone']!, 'Phone Number', keyboardType: TextInputType.phone),
+          ),
+          _input(member.controllers['alternativePhone']!, 'Alternative Phone Number', keyboardType: TextInputType.phone),
+          _two(
+            _input(member.controllers['occupation']!, 'Occupation'),
+            _controllerDropdown(controller: member.controllers['relationshipToClient']!, label: 'Relationship to Client', options: _relationshipToClientOptions, labels: _relationshipToClientLabels, requiredField: true),
+          ),
+          _two(
+            _controllerDropdown(controller: member.controllers['hasDisability']!, label: 'Disability', options: _disabilityOptions, labels: _yesNoLabels, requiredField: true),
+            _input(member.controllers['disabilitySpecify']!, 'Disability Specify', maxLines: 2),
+          ),
           if (member.isPrimaryClient) ...[
-            _two(_input(member.controllers['clientCategory']!, 'Client Category'), _input(member.controllers['identityNumber']!, 'Identity Number')),
-            _two(_input(member.controllers['isClientInSchool']!, 'Is Client in School?'), _input(member.controllers['schoolName']!, 'Name of School')),
-            _two(_input(member.controllers['grade']!, 'Grade'), _input(member.controllers['schoolAttendanceStatus']!, 'School Attendance Status')),
-            _two(_input(member.controllers['isAdultEmployed']!, 'Is Adult Employed?'), _input(member.controllers['employerName']!, 'Employer Name')),
+            _two(
+              _controllerDropdown(controller: member.controllers['clientCategory']!, label: 'Client Category', options: _clientCategoryOptions, labels: _clientCategoryLabels),
+              _input(member.controllers['identityNumber']!, 'Identity Number'),
+            ),
+            _two(
+              _controllerDropdown(controller: member.controllers['nationality']!, label: 'Nationality', options: _nationalityOptions, labels: _nationalityLabels, requiredField: true),
+              _controllerDropdown(controller: member.controllers['homeLanguage']!, label: 'Home Language', options: _homeLanguageOptions, labels: _homeLanguageLabels, requiredField: true),
+            ),
+            _two(
+              _controllerDropdown(controller: member.controllers['isClientInSchool']!, label: 'Is Client in School?', options: _yesNoOptions, labels: _yesNoLabels),
+              _input(member.controllers['schoolName']!, 'Name of School'),
+            ),
+            _two(
+              _controllerDropdown(controller: member.controllers['grade']!, label: 'Grade', options: _gradeOptions, labels: const {}),
+              _controllerDropdown(controller: member.controllers['schoolAttendanceStatus']!, label: 'School Attendance Status', options: _schoolAttendanceOptions, labels: _schoolAttendanceLabels),
+            ),
+            _two(
+              _controllerDropdown(controller: member.controllers['isAdultEmployed']!, label: 'Is Adult Employed?', options: _yesNoOptions, labels: _yesNoLabels),
+              _input(member.controllers['employerName']!, 'Employer Name'),
+            ),
             const Divider(height: 20),
             const Align(alignment: Alignment.centerLeft, child: Text('Father / Mother Intake Status', style: TextStyle(fontWeight: FontWeight.w900))),
             const SizedBox(height: 8),
-            _two(_input(member.controllers['fatherAlive']!, 'Is Father Alive?'), _input(member.controllers['fatherLivingWithChild']!, 'Is Father Living with Child?')),
+            _two(
+              _controllerDropdown(controller: member.controllers['fatherAlive']!, label: 'Is Father Alive?', options: _aliveOptions, labels: _aliveLabels),
+              _controllerDropdown(controller: member.controllers['fatherLivingWithChild']!, label: 'Is Father Living with Child?', options: _aliveOptions, labels: _aliveLabels),
+            ),
             _input(member.controllers['fatherWhyNotLiving']!, 'Why is Father not living with Child?', maxLines: 2),
-            _two(_input(member.controllers['motherAlive']!, 'Is Mother Alive?'), _input(member.controllers['motherLivingWithChild']!, 'Is Mother Living with Child?')),
+            _two(
+              _controllerDropdown(controller: member.controllers['motherAlive']!, label: 'Is Mother Alive?', options: _aliveOptions, labels: _aliveLabels),
+              _controllerDropdown(controller: member.controllers['motherLivingWithChild']!, label: 'Is Mother Living with Child?', options: _aliveOptions, labels: _aliveLabels),
+            ),
             _input(member.controllers['motherWhyNotLiving']!, 'Why is Mother not living with Child?', maxLines: 2),
           ],
         ],
@@ -1377,19 +1848,148 @@ class _MgysdSocialInvestigationPageState
       _domainSection(title: 'Social, religious and cultural inclusion', subtitle: 'Community/religious interaction, social isolation, stigma and sources of community support.', rating: _socialInclusionRating, options: _socialInclusionOptions, labels: _socialInclusionLabels, onRatingChanged: (v) => setState(() => _socialInclusionRating = v), observations: _socialInclusionObservationsController, strengths: _socialInclusionStrengthsController, challenges: _socialInclusionChallengesController),
     ]));
   }
+  Widget _optionalAddCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback onAdd,
+  }) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 11),
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FBFD),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.blueGrey.withOpacity(0.10)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: widget.color.withOpacity(0.12),
+            child: Icon(icon, color: widget.color, size: 20),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    color: Colors.blueGrey,
+                    fontSize: 12.4,
+                    height: 1.3,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          OutlinedButton.icon(
+            onPressed: onAdd,
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Add'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: widget.color,
+              side: BorderSide(color: widget.color.withOpacity(0.45)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _part4() {
-    return _surface(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _sectionTitle("Part 4: Child's Voice", 'Capture the child’s perspective and communication considerations.'),
-      _input(_childOverallSafetyController, 'Overall sense of safety', maxLines: 3),
-      _input(_childCarePreferenceController, 'Who the child wants to be cared for by', maxLines: 3),
-      _input(_childFutureSafetyIdeasController, 'Ideas for how to stay safe and make things good in the future', maxLines: 4),
-      _input(_childCommunicationConsiderationsController, 'Communication considerations', maxLines: 4),
-      const SizedBox(height: 8),
-      const Text('Child Wellbeing Indicators', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900)),
-      const SizedBox(height: 10),
-      ...List.generate(_childWellbeingEntries.length, (index) => _childWellbeingCard(index, _childWellbeingEntries[index])),
-      OutlinedButton.icon(onPressed: _addChildWellbeingEntry, icon: const Icon(Icons.add), label: const Text('Add Child Wellbeing Entry'), style: OutlinedButton.styleFrom(foregroundColor: widget.color, side: BorderSide(color: widget.color))),
-    ]));
+    return _surface(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle(
+            'Part 4: Child Participation',
+            'Only add these sections when they are relevant and the child can safely participate. Child Wellbeing Indicators come before Child Voice.',
+          ),
+          if (!_showChildWellbeingIndicators)
+            _optionalAddCard(
+              title: 'Child Wellbeing Indicators',
+              subtitle: 'Add scoring indicators when you want to capture the child wellbeing scale.',
+              icon: Icons.monitor_heart_outlined,
+              onAdd: _addChildWellbeingEntry,
+            ),
+          if (_showChildWellbeingIndicators) ...[
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Child Wellbeing Indicators',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _addChildWellbeingEntry,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add child'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ...List.generate(
+              _childWellbeingEntries.length,
+                  (index) => _childWellbeingCard(index, _childWellbeingEntries[index]),
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (!_showChildVoiceSection)
+            _optionalAddCard(
+              title: "Child's Voice",
+              subtitle: 'Add this when the child has been consulted and it is appropriate to record their views.',
+              icon: Icons.record_voice_over_outlined,
+              onAdd: _addChildVoiceSection,
+            ),
+          if (_showChildVoiceSection) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FBFD),
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: Colors.blueGrey.withOpacity(0.10)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          "Child's Voice",
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _removeChildVoiceSection,
+                        icon: const Icon(Icons.delete_outline),
+                        color: Colors.redAccent,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _input(_childOverallSafetyController, 'Overall sense of safety', maxLines: 3),
+                  _input(_childCarePreferenceController, 'Who the child wants to be cared for by', maxLines: 3),
+                  _input(_childFutureSafetyIdeasController, 'Ideas for how to stay safe and make things good in the future', maxLines: 4),
+                  _input(_childCommunicationConsiderationsController, 'Communication considerations', maxLines: 4),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   Widget _scoreDropdown({required String label, required int? value, required void Function(int? value) onChanged}) {
