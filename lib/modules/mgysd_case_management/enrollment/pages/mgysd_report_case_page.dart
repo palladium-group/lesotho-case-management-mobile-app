@@ -66,8 +66,8 @@ class MgysdClientEntry {
   final TextEditingController firstNameController;
   final TextEditingController lastNameController;
   final TextEditingController ageController;
-  final TextEditingController estimatedDobController;
   final TextEditingController phoneController;
+  final TextEditingController alternatePhoneController;
   final TextEditingController districtController;
   final TextEditingController communityCouncilController;
   final TextEditingController contactOtherController;
@@ -82,8 +82,8 @@ class MgysdClientEntry {
     String firstName = '',
     String lastName = '',
     String age = '',
-    String estimatedDob = '',
     String phone = '',
+    String alternatePhone = '',
     String district = '',
     String communityCouncil = '',
     String contactOther = '',
@@ -94,8 +94,8 @@ class MgysdClientEntry {
   })  : firstNameController = TextEditingController(text: firstName),
         lastNameController = TextEditingController(text: lastName),
         ageController = TextEditingController(text: age),
-        estimatedDobController = TextEditingController(text: estimatedDob),
         phoneController = TextEditingController(text: phone),
+        alternatePhoneController = TextEditingController(text: alternatePhone),
         districtController = TextEditingController(text: district),
         communityCouncilController = TextEditingController(text: communityCouncil),
         contactOtherController = TextEditingController(text: contactOther);
@@ -104,8 +104,8 @@ class MgysdClientEntry {
     firstNameController.dispose();
     lastNameController.dispose();
     ageController.dispose();
-    estimatedDobController.dispose();
     phoneController.dispose();
+    alternatePhoneController.dispose();
     districtController.dispose();
     communityCouncilController.dispose();
     contactOtherController.dispose();
@@ -116,9 +116,9 @@ class MgysdClientEntry {
       'firstName': firstNameController.text.trim(),
       'lastName': lastNameController.text.trim(),
       'age': ageController.text.trim(),
-      'estimatedDateOfBirth': estimatedDobController.text.trim(),
       'sex': sex,
       'phone': phoneController.text.trim(),
+      'alternatePhone': alternatePhoneController.text.trim(),
       'district': districtController.text.trim(),
       'districtOrgUnit': districtOrgUnit,
       'communityCouncil': communityCouncilController.text.trim(),
@@ -131,25 +131,33 @@ class MgysdClientEntry {
 
 class MgysdPersonInvolvedEntry {
   final String localId;
-  final TextEditingController nameController;
-  final TextEditingController roleController;
+  final TextEditingController firstNameController;
+  final TextEditingController lastNameController;
+
+  String roleOrRelationship;
 
   MgysdPersonInvolvedEntry({
     required this.localId,
-    String name = '',
-    String role = '',
-  })  : nameController = TextEditingController(text: name),
-        roleController = TextEditingController(text: role);
+    String firstName = '',
+    String lastName = '',
+    this.roleOrRelationship = '',
+  })  : firstNameController = TextEditingController(text: firstName),
+        lastNameController = TextEditingController(text: lastName);
 
   void dispose() {
-    nameController.dispose();
-    roleController.dispose();
+    firstNameController.dispose();
+    lastNameController.dispose();
   }
 
   Map<String, dynamic> toJson() {
+    final firstName = firstNameController.text.trim();
+    final lastName = lastNameController.text.trim();
+
     return {
-      'name': nameController.text.trim(),
-      'roleOrRelationship': roleController.text.trim(),
+      'firstName': firstName,
+      'lastName': lastName,
+      'name': [firstName, lastName].where((part) => part.isNotEmpty).join(' '),
+      'roleOrRelationship': roleOrRelationship,
     };
   }
 }
@@ -202,6 +210,7 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
 
   final Set<String> _selectedConcernReasons = {};
   final TextEditingController _concernOtherController = TextEditingController();
+  final TextEditingController _occupationOtherController = TextEditingController();
 
   List<MgysdFormFieldDef> get aboutReporterFields => const [
     MgysdFormFieldDef(
@@ -244,8 +253,15 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     MgysdFormFieldDef(
       id: deReporterOccupation,
       label: 'Occupation',
-      type: MgysdFieldType.textShort,
-      maxLen: 80,
+      type: MgysdFieldType.option,
+      options: [
+        MgysdOption(code: 'Teacher', label: 'Teacher'),
+        MgysdOption(code: 'Police', label: 'Police'),
+        MgysdOption(code: 'Chief', label: 'Chief'),
+        MgysdOption(code: 'Neighbor', label: 'Neighbor'),
+        MgysdOption(code: 'Nurse', label: 'Nurse'),
+        MgysdOption(code: 'Other', label: 'Other'),
+      ],
     ),
     MgysdFormFieldDef(
       id: deReporterVillage,
@@ -365,6 +381,15 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     MgysdOption(code: 'Other', label: 'Other'),
   ];
 
+  static const List<MgysdOption> _peopleInvolvedRelationshipOptions = [
+    MgysdOption(code: 'Mother', label: 'Mother'),
+    MgysdOption(code: 'Father', label: 'Father'),
+    MgysdOption(code: 'Spouse', label: 'Spouse'),
+    MgysdOption(code: 'Siblings', label: 'Siblings'),
+    MgysdOption(code: 'Son', label: 'Son'),
+    MgysdOption(code: 'Daughter', label: 'Daughter'),
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -404,17 +429,46 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       person.dispose();
     }
     _concernOtherController.dispose();
+    _occupationOtherController.dispose();
     super.dispose();
   }
 
   bool get _relationshipIsOther =>
-      (_values[deReporterRelationship] ?? '') == 'OTHER';
+      (_values[deReporterRelationship] ?? '') == 'Other';
+
+  bool get _occupationIsOther =>
+      (_values[deReporterOccupation] ?? '') == 'Other';
 
   Color get _softBg => const Color(0xFFF6F7FB);
 
-  InputDecoration _decoration(String label, {IconData? icon, String? hint}) {
+  Widget _requiredLabel(String label, {required bool requiredField}) {
+    if (!requiredField) return Text(label);
+
+    return RichText(
+      text: TextSpan(
+        text: label,
+        style: const TextStyle(color: Colors.black87),
+        children: const [
+          TextSpan(
+            text: ' *',
+            style: TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  InputDecoration _decoration(
+      String label, {
+        IconData? icon,
+        String? hint,
+        bool requiredField = false,
+      }) {
     return InputDecoration(
-      labelText: label,
+      label: _requiredLabel(label, requiredField: requiredField),
       hintText: hint,
       floatingLabelBehavior: FloatingLabelBehavior.auto,
       isDense: true,
@@ -500,6 +554,30 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     return null;
   }
 
+  String? _dateValidator(
+      String? v, {
+        required bool requiredField,
+        required String fieldId,
+      }) {
+    final requiredError = _requiredValidator(v, requiredField: requiredField);
+    if (requiredError != null) return requiredError;
+
+    final value = (v ?? '').trim();
+    if (value.isEmpty) return null;
+
+    final parsed = _parseDate(value);
+    if (parsed == null) return 'Enter a valid date';
+
+    if (fieldId == deReporterDob) {
+      final age = _calculateAge(parsed);
+      if (age == null || age < 6) {
+        return 'Reporter must be at least 6 years old';
+      }
+    }
+
+    return null;
+  }
+
   int? _calculateAge(DateTime dob) {
     final today = DateTime.now();
     int age = today.year - dob.year;
@@ -509,13 +587,6 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     return age < 0 ? null : age;
   }
 
-  String _estimateDobFromAge(String ageText) {
-    final age = int.tryParse(ageText.trim());
-    if (age == null || age < 0 || age > 130) return '';
-    final now = DateTime.now();
-    final estimated = DateTime(now.year - age, 7, 1);
-    return _formatDate(estimated);
-  }
 
   String _formatDate(DateTime date) {
     final y = date.year.toString().padLeft(4, '0');
@@ -537,17 +608,26 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
   Future<void> _pickDate(String fieldId) async {
     FocusScope.of(context).unfocus();
 
-    DateTime initial = DateTime.now();
+    final now = DateTime.now();
+    final latestReporterDob = DateTime(now.year - 6, now.month, now.day);
+    final latestAllowedDate = fieldId == deReporterDob
+        ? latestReporterDob
+        : now.add(const Duration(days: 365));
+
+    DateTime initial = fieldId == deReporterDob ? latestReporterDob : now;
     final existing = (_values[fieldId] ?? '').trim();
     final parsed = _parseDate(existing);
     if (parsed != null) initial = parsed;
+    if (initial.isAfter(latestAllowedDate)) initial = latestAllowedDate;
 
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
       firstDate: DateTime(1900, 1, 1),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-      helpText: 'Select date',
+      lastDate: latestAllowedDate,
+      helpText: fieldId == deReporterDob
+          ? 'Select reporter date of birth (6 years or older)'
+          : 'Select date',
     );
 
     if (picked == null) return;
@@ -611,7 +691,70 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
   Widget _buildField(MgysdFormFieldDef f) {
     switch (f.type) {
       case MgysdFieldType.option:
-      // Special-case multi-select for Concern reason
+      // Special-case occupation so that selecting Other requires a specification.
+        if (f.id == deReporterOccupation) {
+          final rawValue = (_values[f.id] ?? '').trim();
+          final safeValue = f.options.any((o) => o.code == rawValue) ? rawValue : null;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DropdownButtonFormField<String>(
+                value: safeValue,
+                isExpanded: true,
+                items: f.options
+                    .map(
+                      (o) => DropdownMenuItem<String>(
+                    value: o.code,
+                    child: Text(o.label, overflow: TextOverflow.ellipsis),
+                  ),
+                )
+                    .toList(),
+                onChanged: (v) => setState(() {
+                  _values[f.id] = v ?? '';
+                  if ((v ?? '') != 'Other') {
+                    _occupationOtherController.clear();
+                  }
+                }),
+                validator: (v) => _requiredValidator(
+                  v,
+                  requiredField: f.requiredField,
+                ),
+                decoration: _decoration(
+                  f.label,
+                  requiredField: f.requiredField,
+                ),
+              ),
+              if (_occupationIsOther) ...[
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _occupationOtherController,
+                  decoration: _decoration(
+                    'Specify occupation',
+                    requiredField: true,
+                  ),
+                  maxLength: 80,
+                  buildCounter: (
+                      context, {
+                        required currentLength,
+                        required isFocused,
+                        maxLength,
+                      }) {
+                    return null;
+                  },
+                  validator: (v) {
+                    if (_occupationIsOther && (v ?? '').trim().isEmpty) {
+                      return 'Required';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ],
+          );
+        }
+
+        // Special-case multi-select for Concern reason
         if (f.id == deConcernReason) {
           final selected = _selectedConcernReasons;
 
@@ -837,12 +980,12 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
               .toList(),
           onChanged: (v) => setState(() {
             _values[f.id] = v ?? '';
-            if (f.id == deReporterRelationship && (v ?? '') != 'OTHER') {
+            if (f.id == deReporterRelationship && (v ?? '') != 'Other') {
               _values[deReporterRelationshipOther] = '';
             }
           }),
           validator: (v) => _requiredValidator(v, requiredField: f.requiredField),
-          decoration: _decoration(f.label),
+          decoration: _decoration(f.label, requiredField: f.requiredField),
         );
 
       case MgysdFieldType.boolean:
@@ -894,9 +1037,13 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
                 f.label,
                 icon: Icons.calendar_month,
                 hint: 'yyyy-mm-dd',
+                requiredField: f.requiredField,
               ),
-              validator: (v) =>
-                  _requiredValidator(v, requiredField: f.requiredField),
+              validator: (v) => _dateValidator(
+                v,
+                requiredField: f.requiredField,
+                fieldId: f.id,
+              ),
             ),
           ),
         );
@@ -904,7 +1051,7 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       case MgysdFieldType.phone:
         return TextFormField(
           initialValue: (_values[f.id] ?? '').trim(),
-          decoration: _decoration(f.label, icon: Icons.phone),
+          decoration: _decoration(f.label, icon: Icons.phone, requiredField: f.requiredField),
           keyboardType: TextInputType.phone,
           onChanged: (v) => _values[f.id] = v.trim(),
           validator: (v) => _phoneValidator(v, requiredField: f.requiredField),
@@ -914,7 +1061,7 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
         return TextFormField(
           key: ValueKey('${f.id}_${_values[f.id] ?? ''}'),
           initialValue: (_values[f.id] ?? '').trim(),
-          decoration: _decoration(f.label),
+          decoration: _decoration(f.label, requiredField: f.requiredField),
           keyboardType: TextInputType.number,
           readOnly: f.id == deReporterAge,
           onChanged: (v) => _values[f.id] = v.trim(),
@@ -925,7 +1072,7 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       case MgysdFieldType.textLong:
         return TextFormField(
           initialValue: (_values[f.id] ?? '').trim(),
-          decoration: _decoration(f.label),
+          decoration: _decoration(f.label, requiredField: f.requiredField),
           maxLines: 4,
           onChanged: (v) => _values[f.id] = v.trim(),
           validator: (v) =>
@@ -935,7 +1082,7 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       case MgysdFieldType.textShort:
         return TextFormField(
           initialValue: (_values[f.id] ?? '').trim(),
-          decoration: _decoration(f.label),
+          decoration: _decoration(f.label, requiredField: f.requiredField),
           maxLength: f.maxLen,
           buildCounter: (
               context, {
@@ -998,6 +1145,11 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
           child: _row2(_buildField(f1), _buildField(f2)),
         ),
       );
+    }
+
+    final anonymous = byId(deReporterAnonymous);
+    if (anonymous != null) {
+      addField(anonymous);
     }
 
     if (twoCols) {
@@ -1107,7 +1259,7 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     return DropdownButtonFormField<String>(
       value: safeValue,
       isExpanded: true,
-      decoration: _decoration(label),
+      decoration: _decoration(label, requiredField: requiredField),
       items: options
           .map(
             (o) => DropdownMenuItem<String>(
@@ -1132,7 +1284,7 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
 
     if (_loadingLocationTree) {
       return InputDecorator(
-        decoration: _decoration(label),
+        decoration: _decoration(label, requiredField: requiredField),
         child: const Row(
           children: [
             SizedBox(
@@ -1150,7 +1302,7 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     return DropdownButtonFormField<String>(
       value: safeValue,
       isExpanded: true,
-      decoration: _decoration(label),
+      decoration: _decoration(label, requiredField: requiredField),
       items: options
           .map(
             (ou) => DropdownMenuItem<String>(
@@ -1217,37 +1369,21 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
 
     Widget firstName = TextFormField(
       controller: client.firstNameController,
-      decoration: _decoration('Client First name'),
+      decoration: _decoration('Client First name', requiredField: true),
       validator: (v) => _requiredValidator(v, requiredField: true),
     );
 
     Widget lastName = TextFormField(
       controller: client.lastNameController,
-      decoration: _decoration('Client Last name'),
+      decoration: _decoration('Client Last name', requiredField: true),
       validator: (v) => _requiredValidator(v, requiredField: true),
     );
 
     Widget age = TextFormField(
       controller: client.ageController,
-      decoration: _decoration('Age'),
+      decoration: _decoration('Age', requiredField: true),
       keyboardType: TextInputType.number,
       validator: (v) => _requiredValidator(v, requiredField: true),
-      onChanged: (v) {
-        final estimatedDob = _estimateDobFromAge(v);
-        setState(() {
-          client.estimatedDobController.text = estimatedDob;
-        });
-      },
-    );
-
-    Widget estimatedDob = TextFormField(
-      controller: client.estimatedDobController,
-      readOnly: true,
-      decoration: _decoration(
-        'Estimated date of birth',
-        icon: Icons.calendar_month,
-        hint: 'Calculated from age',
-      ),
     );
 
     Widget sex = _dropdownFromOptions(
@@ -1266,7 +1402,14 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
 
     Widget phone = TextFormField(
       controller: client.phoneController,
-      decoration: _decoration('Client phone', icon: Icons.phone),
+      decoration: _decoration('Client phone', icon: Icons.phone, requiredField: true),
+      keyboardType: TextInputType.phone,
+      validator: (v) => _phoneValidator(v, requiredField: true),
+    );
+
+    Widget alternatePhone = TextFormField(
+      controller: client.alternatePhoneController,
+      decoration: _decoration('Alternative number', icon: Icons.phone),
       keyboardType: TextInputType.phone,
       validator: (v) => _phoneValidator(v, requiredField: false),
     );
@@ -1305,19 +1448,14 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
         Padding(padding: const EdgeInsets.only(bottom: 10), child: firstName),
         Padding(padding: const EdgeInsets.only(bottom: 10), child: lastName),
       ],
-      if (twoCols)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: _row2(age, estimatedDob),
-        )
-      else ...[
-        Padding(padding: const EdgeInsets.only(bottom: 10), child: age),
-        Padding(padding: const EdgeInsets.only(bottom: 10), child: estimatedDob),
-      ],
       if (twoCols) ...[
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
-          child: _row2(sex, phone),
+          child: _row2(age, sex),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: _row2(phone, alternatePhone),
         ),
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
@@ -1328,8 +1466,10 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
           child: contactMethod,
         ),
       ] else ...[
+        Padding(padding: const EdgeInsets.only(bottom: 10), child: age),
         Padding(padding: const EdgeInsets.only(bottom: 10), child: sex),
         Padding(padding: const EdgeInsets.only(bottom: 10), child: phone),
+        Padding(padding: const EdgeInsets.only(bottom: 10), child: alternatePhone),
         Padding(padding: const EdgeInsets.only(bottom: 10), child: district),
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
@@ -1379,15 +1519,25 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     final twoCols = _twoCols(availableWidth);
 
     Widget firstNameField = TextFormField(
-      controller: person.nameController,
-      decoration: _decoration('First name'),
+      controller: person.firstNameController,
+      decoration: _decoration('First name', requiredField: true),
       validator: (v) => _requiredValidator(v, requiredField: true),
     );
 
     Widget lastNameField = TextFormField(
-      controller: person.roleController,
-      decoration: _decoration('Role / Relationship'),
+      controller: person.lastNameController,
+      decoration: _decoration('Last name', requiredField: true),
       validator: (v) => _requiredValidator(v, requiredField: true),
+    );
+
+    Widget roleRelationshipField = _dropdownFromOptions(
+      label: 'Role / Relationship',
+      value: person.roleOrRelationship,
+      options: _peopleInvolvedRelationshipOptions,
+      requiredField: true,
+      onChanged: (v) => setState(() {
+        person.roleOrRelationship = v ?? '';
+      }),
     );
 
     return Container(
@@ -1412,24 +1562,28 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
               ),
             ),
           ),
-          if (twoCols)
+          if (twoCols) ...[
             Row(
               children: [
                 Expanded(child: firstNameField),
                 const SizedBox(width: 10),
                 Expanded(child: lastNameField),
               ],
-            )
-          else ...[
+            ),
+            const SizedBox(height: 10),
+            roleRelationshipField,
+          ] else ...[
             firstNameField,
             const SizedBox(height: 8),
             lastNameField,
+            const SizedBox(height: 8),
+            roleRelationshipField,
           ],
           const SizedBox(height: 8),
           Row(
             children: [
               const Spacer(),
-              if (_peopleInvolved.isNotEmpty)
+              if (_peopleInvolved.length > 1)
                 TextButton.icon(
                   onPressed: () => _removePersonInvolved(index),
                   icon: const Icon(Icons.delete, color: Colors.red),
@@ -1526,6 +1680,12 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       final reporterMap = <String, String>{};
       for (final f in aboutReporterFields) {
         reporterMap[f.id] = _values[f.id] ?? '';
+      }
+      if (_occupationIsOther) {
+        final specifiedOccupation = _occupationOtherController.text.trim();
+        reporterMap[deReporterOccupation] = specifiedOccupation.isNotEmpty
+            ? 'Other: $specifiedOccupation'
+            : 'Other';
       }
 
       final concernsMap = <String, String>{
@@ -1755,44 +1915,6 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
                     ),
                     const SizedBox(height: 16),
                     _sectionCard(
-                      title: 'Why are you concerned?',
-                      subtitle: 'Date, location and reasons for concern',
-                      icon: Icons.report_problem,
-                      children: [
-                        // Concern fields in the new order: date, location, reasons, description
-                        ...concernFields.map((f) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: _buildField(f),
-                          );
-                        }).toList(),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    // People involved section moved before Clients
-                    _sectionCard(
-                      title: 'People involved',
-                      subtitle: 'Other people involved in the incident',
-                      icon: Icons.people,
-                      children: [
-                        ..._peopleInvolved.asMap().entries.map((e) {
-                          final idx = e.key;
-                          final person = e.value;
-                          return _personInvolvedCard(idx, person, contentMax);
-                        }).toList(),
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: TextButton.icon(
-                            onPressed: _addPersonInvolved,
-                            icon: const Icon(Icons.add),
-                            label: const Text('Add another person involved'),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _sectionCard(
                       title: 'Clients',
                       subtitle: 'People affected',
                       icon: Icons.group,
@@ -1813,11 +1935,41 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 16),
+                    _sectionCard(
+                      title: 'Why are you concerned?',
+                      subtitle: 'Date, location and reasons for concern',
+                      icon: Icons.report_problem,
+                      children: [
+                        // Concern fields in the new order: date, location, reasons, description
+                        ...concernFields.map((f) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _buildField(f),
+                          );
+                        }).toList(),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _sectionCard(
+                      title: 'People involved',
+                      subtitle: 'Other people involved in the incident',
+                      icon: Icons.people,
+                      children: [
+                        ..._peopleInvolved.asMap().entries.map((e) {
+                          final idx = e.key;
+                          final person = e.value;
+                          return _personInvolvedCard(idx, person, contentMax);
+                        }).toList(),
+                      ],
+                    ),
                     const SizedBox(height: 20),
                     ElevatedButton(
                       onPressed: _submitting ? null : _onSave,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: widget.color,
+                        foregroundColor: Colors.white,
+                        disabledForegroundColor: Colors.white70,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       child: _submitting
@@ -1826,7 +1978,13 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
                         width: 18,
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                       )
-                          : const Text('Save report offline'),
+                          : const Text(
+                        'Save Report Offline',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 24),
                   ],
@@ -1839,4 +1997,3 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     );
   }
 }
-
