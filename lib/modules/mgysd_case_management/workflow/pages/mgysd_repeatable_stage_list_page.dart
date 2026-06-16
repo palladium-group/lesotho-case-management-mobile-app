@@ -9,6 +9,7 @@ import 'package:lncmis_mobile_app/modules/mgysd_case_management/referral/pages/m
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/service_provision/pages/mgysd_service_provision_page.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/social_investigation/pages/mgysd_social_investigation_page.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:lncmis_mobile_app/modules/mgysd_case_management/case_closure/pages/mgysd_case_closure_page.dart';
 
 class MgysdRepeatableStageListPage extends StatefulWidget {
   const MgysdRepeatableStageListPage({
@@ -627,6 +628,15 @@ class _MgysdRepeatableStageListPageState
         break;
       case 'monitoring':
         page = MgysdMonitoringPage(
+          color: widget.color,
+          mgysdCase: mgysdCase,
+          householdTei: widget.householdTei,
+          householdName: widget.householdName,
+          clientName: widget.clientName,
+        );
+        break;
+      case 'case_closure':
+        page = MgysdCaseClosurePage(
           color: widget.color,
           mgysdCase: mgysdCase,
           householdTei: widget.householdTei,
