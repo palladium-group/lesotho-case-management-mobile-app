@@ -79,109 +79,222 @@ class _OrgUnitOption {
   });
 }
 
-class _ChildWellbeingEntry {
+class _ExternalInformantEntry {
   final String id;
-  final TextEditingController childNameController;
-  final TextEditingController dateController;
-  final TextEditingController notesController;
 
-  int? safeAtHome;
-  int? listenedTo;
-  int? treatedFairly;
-  int? talkingTogether;
-  int? havingFunTogether;
-  int? learningTogether;
-  int? goodFriend;
-  int? friendsNice;
-  int? enjoySchool;
-  int? safeAtSchool;
-  int? likeLooks;
-  int? selfConfident;
-  int? opportunities;
-  int? lifeGoingWell;
-  int? happy;
-  int? positiveFuture;
-  String hasAnotherChild;
+  // Section B – Informant details
+  final TextEditingController fullNameController;
+  final TextEditingController ageController;
+  final TextEditingController relationshipToClientController;
+  final TextEditingController occupationController;
+  final TextEditingController contactDetailsController;
+  final TextEditingController physicalAddressController;
+  String gender;
 
-  _ChildWellbeingEntry({
+  // Section C – Purpose of interview
+  final Set<String> purposeOfInterview;
+  final TextEditingController purposeOfInterviewOtherController;
+
+  // Section D – Knowledge of client
+  final TextEditingController howLongKnownController;
+  final TextEditingController currentSituationUnderstandingController;
+  final TextEditingController responsibleForCareController;
+
+  // Section E – Living conditions
+  String housingConditionRating;
+  final TextEditingController housingCommentsController;
+  String basicNeedsRating;
+  final TextEditingController basicNeedsDetailsController;
+  String healthStatusRating;
+  final TextEditingController healthStatusDetailsController;
+  String accessHealthServices;
+  String accessSocialSupport;
+  String accessSchoolWork;
+  final TextEditingController accessServicesCommentsController;
+
+  // Section F – Safety
+  final Set<String> abuseTypes;
+  final TextEditingController abuseDetailsController;
+  String signsOfNeglect;
+  final TextEditingController neglectDetailsController;
+  final Set<String> riskFactors;
+  final TextEditingController riskFactorOtherController;
+
+  // Section G – Functioning
+  final TextEditingController dailyFunctioningController;
+  final Set<String> socialBehaviours;
+  final TextEditingController behaviourCommentsController;
+
+  // Section H – Social support
+  String familySupportLevel;
+  final TextEditingController familySupportExplainController;
+  final TextEditingController communityPerceptionController;
+  final TextEditingController knownHistoryController;
+
+  // Section I – Opinions
+  final TextEditingController keyChallengesController;
+  final TextEditingController recommendationsController;
+
+  // Section J – Reliability
+  String informantCredibility;
+  final TextEditingController credibilityReasonsController;
+
+  // Section K – Social Worker Summary Notes
+  final TextEditingController socialWorkerSummaryNotesController;
+
+  // Section L – Risk Level Assessment
+  String riskLevel;
+
+  // Section M – Confidentiality: static text, no fields needed
+
+  _ExternalInformantEntry({
     required this.id,
-    String childName = '',
-    String date = '',
-    String notes = '',
-    this.safeAtHome,
-    this.listenedTo,
-    this.treatedFairly,
-    this.talkingTogether,
-    this.havingFunTogether,
-    this.learningTogether,
-    this.goodFriend,
-    this.friendsNice,
-    this.enjoySchool,
-    this.safeAtSchool,
-    this.likeLooks,
-    this.selfConfident,
-    this.opportunities,
-    this.lifeGoingWell,
-    this.happy,
-    this.positiveFuture,
-    this.hasAnotherChild = '',
-  })  : childNameController = TextEditingController(text: childName),
-        dateController = TextEditingController(text: date),
-        notesController = TextEditingController(text: notes);
-
-  bool get hasAnyData {
-    return childNameController.text.trim().isNotEmpty ||
-        dateController.text.trim().isNotEmpty ||
-        notesController.text.trim().isNotEmpty ||
-        safeAtHome != null ||
-        listenedTo != null ||
-        treatedFairly != null ||
-        talkingTogether != null ||
-        havingFunTogether != null ||
-        learningTogether != null ||
-        goodFriend != null ||
-        friendsNice != null ||
-        enjoySchool != null ||
-        safeAtSchool != null ||
-        likeLooks != null ||
-        selfConfident != null ||
-        opportunities != null ||
-        lifeGoingWell != null ||
-        happy != null ||
-        positiveFuture != null ||
-        hasAnotherChild.trim().isNotEmpty;
-  }
+    String fullName = '',
+    String age = '',
+    this.gender = '',
+    String relationshipToClient = '',
+    String occupation = '',
+    String contactDetails = '',
+    String physicalAddress = '',
+    Set<String>? purposeOfInterview,
+    String purposeOfInterviewOther = '',
+    String howLongKnown = '',
+    String currentSituationUnderstanding = '',
+    String responsibleForCare = '',
+    this.housingConditionRating = '',
+    String housingComments = '',
+    this.basicNeedsRating = '',
+    String basicNeedsDetails = '',
+    this.healthStatusRating = '',
+    String healthStatusDetails = '',
+    this.accessHealthServices = '',
+    this.accessSocialSupport = '',
+    this.accessSchoolWork = '',
+    String accessServicesComments = '',
+    Set<String>? abuseTypes,
+    String abuseDetails = '',
+    this.signsOfNeglect = '',
+    String neglectDetails = '',
+    Set<String>? riskFactors,
+    String riskFactorOther = '',
+    String dailyFunctioning = '',
+    Set<String>? socialBehaviours,
+    String behaviourComments = '',
+    this.familySupportLevel = '',
+    String familySupportExplain = '',
+    String communityPerception = '',
+    String knownHistory = '',
+    String keyChallenges = '',
+    String recommendations = '',
+    this.informantCredibility = '',
+    String credibilityReasons = '',
+    String socialWorkerSummaryNotes = '',
+    this.riskLevel = '',
+  })  : fullNameController = TextEditingController(text: fullName),
+        ageController = TextEditingController(text: age),
+        relationshipToClientController = TextEditingController(text: relationshipToClient),
+        occupationController = TextEditingController(text: occupation),
+        contactDetailsController = TextEditingController(text: contactDetails),
+        physicalAddressController = TextEditingController(text: physicalAddress),
+        purposeOfInterview = purposeOfInterview ?? {},
+        purposeOfInterviewOtherController = TextEditingController(text: purposeOfInterviewOther),
+        howLongKnownController = TextEditingController(text: howLongKnown),
+        currentSituationUnderstandingController = TextEditingController(text: currentSituationUnderstanding),
+        responsibleForCareController = TextEditingController(text: responsibleForCare),
+        housingCommentsController = TextEditingController(text: housingComments),
+        basicNeedsDetailsController = TextEditingController(text: basicNeedsDetails),
+        healthStatusDetailsController = TextEditingController(text: healthStatusDetails),
+        accessServicesCommentsController = TextEditingController(text: accessServicesComments),
+        abuseTypes = abuseTypes ?? {},
+        abuseDetailsController = TextEditingController(text: abuseDetails),
+        neglectDetailsController = TextEditingController(text: neglectDetails),
+        riskFactors = riskFactors ?? {},
+        riskFactorOtherController = TextEditingController(text: riskFactorOther),
+        dailyFunctioningController = TextEditingController(text: dailyFunctioning),
+        socialBehaviours = socialBehaviours ?? {},
+        behaviourCommentsController = TextEditingController(text: behaviourComments),
+        familySupportExplainController = TextEditingController(text: familySupportExplain),
+        communityPerceptionController = TextEditingController(text: communityPerception),
+        knownHistoryController = TextEditingController(text: knownHistory),
+        keyChallengesController = TextEditingController(text: keyChallenges),
+        recommendationsController = TextEditingController(text: recommendations),
+        credibilityReasonsController = TextEditingController(text: credibilityReasons),
+        socialWorkerSummaryNotesController = TextEditingController(text: socialWorkerSummaryNotes);
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'childName': childNameController.text.trim(),
-      'date': dateController.text.trim(),
-      'safeAtHome': safeAtHome,
-      'listenedTo': listenedTo,
-      'treatedFairly': treatedFairly,
-      'talkingTogether': talkingTogether,
-      'havingFunTogether': havingFunTogether,
-      'learningTogether': learningTogether,
-      'goodFriend': goodFriend,
-      'friendsNice': friendsNice,
-      'enjoySchool': enjoySchool,
-      'safeAtSchool': safeAtSchool,
-      'likeLooks': likeLooks,
-      'selfConfident': selfConfident,
-      'opportunities': opportunities,
-      'lifeGoingWell': lifeGoingWell,
-      'happy': happy,
-      'positiveFuture': positiveFuture,
-      'hasAnotherChild': hasAnotherChild,
-      'notes': notesController.text.trim(),
+      'fullName': fullNameController.text.trim(),
+      'age': ageController.text.trim(),
+      'gender': gender,
+      'relationshipToClient': relationshipToClientController.text.trim(),
+      'occupation': occupationController.text.trim(),
+      'contactDetails': contactDetailsController.text.trim(),
+      'physicalAddress': physicalAddressController.text.trim(),
+      'purposeOfInterview': purposeOfInterview.toList(),
+      'purposeOfInterviewOther': purposeOfInterviewOtherController.text.trim(),
+      'howLongKnown': howLongKnownController.text.trim(),
+      'currentSituationUnderstanding': currentSituationUnderstandingController.text.trim(),
+      'responsibleForCare': responsibleForCareController.text.trim(),
+      'housingConditionRating': housingConditionRating,
+      'housingComments': housingCommentsController.text.trim(),
+      'basicNeedsRating': basicNeedsRating,
+      'basicNeedsDetails': basicNeedsDetailsController.text.trim(),
+      'healthStatusRating': healthStatusRating,
+      'healthStatusDetails': healthStatusDetailsController.text.trim(),
+      'accessHealthServices': accessHealthServices,
+      'accessSocialSupport': accessSocialSupport,
+      'accessSchoolWork': accessSchoolWork,
+      'accessServicesComments': accessServicesCommentsController.text.trim(),
+      'abuseTypes': abuseTypes.toList(),
+      'abuseDetails': abuseDetailsController.text.trim(),
+      'signsOfNeglect': signsOfNeglect,
+      'neglectDetails': neglectDetailsController.text.trim(),
+      'riskFactors': riskFactors.toList(),
+      'riskFactorOther': riskFactorOtherController.text.trim(),
+      'dailyFunctioning': dailyFunctioningController.text.trim(),
+      'socialBehaviours': socialBehaviours.toList(),
+      'behaviourComments': behaviourCommentsController.text.trim(),
+      'familySupportLevel': familySupportLevel,
+      'familySupportExplain': familySupportExplainController.text.trim(),
+      'communityPerception': communityPerceptionController.text.trim(),
+      'knownHistory': knownHistoryController.text.trim(),
+      'keyChallenges': keyChallengesController.text.trim(),
+      'recommendations': recommendationsController.text.trim(),
+      'informantCredibility': informantCredibility,
+      'credibilityReasons': credibilityReasonsController.text.trim(),
+      'socialWorkerSummaryNotes': socialWorkerSummaryNotesController.text.trim(),
+      'riskLevel': riskLevel,
     };
   }
 
   void dispose() {
-    childNameController.dispose();
-    dateController.dispose();
-    notesController.dispose();
+    fullNameController.dispose();
+    ageController.dispose();
+    relationshipToClientController.dispose();
+    occupationController.dispose();
+    contactDetailsController.dispose();
+    physicalAddressController.dispose();
+    purposeOfInterviewOtherController.dispose();
+    howLongKnownController.dispose();
+    currentSituationUnderstandingController.dispose();
+    responsibleForCareController.dispose();
+    housingCommentsController.dispose();
+    basicNeedsDetailsController.dispose();
+    healthStatusDetailsController.dispose();
+    accessServicesCommentsController.dispose();
+    abuseDetailsController.dispose();
+    neglectDetailsController.dispose();
+    riskFactorOtherController.dispose();
+    dailyFunctioningController.dispose();
+    behaviourCommentsController.dispose();
+    familySupportExplainController.dispose();
+    communityPerceptionController.dispose();
+    knownHistoryController.dispose();
+    keyChallengesController.dispose();
+    recommendationsController.dispose();
+    credibilityReasonsController.dispose();
+    socialWorkerSummaryNotesController.dispose();
   }
 }
 
@@ -293,15 +406,105 @@ class _MgysdSocialInvestigationPageState
   final TextEditingController _socialInclusionStrengthsController = TextEditingController();
   final TextEditingController _socialInclusionChallengesController = TextEditingController();
 
-  final TextEditingController _childOverallSafetyController = TextEditingController();
-  final TextEditingController _childCarePreferenceController = TextEditingController();
-  final TextEditingController _childFutureSafetyIdeasController = TextEditingController();
-  final TextEditingController _childCommunicationConsiderationsController = TextEditingController();
+  final List<_ExternalInformantEntry> _externalInformantEntries = [];
+  final Set<int> _collapsedInformants = {};
 
-  final List<_ChildWellbeingEntry> _childWellbeingEntries = [];
-
-  bool _showChildWellbeingIndicators = false;
-  bool _showChildVoiceSection = false;
+  static const List<String> _purposeOfInterviewOptions = [
+    'SOCIAL_INVESTIGATION', 'RISK_ASSESSMENT', 'PLACEMENT_SUPPORT',
+    'COURT_REPORT', 'FOLLOW_UP_MONITORING', 'OTHER',
+  ];
+  static const Map<String, String> _purposeOfInterviewLabels = {
+    'SOCIAL_INVESTIGATION': 'Social investigation',
+    'RISK_ASSESSMENT': 'Risk assessment',
+    'PLACEMENT_SUPPORT': 'Placement / support assessment',
+    'COURT_REPORT': 'Court report',
+    'FOLLOW_UP_MONITORING': 'Follow-up monitoring',
+    'OTHER': 'Other',
+  };
+  static const List<String> _housingConditionOptions = [
+    'STABLE_SAFE', 'INADEQUATE', 'UNSAFE',
+  ];
+  static const Map<String, String> _housingConditionLabels = {
+    'STABLE_SAFE': 'Stable and safe',
+    'INADEQUATE': 'Inadequate',
+    'UNSAFE': 'Unsafe',
+  };
+  static const List<String> _basicNeedsOptions = [
+    'ADEQUATE', 'INCONSISTENT', 'INADEQUATE',
+  ];
+  static const Map<String, String> _basicNeedsLabels = {
+    'ADEQUATE': 'Adequate',
+    'INCONSISTENT': 'Inconsistent',
+    'INADEQUATE': 'Inadequate',
+  };
+  static const List<String> _observedHealthOptions = [
+    'APPEARS_HEALTHY', 'ILL_FRAIL', 'HAS_DISABILITY', 'MENTAL_HEALTH_CONCERNS',
+  ];
+  static const Map<String, String> _observedHealthLabels = {
+    'APPEARS_HEALTHY': 'Appears healthy',
+    'ILL_FRAIL': 'Ill / frail',
+    'HAS_DISABILITY': 'Has disability',
+    'MENTAL_HEALTH_CONCERNS': 'Mental health concerns',
+  };
+  static const List<String> _abuseTypeOptions = [
+    'PHYSICAL', 'EMOTIONAL_PSYCHOLOGICAL', 'SEXUAL', 'FINANCIAL', 'NONE_KNOWN',
+  ];
+  static const Map<String, String> _abuseTypeLabels = {
+    'PHYSICAL': 'Physical',
+    'EMOTIONAL_PSYCHOLOGICAL': 'Emotional / psychological',
+    'SEXUAL': 'Sexual',
+    'FINANCIAL': 'Financial exploitation',
+    'NONE_KNOWN': 'None known',
+  };
+  static const List<String> _riskFactorOptions = [
+    'VIOLENCE', 'SUBSTANCE_ABUSE', 'ISOLATION', 'UNSAFE_ENVIRONMENT', 'EXPLOITATION', 'OTHER',
+  ];
+  static const Map<String, String> _riskFactorLabels = {
+    'VIOLENCE': 'Violence in household / community',
+    'SUBSTANCE_ABUSE': 'Substance abuse',
+    'ISOLATION': 'Isolation / lack of support',
+    'UNSAFE_ENVIRONMENT': 'Unsafe environment',
+    'EXPLOITATION': 'Exploitation (labour, financial, etc.)',
+    'OTHER': 'Other',
+  };
+  static const List<String> _socialBehaviourOptions = [
+    'INDEPENDENT', 'WITHDRAWN', 'DEPENDENT', 'AGGRESSIVE', 'VULNERABLE',
+  ];
+  static const Map<String, String> _socialBehaviourLabels = {
+    'INDEPENDENT': 'Independent',
+    'WITHDRAWN': 'Withdrawn',
+    'DEPENDENT': 'Dependent on others',
+    'AGGRESSIVE': 'Aggressive',
+    'VULNERABLE': 'Vulnerable / easily exploited',
+  };
+  static const List<String> _familySupportOptions = ['STRONG', 'LIMITED', 'NONE'];
+  static const Map<String, String> _familySupportLabels = {
+    'STRONG': 'Strong',
+    'LIMITED': 'Limited',
+    'NONE': 'None',
+  };
+  static const List<String> _credibilityOptions = ['HIGH', 'MODERATE', 'LOW'];
+  static const Map<String, String> _credibilityLabels = {
+    'HIGH': 'High',
+    'MODERATE': 'Moderate',
+    'LOW': 'Low',
+  };
+  static const List<String> _riskLevelOptions = [
+    'LOW_RISK', 'MODERATE_RISK', 'HIGH_RISK', 'CRITICAL',
+  ];
+  static const Map<String, String> _riskLevelLabels = {
+    'LOW_RISK': 'Low Risk',
+    'MODERATE_RISK': 'Moderate Risk',
+    'HIGH_RISK': 'High Risk',
+    'CRITICAL': 'Critical (Immediate intervention required)',
+  };
+  // Gender options for external informant (includes Other)
+  static const List<String> _genderOptions = ['MALE', 'FEMALE', 'OTHER'];
+  static const Map<String, String> _genderLabels = {
+    'MALE': 'Male',
+    'FEMALE': 'Female',
+    'OTHER': 'Other',
+  };
 
   static const String _stageKey = 'social_investigation';
   static const String _tableName = 'mgysd_social_investigation';
@@ -595,11 +798,7 @@ class _MgysdSocialInvestigationPageState
     _socialInclusionObservationsController.dispose();
     _socialInclusionStrengthsController.dispose();
     _socialInclusionChallengesController.dispose();
-    _childOverallSafetyController.dispose();
-    _childCarePreferenceController.dispose();
-    _childFutureSafetyIdeasController.dispose();
-    _childCommunicationConsiderationsController.dispose();
-    for (final entry in _childWellbeingEntries) { entry.dispose(); }
+    for (final entry in _externalInformantEntries) { entry.dispose(); }
     super.dispose();
   }
 
@@ -1089,46 +1288,55 @@ class _MgysdSocialInvestigationPageState
     _loadDomain(payload: part3, key: 'socialInclusion', ratingSetter: (v) => _socialInclusionRating = v, observations: _socialInclusionObservationsController, strengths: _socialInclusionStrengthsController, challenges: _socialInclusionChallengesController);
 
     final part4 = (payload['part4'] ?? {}) as Map<String, dynamic>;
-    _childOverallSafetyController.text = _text(part4['overallSafety']);
-    _childCarePreferenceController.text = _text(part4['carePreference']);
-    _childFutureSafetyIdeasController.text = _text(part4['futureSafetyIdeas']);
-    _childCommunicationConsiderationsController.text = _text(part4['communicationConsiderations']);
-    _showChildVoiceSection = _childOverallSafetyController.text.trim().isNotEmpty ||
-        _childCarePreferenceController.text.trim().isNotEmpty ||
-        _childFutureSafetyIdeasController.text.trim().isNotEmpty ||
-        _childCommunicationConsiderationsController.text.trim().isNotEmpty;
-
-    final children = (payload['childWellbeing'] ?? []) as List<dynamic>;
-    if (children.isNotEmpty) {
-      _showChildWellbeingIndicators = true;
-      for (final entry in _childWellbeingEntries) { entry.dispose(); }
-      _childWellbeingEntries.clear();
-      for (final raw in children) {
-        final item = (raw ?? {}) as Map<String, dynamic>;
-        _childWellbeingEntries.add(_ChildWellbeingEntry(
-          id: _text(item['id']).isEmpty ? AppUtil.getUid() : _text(item['id']),
-          childName: _text(item['childName']),
-          date: _text(item['date']),
-          notes: _text(item['notes']),
-          safeAtHome: _intOrNull(item['safeAtHome']),
-          listenedTo: _intOrNull(item['listenedTo']),
-          treatedFairly: _intOrNull(item['treatedFairly']),
-          talkingTogether: _intOrNull(item['talkingTogether']),
-          havingFunTogether: _intOrNull(item['havingFunTogether']),
-          learningTogether: _intOrNull(item['learningTogether']),
-          goodFriend: _intOrNull(item['goodFriend']),
-          friendsNice: _intOrNull(item['friendsNice']),
-          enjoySchool: _intOrNull(item['enjoySchool']),
-          safeAtSchool: _intOrNull(item['safeAtSchool']),
-          likeLooks: _intOrNull(item['likeLooks']),
-          selfConfident: _intOrNull(item['selfConfident']),
-          opportunities: _intOrNull(item['opportunities']),
-          lifeGoingWell: _intOrNull(item['lifeGoingWell']),
-          happy: _intOrNull(item['happy']),
-          positiveFuture: _intOrNull(item['positiveFuture']),
-          hasAnotherChild: _text(item['hasAnotherChild']),
-        ));
-      }
+    final informants = (part4['externalInformants'] ?? []) as List<dynamic>;
+    for (final entry in _externalInformantEntries) { entry.dispose(); }
+    _externalInformantEntries.clear();
+    for (final raw in informants) {
+      final item = (raw ?? {}) as Map<String, dynamic>;
+      _externalInformantEntries.add(_ExternalInformantEntry(
+        id: _text(item['id']).isEmpty ? AppUtil.getUid() : _text(item['id']),
+        fullName: _text(item['fullName']),
+        age: _text(item['age']),
+        gender: _text(item['gender']),
+        relationshipToClient: _text(item['relationshipToClient']),
+        occupation: _text(item['occupation']),
+        contactDetails: _text(item['contactDetails']),
+        physicalAddress: _text(item['physicalAddress']),
+        purposeOfInterview: Set<String>.from(item['purposeOfInterview'] ?? []),
+        purposeOfInterviewOther: _text(item['purposeOfInterviewOther']),
+        howLongKnown: _text(item['howLongKnown']),
+        currentSituationUnderstanding: _text(item['currentSituationUnderstanding']),
+        responsibleForCare: _text(item['responsibleForCare']),
+        housingConditionRating: _text(item['housingConditionRating']),
+        housingComments: _text(item['housingComments']),
+        basicNeedsRating: _text(item['basicNeedsRating']),
+        basicNeedsDetails: _text(item['basicNeedsDetails']),
+        healthStatusRating: _text(item['healthStatusRating']),
+        healthStatusDetails: _text(item['healthStatusDetails']),
+        accessHealthServices: _text(item['accessHealthServices']),
+        accessSocialSupport: _text(item['accessSocialSupport']),
+        accessSchoolWork: _text(item['accessSchoolWork']),
+        accessServicesComments: _text(item['accessServicesComments']),
+        abuseTypes: Set<String>.from(item['abuseTypes'] ?? []),
+        abuseDetails: _text(item['abuseDetails']),
+        signsOfNeglect: _text(item['signsOfNeglect']),
+        neglectDetails: _text(item['neglectDetails']),
+        riskFactors: Set<String>.from(item['riskFactors'] ?? []),
+        riskFactorOther: _text(item['riskFactorOther']),
+        dailyFunctioning: _text(item['dailyFunctioning']),
+        socialBehaviours: Set<String>.from(item['socialBehaviours'] ?? []),
+        behaviourComments: _text(item['behaviourComments']),
+        familySupportLevel: _text(item['familySupportLevel']),
+        familySupportExplain: _text(item['familySupportExplain']),
+        communityPerception: _text(item['communityPerception']),
+        knownHistory: _text(item['knownHistory']),
+        keyChallenges: _text(item['keyChallenges']),
+        recommendations: _text(item['recommendations']),
+        informantCredibility: _text(item['informantCredibility']),
+        credibilityReasons: _text(item['credibilityReasons']),
+        socialWorkerSummaryNotes: _text(item['socialWorkerSummaryNotes']),
+        riskLevel: _text(item['riskLevel']),
+      ));
     }
   }
 
@@ -1205,12 +1413,8 @@ class _MgysdSocialInvestigationPageState
         'socialInclusion': _domainPayload(rating: _socialInclusionRating, observations: _socialInclusionObservationsController, strengths: _socialInclusionStrengthsController, challenges: _socialInclusionChallengesController),
       },
       'part4': {
-        'overallSafety': _childOverallSafetyController.text.trim(),
-        'carePreference': _childCarePreferenceController.text.trim(),
-        'futureSafetyIdeas': _childFutureSafetyIdeasController.text.trim(),
-        'communicationConsiderations': _childCommunicationConsiderationsController.text.trim(),
+        'externalInformants': _externalInformantEntries.map((e) => e.toJson()).toList(),
       },
-      'childWellbeing': _childWellbeingEntries.where((entry) => entry.hasAnyData).map((entry) => entry.toJson()).toList(),
     };
   }
   Future<void> _saveHouseholdEditsToTei(Database db) async {
@@ -1422,34 +1626,31 @@ class _MgysdSocialInvestigationPageState
     }
   }
 
-  void _addChildWellbeingEntry() {
+  void _addExternalInformantEntry() {
     setState(() {
-      _showChildWellbeingIndicators = true;
-      _childWellbeingEntries.add(_ChildWellbeingEntry(id: AppUtil.getUid(), date: _today()));
-    });
-  }
-
-  void _removeChildWellbeingEntry(int index) {
-    setState(() {
-      final item = _childWellbeingEntries.removeAt(index);
-      item.dispose();
-      if (_childWellbeingEntries.isEmpty) {
-        _showChildWellbeingIndicators = false;
+      // Collapse all existing cards before adding the new one
+      for (int i = 0; i < _externalInformantEntries.length; i++) {
+        _collapsedInformants.add(i);
       }
+      _externalInformantEntries.add(_ExternalInformantEntry(id: AppUtil.getUid()));
+      // New card is always expanded (its index is not in the set)
     });
   }
 
-  void _addChildVoiceSection() {
-    setState(() => _showChildVoiceSection = true);
-  }
-
-  void _removeChildVoiceSection() {
+  void _removeExternalInformantEntry(int index) {
     setState(() {
-      _showChildVoiceSection = false;
-      _childOverallSafetyController.clear();
-      _childCarePreferenceController.clear();
-      _childFutureSafetyIdeasController.clear();
-      _childCommunicationConsiderationsController.clear();
+      final item = _externalInformantEntries.removeAt(index);
+      item.dispose();
+      // Rebuild the collapsed set with shifted indices
+      final updated = <int>{};
+      for (final i in _collapsedInformants) {
+        if (i < index) updated.add(i);
+        if (i > index) updated.add(i - 1);
+        // i == index: removed, don't carry over
+      }
+      _collapsedInformants
+        ..clear()
+        ..addAll(updated);
     });
   }
 
@@ -1906,127 +2107,484 @@ class _MgysdSocialInvestigationPageState
     );
   }
 
+  Widget _checkboxGroup({
+    required String label,
+    required List<String> options,
+    required Map<String, String> labels,
+    required Set<String> selected,
+    required void Function(String option, bool checked) onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4, top: 4),
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.blueGrey),
+          ),
+        ),
+        ...options.map((option) {
+          return CheckboxListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            value: selected.contains(option),
+            title: Text(labels[option] ?? option, style: const TextStyle(fontSize: 13.5)),
+            onChanged: (checked) => onChanged(option, checked ?? false),
+          );
+        }),
+        const SizedBox(height: 4),
+      ],
+    );
+  }
+
+  Widget _subHeading(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12, bottom: 8),
+      child: Row(
+        children: [
+          Container(width: 3, height: 16, color: widget.color, margin: const EdgeInsets.only(right: 8)),
+          Text(text, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800)),
+        ],
+      ),
+    );
+  }
+
+  Widget _readOnlyInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 7),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 140,
+            child: Text(label, style: const TextStyle(fontSize: 12.5, color: Colors.blueGrey, fontWeight: FontWeight.w600)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _externalInformantCard(int index, _ExternalInformantEntry entry) {
+    final cardLabel = entry.fullNameController.text.trim().isNotEmpty
+        ? entry.fullNameController.text.trim()
+        : 'Informant ${index + 1}';
+    final isCollapsed = _collapsedInformants.contains(index);
+
+    // Pull primary client from _familyMembers
+    final primaryClient = _familyMembers.isNotEmpty
+        ? _familyMembers.firstWhere((m) => m.isPrimaryClient, orElse: () => _familyMembers.first)
+        : null;
+    final clientName = primaryClient != null ? primaryClient.fullName : (widget.clientName ?? '').trim();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 13),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FBFD),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(
+          color: isCollapsed ? Colors.blueGrey.withOpacity(0.08) : Colors.blueGrey.withOpacity(0.12),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header (always visible) ──────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: widget.color.withOpacity(0.12),
+                  child: Icon(Icons.person_outline, color: widget.color, size: 18),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(cardLabel, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900)),
+                      if (isCollapsed && entry.purposeOfInterview.isNotEmpty)
+                        Text(
+                          entry.purposeOfInterview
+                              .map((k) => _purposeOfInterviewLabels[k] ?? k)
+                              .join(', '),
+                          style: const TextStyle(fontSize: 11.5, color: Colors.blueGrey),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
+                ),
+                // Expand / collapse button
+                IconButton(
+                  tooltip: isCollapsed ? 'Expand' : 'Minimise',
+                  onPressed: () => setState(() {
+                    if (isCollapsed) {
+                      _collapsedInformants.remove(index);
+                    } else {
+                      _collapsedInformants.add(index);
+                    }
+                  }),
+                  icon: AnimatedRotation(
+                    turns: isCollapsed ? 0 : 0.5,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(Icons.keyboard_arrow_down_rounded, size: 22),
+                  ),
+                  color: Colors.blueGrey,
+                ),
+                const SizedBox(width: 2),
+                // Delete — visually separated by colour and distance from minimize
+                IconButton(
+                  tooltip: 'Remove informant',
+                  onPressed: () => _removeExternalInformantEntry(index),
+                  icon: const Icon(Icons.delete_outline, size: 20),
+                  color: Colors.redAccent,
+                ),
+              ],
+            ),
+          ),
+
+          // ── Body (hidden when collapsed) ─────────────────────
+          if (!isCollapsed) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _subHeading('Section A: Case Information'),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: widget.color.withOpacity(0.04),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: widget.color.withOpacity(0.14)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _readOnlyInfoRow('Case Number', widget.mgysdCase.caseNo),
+                        _readOnlyInfoRow('File Number', _householdFileNumberController.text.trim().isNotEmpty
+                            ? _householdFileNumberController.text.trim() : '—'),
+                        _readOnlyInfoRow('Name of Client', clientName.isNotEmpty ? clientName : '—'),
+                        _readOnlyInfoRow('District', _householdDistrictController.text.trim().isNotEmpty
+                            ? _householdDistrictController.text.trim() : '—'),
+                        _readOnlyInfoRow('Community Council', _householdCommunityCouncilController.text.trim().isNotEmpty
+                            ? _householdCommunityCouncilController.text.trim() : '—'),
+                        _readOnlyInfoRow('Village', _householdVillageController.text.trim().isNotEmpty
+                            ? _householdVillageController.text.trim() : '—'),
+                        _readOnlyInfoRow('Address', _householdAddressController.text.trim().isNotEmpty
+                            ? _householdAddressController.text.trim() : '—'),
+                        _readOnlyInfoRow('Name of Social Worker',
+                            '${_socialWorkerFirstNameController.text.trim()} ${_socialWorkerSurnameController.text.trim()}'.trim().isNotEmpty
+                                ? '${_socialWorkerFirstNameController.text.trim()} ${_socialWorkerSurnameController.text.trim()}'.trim()
+                                : '—'),
+                        _readOnlyInfoRow('Date of Interview', _eventDateController.text.trim().isNotEmpty
+                            ? _eventDateController.text.trim() : '—'),
+                      ],
+                    ),
+                  ),
+
+                  // ── Section B: Informant Details ──────────────────────
+                  _subHeading('Section B: Informant Details'),
+                  _input(entry.fullNameController, 'Full Name',
+                      validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null),
+                  _two(
+                    _input(entry.ageController, 'Age', keyboardType: TextInputType.number),
+                    _dropdown(
+                      label: 'Gender',
+                      value: entry.gender,
+                      options: _genderOptions,
+                      labels: _genderLabels,
+                      onChanged: (v) => setState(() => entry.gender = v),
+                    ),
+                  ),
+                  _input(entry.relationshipToClientController, 'Relationship to Client'),
+                  _two(
+                    _input(entry.occupationController, 'Occupation'),
+                    _input(entry.contactDetailsController, 'Contact Details', keyboardType: TextInputType.phone),
+                  ),
+                  _input(entry.physicalAddressController, 'Physical Address', maxLines: 2),
+
+                  // ── Section C: Purpose of Interview ───────────────────
+                  _subHeading('Section C: Purpose of Interview'),
+                  _checkboxGroup(
+                    label: 'Select all that apply',
+                    options: _purposeOfInterviewOptions,
+                    labels: _purposeOfInterviewLabels,
+                    selected: entry.purposeOfInterview,
+                    onChanged: (option, checked) => setState(() {
+                      if (checked) { entry.purposeOfInterview.add(option); } else { entry.purposeOfInterview.remove(option); }
+                    }),
+                  ),
+                  if (entry.purposeOfInterview.contains('OTHER'))
+                    _input(entry.purposeOfInterviewOtherController, 'Please specify other purpose', maxLines: 2),
+
+                  // ── Section D: Knowledge of Client ────────────────────
+                  _subHeading('Section D: Knowledge of Client'),
+                  _input(entry.howLongKnownController, 'How long have you known the client?'),
+                  _input(entry.currentSituationUnderstandingController,
+                      "What is your understanding of the client's current situation?", maxLines: 4),
+                  _input(entry.responsibleForCareController,
+                      "Who is responsible for the client's care / support (if any)?", maxLines: 2),
+
+                  // ── Section E: Living Conditions ──────────────────────
+                  _subHeading('Section E: Living Conditions and Basic Needs'),
+                  _dropdown(
+                    label: '1. Housing / Living Environment',
+                    value: entry.housingConditionRating,
+                    options: _housingConditionOptions,
+                    labels: _housingConditionLabels,
+                    onChanged: (v) => setState(() => entry.housingConditionRating = v),
+                  ),
+                  _input(entry.housingCommentsController, 'Comments', maxLines: 2),
+                  _dropdown(
+                    label: '2. Access to Basic Needs (food, clothing, hygiene, shelter)',
+                    value: entry.basicNeedsRating,
+                    options: _basicNeedsOptions,
+                    labels: _basicNeedsLabels,
+                    onChanged: (v) => setState(() => entry.basicNeedsRating = v),
+                  ),
+                  _input(entry.basicNeedsDetailsController, 'Details', maxLines: 2),
+                  _dropdown(
+                    label: '3. Health Status (as observed)',
+                    value: entry.healthStatusRating,
+                    options: _observedHealthOptions,
+                    labels: _observedHealthLabels,
+                    onChanged: (v) => setState(() => entry.healthStatusRating = v),
+                  ),
+                  _input(entry.healthStatusDetailsController, 'Details', maxLines: 2),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4, top: 4),
+                    child: Text('4. Access to Services',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.blueGrey)),
+                  ),
+                  _two(
+                    _dropdown(
+                      label: 'Health services',
+                      value: entry.accessHealthServices,
+                      options: _yesNoOptions,
+                      labels: _yesNoLabels,
+                      onChanged: (v) => setState(() => entry.accessHealthServices = v),
+                    ),
+                    _dropdown(
+                      label: 'Social support',
+                      value: entry.accessSocialSupport,
+                      options: _yesNoOptions,
+                      labels: _yesNoLabels,
+                      onChanged: (v) => setState(() => entry.accessSocialSupport = v),
+                    ),
+                  ),
+                  _dropdown(
+                    label: 'School / work (if applicable)',
+                    value: entry.accessSchoolWork,
+                    options: _yesNoOptions,
+                    labels: _yesNoLabels,
+                    onChanged: (v) => setState(() => entry.accessSchoolWork = v),
+                  ),
+                  _input(entry.accessServicesCommentsController, 'Comments', maxLines: 2),
+
+                  // ── Section F: Safety and Protection Concerns ──────────────────────
+                  _subHeading('Section F: Safety and Protection Concerns'),
+                  _checkboxGroup(
+                    label: '1. Any concerns of abuse or exploitation?',
+                    options: _abuseTypeOptions,
+                    labels: _abuseTypeLabels,
+                    selected: entry.abuseTypes,
+                    onChanged: (option, checked) => setState(() {
+                      if (checked) { entry.abuseTypes.add(option); } else { entry.abuseTypes.remove(option); }
+                    }),
+                  ),
+                  _input(entry.abuseDetailsController, 'Details', maxLines: 3),
+                  _dropdown(
+                    label: '2. Signs of neglect?',
+                    value: entry.signsOfNeglect,
+                    options: _yesNoOptions,
+                    labels: _yesNoLabels,
+                    onChanged: (v) => setState(() => entry.signsOfNeglect = v),
+                  ),
+                  _input(entry.neglectDetailsController, 'Details', maxLines: 2),
+                  _checkboxGroup(
+                    label: '3. Exposure to risk factors',
+                    options: _riskFactorOptions,
+                    labels: _riskFactorLabels,
+                    selected: entry.riskFactors,
+                    onChanged: (option, checked) => setState(() {
+                      if (checked) { entry.riskFactors.add(option); } else { entry.riskFactors.remove(option); }
+                    }),
+                  ),
+                  if (entry.riskFactors.contains('OTHER'))
+                    _input(entry.riskFactorOtherController, 'Please specify other risk factor', maxLines: 2),
+
+                  // ── Section G: Functioning and Well-being ─────────────────────────
+                  _subHeading('Section G: Functioning and Well-being'),
+                  _input(entry.dailyFunctioningController, 'How does the client function in daily life?', maxLines: 3),
+                  _checkboxGroup(
+                    label: 'Social behaviour (tick any observed)',
+                    options: _socialBehaviourOptions,
+                    labels: _socialBehaviourLabels,
+                    selected: entry.socialBehaviours,
+                    onChanged: (option, checked) => setState(() {
+                      if (checked) { entry.socialBehaviours.add(option); } else { entry.socialBehaviours.remove(option); }
+                    }),
+                  ),
+                  _input(entry.behaviourCommentsController, 'Comments', maxLines: 2),
+
+                  // ── Section H: Social Support and Community Context ───────────────
+                  _subHeading('Section H: Social Support and Community Context'),
+                  _dropdown(
+                    label: 'Does the client have family or community support?',
+                    value: entry.familySupportLevel,
+                    options: _familySupportOptions,
+                    labels: _familySupportLabels,
+                    onChanged: (v) => setState(() => entry.familySupportLevel = v),
+                  ),
+                  _input(entry.familySupportExplainController, 'Explain', maxLines: 2),
+                  _input(entry.communityPerceptionController, 'How is the client perceived in the community?', maxLines: 3),
+                  _input(entry.knownHistoryController, 'Any known history of issues (violence, neglect, conflict)?', maxLines: 3),
+
+                  // ── Section I: Informant's Opinion / Recommendations ──────────────
+                  _subHeading("Section I: Informant's Opinion / Recommendations"),
+                  _input(entry.keyChallengesController, 'What do you think are the key challenges facing the client?', maxLines: 4),
+                  _input(entry.recommendationsController, 'What support or intervention do you recommend?', maxLines: 4),
+
+                  // ── Section J: Reliability of Information ─────────────────────────
+                  _subHeading('Section J: Reliability of Information'),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text('To be completed by Social Worker',
+                        style: const TextStyle(fontSize: 12, color: Colors.blueGrey, fontStyle: FontStyle.italic)),
+                  ),
+                  _dropdown(
+                    label: 'Informant credibility',
+                    value: entry.informantCredibility,
+                    options: _credibilityOptions,
+                    labels: _credibilityLabels,
+                    onChanged: (v) => setState(() => entry.informantCredibility = v),
+                  ),
+                  _input(entry.credibilityReasonsController, 'Reasons', maxLines: 3),
+
+                  // ── Section K: Social Worker's Summary Notes ──────────────────────
+                  _subHeading('Section K: Social Worker\'s Summary Notes'),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text('To be completed by Social Worker',
+                        style: const TextStyle(fontSize: 12, color: Colors.blueGrey, fontStyle: FontStyle.italic)),
+                  ),
+                  _input(entry.socialWorkerSummaryNotesController, 'Summary notes', maxLines: 6),
+
+                  // ── Section L: Risk Level Assessment ──────────────────────────────
+                  _subHeading('Section L: Risk Level Assessment'),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text('To be completed by Social Worker',
+                        style: const TextStyle(fontSize: 12, color: Colors.blueGrey, fontStyle: FontStyle.italic)),
+                  ),
+                  _dropdown(
+                    label: 'Risk Level',
+                    value: entry.riskLevel,
+                    options: _riskLevelOptions,
+                    labels: _riskLevelLabels,
+                    onChanged: (v) => setState(() => entry.riskLevel = v),
+                  ),
+
+                  // ── Section M: Confidentiality Statement ──────────────────────────
+                  _subHeading('Section M: Confidentiality Statement'),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.amber.shade400, width: 1.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.amber.withOpacity(0.25),
+                          blurRadius: 12,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.campaign_outlined, color: Colors.amber.shade700, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Read aloud to the informant before proceeding',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.amber.shade800,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          'Information provided will be used strictly for social work and protection purposes and will be treated with confidentiality.',
+                          style: TextStyle(fontSize: 14.5, color: Colors.black87, height: 1.6),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ], // end if (!isCollapsed)
+        ],
+      ),
+    );
+  }
+
   Widget _part4() {
     return _surface(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _sectionTitle(
-            'Part 4: Child Participation',
-            'Only add these sections when they are relevant and the child can safely participate. Child Wellbeing Indicators come before Child Voice.',
+            'Part 4: External Informant Interviews',
+            'Record information gathered from neighbours, teachers, community leaders, relatives, nurses, or other external sources who know the client.',
           ),
-          if (!_showChildWellbeingIndicators)
+          if (_externalInformantEntries.isEmpty)
             _optionalAddCard(
-              title: 'Child Wellbeing Indicators',
-              subtitle: 'Add scoring indicators when you want to capture the child wellbeing scale.',
-              icon: Icons.monitor_heart_outlined,
-              onAdd: _addChildWellbeingEntry,
+              title: 'External Informant',
+              subtitle: 'Add an interview with a neighbour, teacher, community leader, relative, nurse or other external source.',
+              icon: Icons.record_voice_over_outlined,
+              onAdd: _addExternalInformantEntry,
             ),
-          if (_showChildWellbeingIndicators) ...[
+          if (_externalInformantEntries.isNotEmpty) ...[
             Row(
               children: [
                 const Expanded(
-                  child: Text(
-                    'Child Wellbeing Indicators',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
-                  ),
+                  child: Text('External Informants', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900)),
                 ),
                 TextButton.icon(
-                  onPressed: _addChildWellbeingEntry,
+                  onPressed: _addExternalInformantEntry,
                   icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add child'),
+                  label: const Text('Add informant'),
                 ),
               ],
             ),
             const SizedBox(height: 10),
             ...List.generate(
-              _childWellbeingEntries.length,
-                  (index) => _childWellbeingCard(index, _childWellbeingEntries[index]),
-            ),
-            const SizedBox(height: 12),
-          ],
-          if (!_showChildVoiceSection)
-            _optionalAddCard(
-              title: "Child's Voice",
-              subtitle: 'Add this when the child has been consulted and it is appropriate to record their views.',
-              icon: Icons.record_voice_over_outlined,
-              onAdd: _addChildVoiceSection,
-            ),
-          if (_showChildVoiceSection) ...[
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF9FBFD),
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: Colors.blueGrey.withOpacity(0.10)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          "Child's Voice",
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: _removeChildVoiceSection,
-                        icon: const Icon(Icons.delete_outline),
-                        color: Colors.redAccent,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  _input(_childOverallSafetyController, 'Overall sense of safety', maxLines: 3),
-                  _input(_childCarePreferenceController, 'Who the child wants to be cared for by', maxLines: 3),
-                  _input(_childFutureSafetyIdeasController, 'Ideas for how to stay safe and make things good in the future', maxLines: 4),
-                  _input(_childCommunicationConsiderationsController, 'Communication considerations', maxLines: 4),
-                ],
-              ),
+              _externalInformantEntries.length,
+                  (index) => _externalInformantCard(index, _externalInformantEntries[index]),
             ),
           ],
         ],
       ),
-    );
-  }
-
-  Widget _scoreDropdown({required String label, required int? value, required void Function(int? value) onChanged}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: DropdownButtonFormField<int>(
-        value: value,
-        isExpanded: true,
-        items: [1, 2, 3, 4, 5].map((score) => DropdownMenuItem<int>(value: score, child: Text('$score'))).toList(),
-        onChanged: onChanged,
-        decoration: InputDecoration(labelText: label, helperText: '1 Never / not at all • 5 Always', filled: true, fillColor: const Color(0xFFF9FBFD), border: OutlineInputBorder(borderRadius: BorderRadius.circular(13)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
-      ),
-    );
-  }
-
-  Widget _childWellbeingCard(int index, _ChildWellbeingEntry entry) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 13),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: const Color(0xFFF9FBFD), borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.blueGrey.withOpacity(0.10))),
-      child: Column(children: [
-        Row(children: [Expanded(child: Text('Child Wellbeing Entry ${index + 1}', style: const TextStyle(fontWeight: FontWeight.w900))), IconButton(onPressed: () => _removeChildWellbeingEntry(index), icon: const Icon(Icons.delete_outline), color: Colors.redAccent)]),
-        _two(_input(entry.childNameController, 'Child name'), _input(entry.dateController, 'Date', readOnly: true, onTap: () => _pickDate(entry.dateController))),
-        _scoreDropdown(label: 'I feel safe at home', value: entry.safeAtHome, onChanged: (v) => setState(() => entry.safeAtHome = v)),
-        _scoreDropdown(label: 'My parents / people who look after me listen to me', value: entry.listenedTo, onChanged: (v) => setState(() => entry.listenedTo = v)),
-        _scoreDropdown(label: 'My parents / people who look after me treat me fairly', value: entry.treatedFairly, onChanged: (v) => setState(() => entry.treatedFairly = v)),
-        _two(_scoreDropdown(label: 'Talking together', value: entry.talkingTogether, onChanged: (v) => setState(() => entry.talkingTogether = v)), _scoreDropdown(label: 'Having fun together', value: entry.havingFunTogether, onChanged: (v) => setState(() => entry.havingFunTogether = v))),
-        _scoreDropdown(label: 'Learning together', value: entry.learningTogether, onChanged: (v) => setState(() => entry.learningTogether = v)),
-        _two(_scoreDropdown(label: 'I have at least one good friend', value: entry.goodFriend, onChanged: (v) => setState(() => entry.goodFriend = v)), _scoreDropdown(label: 'My friends are usually nice to me', value: entry.friendsNice, onChanged: (v) => setState(() => entry.friendsNice = v))),
-        _two(_scoreDropdown(label: 'I enjoy school', value: entry.enjoySchool, onChanged: (v) => setState(() => entry.enjoySchool = v)), _scoreDropdown(label: 'I feel safe and supported at school', value: entry.safeAtSchool, onChanged: (v) => setState(() => entry.safeAtSchool = v))),
-        _two(_scoreDropdown(label: 'I like the way I look', value: entry.likeLooks, onChanged: (v) => setState(() => entry.likeLooks = v)), _scoreDropdown(label: 'I feel self-confident', value: entry.selfConfident, onChanged: (v) => setState(() => entry.selfConfident = v))),
-        _scoreDropdown(label: 'I have opportunities to improve my life', value: entry.opportunities, onChanged: (v) => setState(() => entry.opportunities = v)),
-        _two(_scoreDropdown(label: 'My life is going well', value: entry.lifeGoingWell, onChanged: (v) => setState(() => entry.lifeGoingWell = v)), _scoreDropdown(label: 'I am happy', value: entry.happy, onChanged: (v) => setState(() => entry.happy = v))),
-        _scoreDropdown(label: 'I feel positive about my future', value: entry.positiveFuture, onChanged: (v) => setState(() => entry.positiveFuture = v)),
-        _dropdown(label: 'Is there any other child in the family?', value: entry.hasAnotherChild, options: _yesNoOptions, onChanged: (v) => setState(() => entry.hasAnotherChild = v)),
-        _input(entry.notesController, 'Notes / comments', maxLines: 4),
-      ]),
     );
   }
 
