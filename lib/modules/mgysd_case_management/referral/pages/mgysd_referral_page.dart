@@ -1,27 +1,12 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:lncmis_mobile_app/app_state/current_user_state/current_user_state.dart';
 import 'package:lncmis_mobile_app/core/offline_db/offline_db_provider.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/workflow/helpers/mgysd_program_stage_event_helper.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/models/mgysd_case.dart';
 import 'package:sqflite/sqflite.dart';
-
-// ---------------------------------------------------------------------------
-// Lightweight model for the logged-in user.
-// ---------------------------------------------------------------------------
-class LoggedInUser {
-  final String fullName;
-  final String title;
-  final String contactDetails;
-  final String organisation;
-
-  const LoggedInUser({
-    this.fullName = '',
-    this.title = '',
-    this.contactDetails = '',
-    this.organisation = '',
-  });
-}
 
 // ---------------------------------------------------------------------------
 // Need categories – matches Form 4 in the PDF exactly.
@@ -39,7 +24,6 @@ class _NeedItem {
   final bool isParent;
   final bool isOther;
   final List<String> children;
-  // Child labels in this set will show a text field when ticked
   final Set<String> childOtherKeys;
 
   const _NeedItem({
@@ -58,30 +42,17 @@ class _NeedCategory {
 }
 
 const List<_NeedCategory> _needCategories = [
-  // -------------------------------------------------------------------
-  // Social Protection Support – 3 plain top-level options
-  // Social Assistance is a plain checkbox (no sub-options)
-  // -------------------------------------------------------------------
   _NeedCategory(label: 'Social Protection Support', items: [
     _NeedItem(label: 'Transportation Assistance'),
     _NeedItem(label: 'Food Assistance'),
     _NeedItem(label: 'Social Assistance (Bursary)'),
   ]),
-
-  // -------------------------------------------------------------------
-  // Education
-  // -------------------------------------------------------------------
   _NeedCategory(label: 'Education', items: [
     _NeedItem(label: 'Bursary or other financial or material support'),
     _NeedItem(label: 'Vocational training'),
     _NeedItem(label: 'Early Childhood Development'),
     _NeedItem(label: 'Support to return to school / homework support'),
   ]),
-
-  // -------------------------------------------------------------------
-  // Health Support – Disability Support reveals sub-options;
-  // "Other disability support (specify)" child shows a free-text field
-  // -------------------------------------------------------------------
   _NeedCategory(label: 'Health Support', items: [
     _NeedItem(label: 'Nutritional support'),
     _NeedItem(label: 'Support related to primary care'),
@@ -99,20 +70,12 @@ const List<_NeedCategory> _needCategories = [
       childOtherKeys: {'Other disability support (specify)'},
     ),
   ]),
-
-  // -------------------------------------------------------------------
-  // Mental Health Support
-  // -------------------------------------------------------------------
   _NeedCategory(label: 'Mental Health Support', items: [
     _NeedItem(label: 'Psychiatric Services'),
     _NeedItem(label: 'Substance abuse services'),
     _NeedItem(label: 'Psychosocial support / counselling'),
     _NeedItem(label: 'Support group'),
   ]),
-
-  // -------------------------------------------------------------------
-  // Community Development – Economic empowerment is a plain sub-option
-  // -------------------------------------------------------------------
   _NeedCategory(label: 'Community Development', items: [
     _NeedItem(label: 'Skills Development'),
     _NeedItem(label: 'Income Generating Activity'),
@@ -120,10 +83,6 @@ const List<_NeedCategory> _needCategories = [
     _NeedItem(label: 'Start-up kit / capital'),
     _NeedItem(label: 'Economic empowerment'),
   ]),
-
-  // -------------------------------------------------------------------
-  // Legal/Justice Services – section header, items are plain checkboxes
-  // -------------------------------------------------------------------
   _NeedCategory(label: 'Legal/Justice Services', items: [
     _NeedItem(label: 'Master of High Court'),
     _NeedItem(label: 'Probation'),
@@ -132,10 +91,6 @@ const List<_NeedCategory> _needCategories = [
     _NeedItem(label: 'High Court'),
     _NeedItem(label: 'Child and Gender Protection Unit (CGPU)'),
   ]),
-
-  // -------------------------------------------------------------------
-  // NICR – section header, single plain checkbox
-  // -------------------------------------------------------------------
   _NeedCategory(label: 'NICR', items: [
     _NeedItem(label: 'Birth registration / civil registration support'),
   ]),
@@ -149,7 +104,6 @@ class MgysdReferralPage extends StatefulWidget {
     Key? key,
     required this.color,
     required this.mgysdCase,
-    this.loggedInUser,
     this.householdTei,
     this.householdName,
     this.clientName,
@@ -158,7 +112,6 @@ class MgysdReferralPage extends StatefulWidget {
 
   final Color color;
   final MgysdCase mgysdCase;
-  final LoggedInUser? loggedInUser;
   final String? householdTei;
   final String? householdName;
   final String? clientName;
@@ -174,56 +127,46 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
   // ── Date ──────────────────────────────────────────────────────────────────
   final _referralDateController = TextEditingController();
 
-  // ── Person Making Referral (auto-filled, read-only) ───────────────────────
+  // ── Person Making Referral (auto-filled from CurrentUserState, read-only) ─
   late final TextEditingController _referrerNameController;
   late final TextEditingController _referrerTitleController;
   late final TextEditingController _referrerContactController;
-  late final TextEditingController _referringOrgController;
+  late final TextEditingController _referrerLocationController;
+
+  // ── Referring Organisation (user-editable) ────────────────────────────────
+  final _referringOrgController = TextEditingController();
 
   // ── Referred To ───────────────────────────────────────────────────────────
-  final _referredToOrgController    = TextEditingController();
+  final _referredToOrgController     = TextEditingController();
   final _referredToSpecifyController = TextEditingController();
 
-  // ── Extra fields under "Referred To / Specify" ────────────────────────────
+  // ── Extra fields ──────────────────────────────────────────────────────────
   final _supportsProvidedController      = TextEditingController();
   final _documentsAccompanyingController = TextEditingController();
   final _recommendationsController       = TextEditingController();
 
-  // ── Needs: selected top-level items ───────────────────────────────────────
-  // Map<categoryLabel, Set<itemLabel>>
+  // ── Needs ─────────────────────────────────────────────────────────────────
   final Map<String, Set<String>> _selectedItems = {
     for (final cat in _needCategories) cat.label: {},
   };
-
-  // ── Needs: selected sub-items for parent checkboxes ───────────────────────
-  // Map<parentItemLabel, Set<childLabel>>
   final Map<String, Set<String>> _selectedChildren = {};
-
-  // ── "Other (specify)" free text for top-level items ──────────────────────
-  // Map<itemLabel, TextEditingController>  (only items with isOther=true)
   final Map<String, TextEditingController> _otherControllers = {};
-
-  // ── "Other (specify)" free text for child items ───────────────────────────
-  // Map<childLabel, TextEditingController>
   final Map<String, TextEditingController> _childOtherControllers = {};
 
   bool _saving = false;
   String? _savedStatus;
-
-  LoggedInUser get _user => widget.loggedInUser ?? const LoggedInUser();
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
 
-    // Auto-fill referrer fields from the logged-in user
-    _referrerNameController    = TextEditingController(text: _user.fullName);
-    _referrerTitleController   = TextEditingController(text: _user.title);
-    _referrerContactController = TextEditingController(text: _user.contactDetails);
-    _referringOrgController    = TextEditingController(text: _user.organisation);
+    // Initialise empty – filled from Provider in didChangeDependencies
+    _referrerNameController     = TextEditingController();
+    _referrerTitleController    = TextEditingController();
+    _referrerContactController  = TextEditingController();
+    _referrerLocationController = TextEditingController();
 
-    // Pre-create controllers for every "Other (specify)" item
     for (final cat in _needCategories) {
       for (final item in cat.items) {
         if (item.isOther) {
@@ -231,7 +174,6 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
         }
         if (item.isParent) {
           _selectedChildren[item.label] = {};
-          // Pre-create controllers for child "specify" fields
           for (final childKey in item.childOtherKeys) {
             _childOtherControllers[childKey] = TextEditingController();
           }
@@ -241,11 +183,28 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    // Only fill once – guard prevents clobbering on subsequent dependency changes
+    if (_referrerNameController.text.isNotEmpty) return;
+
+    final userState = context.read<CurrentUserState>();
+    final user = userState.currentUser;
+
+    _referrerNameController.text     = user?.name ?? '';
+    _referrerTitleController.text    = user?.userRoles ?? '';
+    _referrerContactController.text  = user?.phoneNumber ?? user?.email ?? '';
+    _referrerLocationController.text = userState.currentUserLocations;
+  }
+
+  @override
   void dispose() {
     _referralDateController.dispose();
     _referrerNameController.dispose();
     _referrerTitleController.dispose();
     _referrerContactController.dispose();
+    _referrerLocationController.dispose();
     _referringOrgController.dispose();
     _referredToOrgController.dispose();
     _referredToSpecifyController.dispose();
@@ -260,17 +219,7 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
     }
     super.dispose();
   }
-  // Re-sync auto-filled fields if loggedInUser is updated from outside
-  @override
-  void didUpdateWidget(MgysdReferralPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.loggedInUser != widget.loggedInUser) {
-      _referrerNameController.text    = _user.fullName;
-      _referrerTitleController.text   = _user.title;
-      _referrerContactController.text = _user.contactDetails;
-      _referringOrgController.text    = _user.organisation;
-    }
-  }
+
   // ── DB helpers ────────────────────────────────────────────────────────────
   Future<Database> _db() async {
     final dbClient = await OfflineDbProvider().db;
@@ -282,38 +231,48 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
   Map<String, dynamic> _payload() => {
-    'referringOrganisation': _referringOrgController.text.trim(),
-    'referrerName':          _referrerNameController.text.trim(),
-    'referrerTitle':         _referrerTitleController.text.trim(),
-    'referrerContact':       _referrerContactController.text.trim(),
+    'referringOrganisation':  _referringOrgController.text.trim(),
+    'referrerName':           _referrerNameController.text.trim(),
+    'referrerTitle':          _referrerTitleController.text.trim(),
+    'referrerContact':        _referrerContactController.text.trim(),
+    'referrerLocation':       _referrerLocationController.text.trim(),
     'referredToOrganisation': _referredToOrgController.text.trim(),
-    'referredToSpecify':     _referredToSpecifyController.text.trim(),
-    'supportsProvided':      _supportsProvidedController.text.trim(),
-    'documentsAccompanying': _documentsAccompanyingController.text.trim(),
-    'recommendations':       _recommendationsController.text.trim(),
+    'referredToSpecify':      _referredToSpecifyController.text.trim(),
+    'supportsProvided':       _supportsProvidedController.text.trim(),
+    'documentsAccompanying':  _documentsAccompanyingController.text.trim(),
+    'recommendations':        _recommendationsController.text.trim(),
     'identifiedNeeds': {
       for (final cat in _needCategories)
         cat.label: {
           'selected': _selectedItems[cat.label]!.toList(),
           'subSelections': {
             for (final item in cat.items)
-              if (item.isParent && (_selectedChildren[item.label]?.isNotEmpty ?? false))
+              if (item.isParent &&
+                  (_selectedChildren[item.label]?.isNotEmpty ?? false))
                 item.label: _selectedChildren[item.label]!.toList(),
           },
           'otherText': {
             for (final item in cat.items)
               if (item.isOther &&
                   _selectedItems[cat.label]!.contains(item.label) &&
-                  (_otherControllers[item.label]?.text.trim().isNotEmpty ?? false))
+                  (_otherControllers[item.label]?.text.trim().isNotEmpty ??
+                      false))
                 item.label: _otherControllers[item.label]!.text.trim(),
           },
           'childOtherText': {
             for (final item in cat.items)
               if (item.isParent)
                 for (final childKey in item.childOtherKeys)
-                  if ((_selectedChildren[item.label]?.contains(childKey) ?? false) &&
-                      (_childOtherControllers[childKey]?.text.trim().isNotEmpty ?? false))
-                    childKey: _childOtherControllers[childKey]!.text.trim(),
+                  if ((_selectedChildren[item.label]
+                      ?.contains(childKey) ??
+                      false) &&
+                      (_childOtherControllers[childKey]
+                          ?.text
+                          .trim()
+                          .isNotEmpty ??
+                          false))
+                    childKey:
+                    _childOtherControllers[childKey]!.text.trim(),
           },
         },
     },
@@ -451,7 +410,7 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
                 fontWeight: FontWeight.w700, fontSize: 13)),
       ),
       for (final item in cat.items) ...[
-        // ── Top-level checkbox ──────────────────────────────────────
+        // ── Top-level checkbox ──────────────────────────────────────────
         CheckboxListTile(
           dense: true,
           contentPadding: EdgeInsets.zero,
@@ -465,7 +424,6 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
               _selectedItems[cat.label]!.add(item.label);
             } else {
               _selectedItems[cat.label]!.remove(item.label);
-              // Clear children / other text when parent is unchecked
               if (item.isParent) {
                 _selectedChildren[item.label]?.clear();
               }
@@ -476,7 +434,7 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
           }),
         ),
 
-        // ── Sub-options for parent items ─────────────────────────
+        // ── Sub-options for parent items ────────────────────────────────
         if (item.isParent &&
             _selectedItems[cat.label]!.contains(item.label))
           Padding(
@@ -488,8 +446,7 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
                   CheckboxListTile(
                     dense: true,
                     contentPadding: EdgeInsets.zero,
-                    controlAffinity:
-                    ListTileControlAffinity.leading,
+                    controlAffinity: ListTileControlAffinity.leading,
                     title: Text(child,
                         style: const TextStyle(fontSize: 12)),
                     value: _selectedChildren[item.label]
@@ -502,7 +459,6 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
                         _selectedChildren[item.label]!.add(child);
                       } else {
                         _selectedChildren[item.label]!.remove(child);
-                        // Clear the text field if this child had one
                         if (item.childOtherKeys.contains(child)) {
                           _childOtherControllers[child]?.clear();
                         }
@@ -517,8 +473,7 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
                       padding: const EdgeInsets.only(
                           left: 16, right: 8, bottom: 8),
                       child: TextFormField(
-                        controller:
-                        _childOtherControllers[child],
+                        controller: _childOtherControllers[child],
                         decoration: const InputDecoration(
                           border: OutlineInputBorder(),
                           hintText: 'Please specify…',
@@ -531,12 +486,12 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
             ),
           ),
 
-        // ── Free-text for "Other (specify)" items ────────────────
+        // ── Free-text for "Other (specify)" top-level items ─────────────
         if (item.isOther &&
             _selectedItems[cat.label]!.contains(item.label))
           Padding(
-            padding: const EdgeInsets.only(
-                left: 32, right: 8, bottom: 8),
+            padding:
+            const EdgeInsets.only(left: 32, right: 8, bottom: 8),
             child: TextFormField(
               controller: _otherControllers[item.label],
               decoration: const InputDecoration(
@@ -565,7 +520,7 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // ── Client header ─────────────────────────────────────────
+            // ── Client header ─────────────────────────────────────────────
             _card([
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -581,8 +536,7 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
                         Text(
                           widget.clientName ?? '',
                           style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800),
+                              fontSize: 18, fontWeight: FontWeight.w800),
                         ),
                       ],
                     ),
@@ -595,8 +549,7 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
                               fontSize: 11, color: Colors.blueGrey)),
                       const SizedBox(height: 2),
                       Text(
-                        widget.fileNumber ??
-                            widget.mgysdCase.caseNo,
+                        widget.fileNumber ?? widget.mgysdCase.caseNo,
                         style: const TextStyle(
                             fontWeight: FontWeight.w700,
                             color: Colors.blueGrey),
@@ -607,7 +560,7 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
               ),
             ]),
 
-            // ── Section 1: Date & Referring Organisation ──────────────
+            // ── Section 1: Referral Details ───────────────────────────────
             _card([
               _sectionHeader('Referral Details'),
               _divider(),
@@ -620,38 +573,41 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     hintText: 'YYYY-MM-DD',
-                    suffixIcon:
-                    Icon(Icons.calendar_today, size: 18),
+                    suffixIcon: Icon(Icons.calendar_today, size: 18),
                   ),
                   validator: (v) =>
-                  (v == null || v.trim().isEmpty)
-                      ? 'Required'
-                      : null,
+                  (v == null || v.trim().isEmpty) ? 'Required' : null,
                 ),
               ),
-              // Read-only – auto-filled from logged-in user
-              _readOnlyField(
-                  'Name of Referring Organisation',
-                  _referringOrgController),
+              _field(
+                label: 'Name of Referring Organisation',
+                isRequired: true,
+                child: TextFormField(
+                  controller: _referringOrgController,
+                  validator: (v) =>
+                  (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  decoration: const InputDecoration(
+                      border: OutlineInputBorder()),
+                ),
+              ),
             ]),
 
-            // ── Section 2: Person Making Referral (auto-filled) ───────
+            // ── Section 2: Person Making Referral (auto-filled) ───────────
             _card([
               _sectionHeader('Person Making Referral'),
               const Text(
                 'Auto-filled from your account',
-                style:
-                TextStyle(fontSize: 12, color: Colors.grey),
+                style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
               _divider(),
               const SizedBox(height: 12),
               _readOnlyField('Name', _referrerNameController),
-              _readOnlyField('Title', _referrerTitleController),
-              _readOnlyField(
-                  'Contact Details', _referrerContactController),
+              _readOnlyField('Title / Role', _referrerTitleController),
+              _readOnlyField('Contact Details', _referrerContactController),
+              _readOnlyField('Location', _referrerLocationController),
             ]),
 
-            // ── Section 3: Referred To ────────────────────────────────
+            // ── Section 3: Referred To ────────────────────────────────────
             _card([
               _sectionHeader('This Client Has Been Referred To'),
               _divider(),
@@ -662,9 +618,7 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
                 child: TextFormField(
                   controller: _referredToOrgController,
                   validator: (v) =>
-                  (v == null || v.trim().isEmpty)
-                      ? 'Required'
-                      : null,
+                  (v == null || v.trim().isEmpty) ? 'Required' : null,
                   decoration: const InputDecoration(
                       border: OutlineInputBorder()),
                 ),
@@ -691,8 +645,7 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
                 ),
               ),
               _field(
-                label:
-                'List any documents accompanying this referral form',
+                label: 'List any documents accompanying this referral form',
                 child: TextFormField(
                   controller: _documentsAccompanyingController,
                   minLines: 2,
@@ -717,18 +670,17 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
               ),
             ]),
 
-            // ── Section 4: Identified Needs (checkboxes) ──────────────
+            // ── Section 4: Identified Needs ───────────────────────────────
             _needsSection(),
 
             const SizedBox(height: 16),
 
-            // ── Action buttons ────────────────────────────────────────
+            // ── Action buttons ────────────────────────────────────────────
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed:
-                    _saving ? null : () => _save('DRAFT'),
+                    onPressed: _saving ? null : () => _save('DRAFT'),
                     child: const Text('Save Draft'),
                   ),
                 ),
@@ -737,16 +689,14 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                         backgroundColor: widget.color),
-                    onPressed: _saving
-                        ? null
-                        : () => _save('COMPLETED'),
+                    onPressed:
+                    _saving ? null : () => _save('COMPLETED'),
                     child: _saving
                         ? const SizedBox(
                       height: 18,
                       width: 18,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white),
+                          strokeWidth: 2, color: Colors.white),
                     )
                         : const Text('Complete'),
                   ),
@@ -760,8 +710,7 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
                 child: Text(
                   'Current status: $_savedStatus',
                   style: TextStyle(
-                      color: widget.color,
-                      fontWeight: FontWeight.w700),
+                      color: widget.color, fontWeight: FontWeight.w700),
                 ),
               ),
           ],
