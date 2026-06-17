@@ -2018,7 +2018,32 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               icon: Icons.fact_check_outlined,
             ),
             const SizedBox(height: 12),
-            ..._visibleGroupedReasons().map(_reasonGroupCard).toList(),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: primary.withOpacity(0.04),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: primary.withOpacity(0.16)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Identified Concerns',
+                    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'These are the specific concerns identified for this client.',
+                    style: TextStyle(color: Colors.blueGrey, fontSize: 12.5, height: 1.3),
+                  ),
+                  const SizedBox(height: 12),
+                  ..._visibleGroupedReasons().map(_reasonGroupCard).toList(),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
