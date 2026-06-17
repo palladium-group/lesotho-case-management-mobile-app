@@ -64,8 +64,6 @@ class _MgysdCaseClosurePageState extends State<MgysdCaseClosurePage> {
   final TextEditingController _caseOpeningDateController = TextEditingController();
   final TextEditingController _currentAddressController = TextEditingController();
   final TextEditingController _previousAddressController = TextEditingController();
-  final TextEditingController _summaryController = TextEditingController();
-
   // Decision checkboxes
   final Map<String, bool> _closureDecisions = {
     'OBJECTIVES_MET': false,
@@ -100,7 +98,6 @@ class _MgysdCaseClosurePageState extends State<MgysdCaseClosurePage> {
     _caseOpeningDateController.dispose();
     _currentAddressController.dispose();
     _previousAddressController.dispose();
-    _summaryController.dispose();
     for (final person in _peopleInMeeting) {
       person.dispose();
     }
@@ -255,7 +252,6 @@ class _MgysdCaseClosurePageState extends State<MgysdCaseClosurePage> {
 
         _currentAddressController.text = _text(payload['currentAddress']);
         _previousAddressController.text = _text(payload['previousAddress']);
-        _summaryController.text = _text(payload['summary']);
 
         // Restore decisions
         final decisions = payload['closureDecisions'] as Map<String, dynamic>? ?? {};
@@ -309,7 +305,6 @@ class _MgysdCaseClosurePageState extends State<MgysdCaseClosurePage> {
       'currentAddress': _currentAddressController.text.trim(),
       'previousAddress': _previousAddressController.text.trim(),
       'closureDecisions': Map<String, bool>.from(_closureDecisions),
-      'summary': _summaryController.text.trim(),
       'peopleInMeeting': _peopleInMeeting.map((e) => e.toJson()).toList(),
       'status': status,
     };
@@ -549,7 +544,7 @@ class _MgysdCaseClosurePageState extends State<MgysdCaseClosurePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _sectionTitle(
-            'Decision taken for case closure',
+            'Criteria for case closure',
             'Select all reasons that apply for closing this case.',
             Icons.gavel_outlined,
           ),
@@ -570,22 +565,6 @@ class _MgysdCaseClosurePageState extends State<MgysdCaseClosurePage> {
               },
             );
           }),
-        ],
-      ),
-    );
-  }
-
-  Widget _summarySection() {
-    return _surface(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _sectionTitle(
-            'Summary',
-            'Social worker\'s summary of reasons for case closure.',
-            Icons.summarize_outlined,
-          ),
-          _input(_summaryController, 'Summary from social worker', maxLines: 6),
         ],
       ),
     );
@@ -708,7 +687,7 @@ class _MgysdCaseClosurePageState extends State<MgysdCaseClosurePage> {
               _header(),
               _caseDetailsSection(),
               _decisionsSection(),
-              _summarySection(),
+
               _peopleInMeetingSection(),
               const SizedBox(height: 4),
               _actions(),
