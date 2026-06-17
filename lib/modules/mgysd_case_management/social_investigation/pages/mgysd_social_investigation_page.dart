@@ -83,22 +83,29 @@ class _ExternalInformantEntry {
   final String id;
 
   // Section B – Informant details
-  final TextEditingController fullNameController;
+  final TextEditingController firstNameController;
+  final TextEditingController surnameController;
   final TextEditingController ageController;
-  final TextEditingController relationshipToClientController;
-  final TextEditingController occupationController;
-  final TextEditingController contactDetailsController;
-  final TextEditingController physicalAddressController;
   String gender;
+  String relationshipToClient;
+  final TextEditingController relationshipToClientOtherController;
+  String occupation;
+  final TextEditingController occupationOtherController;
+  String contactCountryCode;
+  final TextEditingController contactCountryCodeOtherController;
+  final TextEditingController contactNumberController;
+  final TextEditingController physicalAddressController;
 
   // Section C – Purpose of interview
   final Set<String> purposeOfInterview;
   final TextEditingController purposeOfInterviewOtherController;
 
   // Section D – Knowledge of client
-  final TextEditingController howLongKnownController;
+  String howLongKnown;
   final TextEditingController currentSituationUnderstandingController;
-  final TextEditingController responsibleForCareController;
+  bool showResponsibleForCare;
+  final TextEditingController responsibleForCareFirstNameController;
+  final TextEditingController responsibleForCareSurnameController;
 
   // Section E – Living conditions
   String housingConditionRating;
@@ -108,14 +115,22 @@ class _ExternalInformantEntry {
   String healthStatusRating;
   final TextEditingController healthStatusDetailsController;
   String accessHealthServices;
+  final Set<String> healthServiceTypes;
+  final TextEditingController healthServiceOtherController;
   String accessSocialSupport;
+  final Set<String> socialSupportTypes;
+  final TextEditingController socialSupportOtherController;
   String accessSchoolWork;
+  final Set<String> schoolWorkTypes;
+  final TextEditingController schoolWorkOtherController;
   final TextEditingController accessServicesCommentsController;
 
   // Section F – Safety
   final Set<String> abuseTypes;
   final TextEditingController abuseDetailsController;
   String signsOfNeglect;
+  final Set<String> neglectTypes;
+  final TextEditingController neglectTypeOtherController;
   final TextEditingController neglectDetailsController;
   final Set<String> riskFactors;
   final TextEditingController riskFactorOtherController;
@@ -149,18 +164,25 @@ class _ExternalInformantEntry {
 
   _ExternalInformantEntry({
     required this.id,
-    String fullName = '',
+    String firstName = '',
+    String surname = '',
     String age = '',
     this.gender = '',
-    String relationshipToClient = '',
-    String occupation = '',
-    String contactDetails = '',
+    this.relationshipToClient = '',
+    String relationshipToClientOther = '',
+    this.occupation = '',
+    String occupationOther = '',
+    this.contactCountryCode = '',
+    String contactCountryCodeOther = '',
+    String contactNumber = '',
     String physicalAddress = '',
     Set<String>? purposeOfInterview,
     String purposeOfInterviewOther = '',
-    String howLongKnown = '',
+    this.howLongKnown = '',
     String currentSituationUnderstanding = '',
-    String responsibleForCare = '',
+    bool? showResponsibleForCare,
+    String responsibleForCareFirstName = '',
+    String responsibleForCareSurname = '',
     this.housingConditionRating = '',
     String housingComments = '',
     this.basicNeedsRating = '',
@@ -168,12 +190,20 @@ class _ExternalInformantEntry {
     this.healthStatusRating = '',
     String healthStatusDetails = '',
     this.accessHealthServices = '',
+    Set<String>? healthServiceTypes,
+    String healthServiceOther = '',
     this.accessSocialSupport = '',
+    Set<String>? socialSupportTypes,
+    String socialSupportOther = '',
     this.accessSchoolWork = '',
+    Set<String>? schoolWorkTypes,
+    String schoolWorkOther = '',
     String accessServicesComments = '',
     Set<String>? abuseTypes,
     String abuseDetails = '',
     this.signsOfNeglect = '',
+    Set<String>? neglectTypes,
+    String neglectTypeOther = '',
     String neglectDetails = '',
     Set<String>? riskFactors,
     String riskFactorOther = '',
@@ -190,23 +220,35 @@ class _ExternalInformantEntry {
     String credibilityReasons = '',
     String socialWorkerSummaryNotes = '',
     this.riskLevel = '',
-  })  : fullNameController = TextEditingController(text: fullName),
+  })  : firstNameController = TextEditingController(text: firstName),
+        surnameController = TextEditingController(text: surname),
         ageController = TextEditingController(text: age),
-        relationshipToClientController = TextEditingController(text: relationshipToClient),
-        occupationController = TextEditingController(text: occupation),
-        contactDetailsController = TextEditingController(text: contactDetails),
+        relationshipToClientOtherController = TextEditingController(text: relationshipToClientOther),
+        occupationOtherController = TextEditingController(text: occupationOther),
+        contactCountryCodeOtherController = TextEditingController(text: contactCountryCodeOther),
+        contactNumberController = TextEditingController(text: contactNumber),
         physicalAddressController = TextEditingController(text: physicalAddress),
         purposeOfInterview = purposeOfInterview ?? {},
         purposeOfInterviewOtherController = TextEditingController(text: purposeOfInterviewOther),
-        howLongKnownController = TextEditingController(text: howLongKnown),
         currentSituationUnderstandingController = TextEditingController(text: currentSituationUnderstanding),
-        responsibleForCareController = TextEditingController(text: responsibleForCare),
+        showResponsibleForCare = showResponsibleForCare ??
+            (responsibleForCareFirstName.trim().isNotEmpty || responsibleForCareSurname.trim().isNotEmpty),
+        responsibleForCareFirstNameController = TextEditingController(text: responsibleForCareFirstName),
+        responsibleForCareSurnameController = TextEditingController(text: responsibleForCareSurname),
         housingCommentsController = TextEditingController(text: housingComments),
         basicNeedsDetailsController = TextEditingController(text: basicNeedsDetails),
         healthStatusDetailsController = TextEditingController(text: healthStatusDetails),
+        healthServiceTypes = healthServiceTypes ?? {},
+        healthServiceOtherController = TextEditingController(text: healthServiceOther),
+        socialSupportTypes = socialSupportTypes ?? {},
+        socialSupportOtherController = TextEditingController(text: socialSupportOther),
+        schoolWorkTypes = schoolWorkTypes ?? {},
+        schoolWorkOtherController = TextEditingController(text: schoolWorkOther),
         accessServicesCommentsController = TextEditingController(text: accessServicesComments),
         abuseTypes = abuseTypes ?? {},
         abuseDetailsController = TextEditingController(text: abuseDetails),
+        neglectTypes = neglectTypes ?? {},
+        neglectTypeOtherController = TextEditingController(text: neglectTypeOther),
         neglectDetailsController = TextEditingController(text: neglectDetails),
         riskFactors = riskFactors ?? {},
         riskFactorOtherController = TextEditingController(text: riskFactorOther),
@@ -221,21 +263,34 @@ class _ExternalInformantEntry {
         credibilityReasonsController = TextEditingController(text: credibilityReasons),
         socialWorkerSummaryNotesController = TextEditingController(text: socialWorkerSummaryNotes);
 
+  String get fullName {
+    final first = firstNameController.text.trim();
+    final last = surnameController.text.trim();
+    return ('$first $last').trim();
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'fullName': fullNameController.text.trim(),
+      'firstName': firstNameController.text.trim(),
+      'surname': surnameController.text.trim(),
       'age': ageController.text.trim(),
       'gender': gender,
-      'relationshipToClient': relationshipToClientController.text.trim(),
-      'occupation': occupationController.text.trim(),
-      'contactDetails': contactDetailsController.text.trim(),
+      'relationshipToClient': relationshipToClient,
+      'relationshipToClientOther': relationshipToClientOtherController.text.trim(),
+      'occupation': occupation,
+      'occupationOther': occupationOtherController.text.trim(),
+      'contactCountryCode': contactCountryCode,
+      'contactCountryCodeOther': contactCountryCodeOtherController.text.trim(),
+      'contactNumber': contactNumberController.text.trim(),
       'physicalAddress': physicalAddressController.text.trim(),
       'purposeOfInterview': purposeOfInterview.toList(),
       'purposeOfInterviewOther': purposeOfInterviewOtherController.text.trim(),
-      'howLongKnown': howLongKnownController.text.trim(),
+      'howLongKnown': howLongKnown,
       'currentSituationUnderstanding': currentSituationUnderstandingController.text.trim(),
-      'responsibleForCare': responsibleForCareController.text.trim(),
+      'showResponsibleForCare': showResponsibleForCare,
+      'responsibleForCareFirstName': responsibleForCareFirstNameController.text.trim(),
+      'responsibleForCareSurname': responsibleForCareSurnameController.text.trim(),
       'housingConditionRating': housingConditionRating,
       'housingComments': housingCommentsController.text.trim(),
       'basicNeedsRating': basicNeedsRating,
@@ -243,12 +298,20 @@ class _ExternalInformantEntry {
       'healthStatusRating': healthStatusRating,
       'healthStatusDetails': healthStatusDetailsController.text.trim(),
       'accessHealthServices': accessHealthServices,
+      'healthServiceTypes': healthServiceTypes.toList(),
+      'healthServiceOther': healthServiceOtherController.text.trim(),
       'accessSocialSupport': accessSocialSupport,
+      'socialSupportTypes': socialSupportTypes.toList(),
+      'socialSupportOther': socialSupportOtherController.text.trim(),
       'accessSchoolWork': accessSchoolWork,
+      'schoolWorkTypes': schoolWorkTypes.toList(),
+      'schoolWorkOther': schoolWorkOtherController.text.trim(),
       'accessServicesComments': accessServicesCommentsController.text.trim(),
       'abuseTypes': abuseTypes.toList(),
       'abuseDetails': abuseDetailsController.text.trim(),
       'signsOfNeglect': signsOfNeglect,
+      'neglectTypes': neglectTypes.toList(),
+      'neglectTypeOther': neglectTypeOtherController.text.trim(),
       'neglectDetails': neglectDetailsController.text.trim(),
       'riskFactors': riskFactors.toList(),
       'riskFactorOther': riskFactorOtherController.text.trim(),
@@ -269,21 +332,27 @@ class _ExternalInformantEntry {
   }
 
   void dispose() {
-    fullNameController.dispose();
+    firstNameController.dispose();
+    surnameController.dispose();
     ageController.dispose();
-    relationshipToClientController.dispose();
-    occupationController.dispose();
-    contactDetailsController.dispose();
+    relationshipToClientOtherController.dispose();
+    occupationOtherController.dispose();
+    contactCountryCodeOtherController.dispose();
+    contactNumberController.dispose();
     physicalAddressController.dispose();
     purposeOfInterviewOtherController.dispose();
-    howLongKnownController.dispose();
     currentSituationUnderstandingController.dispose();
-    responsibleForCareController.dispose();
+    responsibleForCareFirstNameController.dispose();
+    responsibleForCareSurnameController.dispose();
     housingCommentsController.dispose();
     basicNeedsDetailsController.dispose();
     healthStatusDetailsController.dispose();
+    healthServiceOtherController.dispose();
+    socialSupportOtherController.dispose();
+    schoolWorkOtherController.dispose();
     accessServicesCommentsController.dispose();
     abuseDetailsController.dispose();
+    neglectTypeOtherController.dispose();
     neglectDetailsController.dispose();
     riskFactorOtherController.dispose();
     dailyFunctioningController.dispose();
@@ -503,6 +572,146 @@ class _MgysdSocialInvestigationPageState
   static const Map<String, String> _genderLabels = {
     'MALE': 'Male',
     'FEMALE': 'Female',
+    'OTHER': 'Other',
+  };
+
+  // Informant's relationship to client (Section B) — dropdown with Other
+  static const List<String> _informantRelationshipOptions = [
+    'NEIGHBOUR',
+    'TEACHER',
+    'COMMUNITY_LEADER',
+    'RELATIVE',
+    'NURSE_HEALTH_WORKER',
+    'FRIEND',
+    'RELIGIOUS_LEADER',
+    'SOCIAL_WORKER_OTHER_PROFESSIONAL',
+    'OTHER',
+  ];
+  static const Map<String, String> _informantRelationshipLabels = {
+    'NEIGHBOUR': 'Neighbour',
+    'TEACHER': 'Teacher',
+    'COMMUNITY_LEADER': 'Community leader',
+    'RELATIVE': 'Relative',
+    'NURSE_HEALTH_WORKER': 'Nurse / health worker',
+    'FRIEND': 'Friend',
+    'RELIGIOUS_LEADER': 'Religious leader',
+    'SOCIAL_WORKER_OTHER_PROFESSIONAL': 'Social worker / other professional',
+    'OTHER': 'Other',
+  };
+
+  // Informant occupation (Section B) — dropdown with Other
+  static const List<String> _occupationOptions = [
+    'UNEMPLOYED',
+    'FARMER',
+    'TEACHER',
+    'HEALTH_WORKER',
+    'GOVERNMENT_EMPLOYEE',
+    'BUSINESS_OWNER_TRADER',
+    'DOMESTIC_WORKER',
+    'CASUAL_LABOURER',
+    'STUDENT',
+    'RETIRED',
+    'OTHER',
+  ];
+  static const Map<String, String> _occupationLabels = {
+    'UNEMPLOYED': 'Unemployed',
+    'FARMER': 'Farmer',
+    'TEACHER': 'Teacher',
+    'HEALTH_WORKER': 'Health worker',
+    'GOVERNMENT_EMPLOYEE': 'Government employee',
+    'BUSINESS_OWNER_TRADER': 'Business owner / trader',
+    'DOMESTIC_WORKER': 'Domestic worker',
+    'CASUAL_LABOURER': 'Casual labourer',
+    'STUDENT': 'Student',
+    'RETIRED': 'Retired',
+    'OTHER': 'Other',
+  };
+
+  // Country code for informant contact number (Section B)
+  static const List<String> _countryCodeOptions = ['+266', '+27', 'OTHER'];
+  static const Map<String, String> _countryCodeLabels = {
+    '+266': '+266 (Lesotho)',
+    '+27': '+27 (South Africa)',
+    'OTHER': 'Other',
+  };
+
+  // How long the informant has known the client (Section D) — range dropdown
+  static const List<String> _howLongKnownOptions = [
+    'LESS_THAN_6_MONTHS',
+    'SIX_MONTHS_TO_ONE_YEAR',
+    'ONE_TO_THREE_YEARS',
+    'THREE_TO_FIVE_YEARS',
+    'MORE_THAN_FIVE_YEARS',
+  ];
+  static const Map<String, String> _howLongKnownLabels = {
+    'LESS_THAN_6_MONTHS': 'Less than 6 months',
+    'SIX_MONTHS_TO_ONE_YEAR': '6 months – 1 year',
+    'ONE_TO_THREE_YEARS': '1 – 3 years',
+    'THREE_TO_FIVE_YEARS': '3 – 5 years',
+    'MORE_THAN_FIVE_YEARS': 'More than 5 years',
+  };
+
+  // Access to services sub-options (Section E), shown when the parent Yes/No is YES
+  static const List<String> _healthServiceOptions = [
+    'CLINIC_HOSPITAL',
+    'MENTAL_HEALTH_SERVICES',
+    'DISABILITY_REHABILITATION',
+    'TRADITIONAL_HEALER',
+    'OTHER',
+  ];
+  static const Map<String, String> _healthServiceLabels = {
+    'CLINIC_HOSPITAL': 'Clinic / hospital',
+    'MENTAL_HEALTH_SERVICES': 'Mental health services',
+    'DISABILITY_REHABILITATION': 'Disability / rehabilitation services',
+    'TRADITIONAL_HEALER': 'Traditional healer',
+    'OTHER': 'Other',
+  };
+  static const List<String> _socialSupportOptions = [
+    'GOVERNMENT_GRANT',
+    'NGO_SUPPORT',
+    'FAMILY_NETWORK',
+    'RELIGIOUS_SUPPORT',
+    'OTHER',
+  ];
+  static const Map<String, String> _socialSupportLabels = {
+    'GOVERNMENT_GRANT': 'Government grant',
+    'NGO_SUPPORT': 'NGO support',
+    'FAMILY_NETWORK': 'Family network',
+    'RELIGIOUS_SUPPORT': 'Religious support',
+    'OTHER': 'Other',
+  };
+  static const List<String> _schoolWorkOptions = [
+    'ATTENDING_SCHOOL',
+    'VOCATIONAL_TRAINING',
+    'EMPLOYED',
+    'SELF_EMPLOYED',
+    'OTHER',
+  ];
+  static const Map<String, String> _schoolWorkLabels = {
+    'ATTENDING_SCHOOL': 'Attending school',
+    'VOCATIONAL_TRAINING': 'Vocational training',
+    'EMPLOYED': 'Employed',
+    'SELF_EMPLOYED': 'Self-employed',
+    'OTHER': 'Other',
+  };
+
+  // Signs of neglect sub-options (Section F), shown when the parent Yes/No is YES
+  static const List<String> _neglectTypeOptions = [
+    'LACK_OF_FOOD_NUTRITION',
+    'POOR_HYGIENE',
+    'INADEQUATE_CLOTHING',
+    'LACK_OF_SUPERVISION',
+    'LACK_OF_MEDICAL_CARE',
+    'EDUCATIONAL_NEGLECT',
+    'OTHER',
+  ];
+  static const Map<String, String> _neglectTypeLabels = {
+    'LACK_OF_FOOD_NUTRITION': 'Lack of food / nutrition',
+    'POOR_HYGIENE': 'Poor hygiene',
+    'INADEQUATE_CLOTHING': 'Inadequate clothing',
+    'LACK_OF_SUPERVISION': 'Lack of supervision',
+    'LACK_OF_MEDICAL_CARE': 'Lack of medical care',
+    'EDUCATIONAL_NEGLECT': 'Educational neglect',
     'OTHER': 'Other',
   };
 
@@ -1293,20 +1502,85 @@ class _MgysdSocialInvestigationPageState
     _externalInformantEntries.clear();
     for (final raw in informants) {
       final item = (raw ?? {}) as Map<String, dynamic>;
+
+      // Backward compatibility: older saved drafts stored a single 'fullName'
+      // and a single 'responsibleForCare' free-text field.
+      String firstName = _text(item['firstName']);
+      String surname = _text(item['surname']);
+      if (firstName.isEmpty && surname.isEmpty) {
+        final legacyFullName = _text(item['fullName']);
+        if (legacyFullName.isNotEmpty) {
+          final parts = legacyFullName.split(' ').where((p) => p.trim().isNotEmpty).toList();
+          firstName = parts.isNotEmpty ? parts.first : '';
+          surname = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+        }
+      }
+
+      String responsibleFirstName = _text(item['responsibleForCareFirstName']);
+      String responsibleSurname = _text(item['responsibleForCareSurname']);
+      if (responsibleFirstName.isEmpty && responsibleSurname.isEmpty) {
+        final legacyResponsible = _text(item['responsibleForCare']);
+        if (legacyResponsible.isNotEmpty) {
+          final parts = legacyResponsible.split(' ').where((p) => p.trim().isNotEmpty).toList();
+          responsibleFirstName = parts.isNotEmpty ? parts.first : '';
+          responsibleSurname = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+        }
+      }
+
+      // Relationship to client / occupation used to be free text; map onto the
+      // new dropdown + Other pattern.
+      final relationship = _resolveOptionWithOther(
+        _text(item['relationshipToClient']).isNotEmpty
+            ? _text(item['relationshipToClient'])
+            : '',
+        _informantRelationshipOptions,
+      );
+      final relationshipOther = _text(item['relationshipToClientOther']).isNotEmpty
+          ? _text(item['relationshipToClientOther'])
+          : relationship[1];
+
+      final occupationResolved = _resolveOptionWithOther(_text(item['occupation']), _occupationOptions);
+      final occupationOther = _text(item['occupationOther']).isNotEmpty
+          ? _text(item['occupationOther'])
+          : occupationResolved[1];
+
+      // Contact details: newer drafts split country code + number; legacy
+      // drafts stored one free-text 'contactDetails' field.
+      String countryCode = _text(item['contactCountryCode']);
+      String contactNumber = _text(item['contactNumber']);
+      if (countryCode.isEmpty && contactNumber.isEmpty) {
+        contactNumber = _text(item['contactDetails']);
+        countryCode = '+266';
+      }
+      if (countryCode.isEmpty) countryCode = '+266';
+
+      // How long known used to be free text; normalise onto the range options
+      // where possible (older values that don't match are left blank).
+      final howLongKnownResolved = _normaliseOptionValue(_text(item['howLongKnown']), _howLongKnownOptions);
+
       _externalInformantEntries.add(_ExternalInformantEntry(
         id: _text(item['id']).isEmpty ? AppUtil.getUid() : _text(item['id']),
-        fullName: _text(item['fullName']),
+        firstName: firstName,
+        surname: surname,
         age: _text(item['age']),
         gender: _text(item['gender']),
-        relationshipToClient: _text(item['relationshipToClient']),
-        occupation: _text(item['occupation']),
-        contactDetails: _text(item['contactDetails']),
+        relationshipToClient: relationship[0],
+        relationshipToClientOther: relationshipOther,
+        occupation: occupationResolved[0],
+        occupationOther: occupationOther,
+        contactCountryCode: countryCode,
+        contactCountryCodeOther: _text(item['contactCountryCodeOther']),
+        contactNumber: contactNumber,
         physicalAddress: _text(item['physicalAddress']),
         purposeOfInterview: Set<String>.from(item['purposeOfInterview'] ?? []),
         purposeOfInterviewOther: _text(item['purposeOfInterviewOther']),
-        howLongKnown: _text(item['howLongKnown']),
+        howLongKnown: _howLongKnownOptions.contains(howLongKnownResolved) ? howLongKnownResolved : '',
         currentSituationUnderstanding: _text(item['currentSituationUnderstanding']),
-        responsibleForCare: _text(item['responsibleForCare']),
+        showResponsibleForCare: item['showResponsibleForCare'] is bool
+            ? item['showResponsibleForCare'] as bool
+            : null,
+        responsibleForCareFirstName: responsibleFirstName,
+        responsibleForCareSurname: responsibleSurname,
         housingConditionRating: _text(item['housingConditionRating']),
         housingComments: _text(item['housingComments']),
         basicNeedsRating: _text(item['basicNeedsRating']),
@@ -1314,12 +1588,20 @@ class _MgysdSocialInvestigationPageState
         healthStatusRating: _text(item['healthStatusRating']),
         healthStatusDetails: _text(item['healthStatusDetails']),
         accessHealthServices: _text(item['accessHealthServices']),
+        healthServiceTypes: Set<String>.from(item['healthServiceTypes'] ?? []),
+        healthServiceOther: _text(item['healthServiceOther']),
         accessSocialSupport: _text(item['accessSocialSupport']),
+        socialSupportTypes: Set<String>.from(item['socialSupportTypes'] ?? []),
+        socialSupportOther: _text(item['socialSupportOther']),
         accessSchoolWork: _text(item['accessSchoolWork']),
+        schoolWorkTypes: Set<String>.from(item['schoolWorkTypes'] ?? []),
+        schoolWorkOther: _text(item['schoolWorkOther']),
         accessServicesComments: _text(item['accessServicesComments']),
         abuseTypes: Set<String>.from(item['abuseTypes'] ?? []),
         abuseDetails: _text(item['abuseDetails']),
         signsOfNeglect: _text(item['signsOfNeglect']),
+        neglectTypes: Set<String>.from(item['neglectTypes'] ?? []),
+        neglectTypeOther: _text(item['neglectTypeOther']),
         neglectDetails: _text(item['neglectDetails']),
         riskFactors: Set<String>.from(item['riskFactors'] ?? []),
         riskFactorOther: _text(item['riskFactorOther']),
@@ -1338,6 +1620,20 @@ class _MgysdSocialInvestigationPageState
         riskLevel: _text(item['riskLevel']),
       ));
     }
+  }
+
+  /// Resolves a legacy free-text value onto a known option list. Returns a
+  /// two-item list: [resolvedOption, otherText]. If the value already
+  /// matches (or normalises to) one of [options], otherText is empty. If it
+  /// doesn't match and the list supports 'OTHER', the original text is kept
+  /// as the Other value. Empty input resolves to ['', ''].
+  List<String> _resolveOptionWithOther(String raw, List<String> options) {
+    final v = raw.trim();
+    if (v.isEmpty) return ['', ''];
+    final normalised = _normaliseOptionValue(v, options);
+    if (options.contains(normalised)) return [normalised, ''];
+    if (options.contains('OTHER')) return ['OTHER', v];
+    return [v, ''];
   }
 
   int? _intOrNull(dynamic value) => value == null ? null : int.tryParse(value.toString());
@@ -1632,7 +1928,7 @@ class _MgysdSocialInvestigationPageState
       for (int i = 0; i < _externalInformantEntries.length; i++) {
         _collapsedInformants.add(i);
       }
-      _externalInformantEntries.add(_ExternalInformantEntry(id: AppUtil.getUid()));
+      _externalInformantEntries.add(_ExternalInformantEntry(id: AppUtil.getUid(), contactCountryCode: '+266'));
       // New card is always expanded (its index is not in the set)
     });
   }
@@ -2171,8 +2467,8 @@ class _MgysdSocialInvestigationPageState
   }
 
   Widget _externalInformantCard(int index, _ExternalInformantEntry entry) {
-    final cardLabel = entry.fullNameController.text.trim().isNotEmpty
-        ? entry.fullNameController.text.trim()
+    final cardLabel = entry.fullName.isNotEmpty
+        ? entry.fullName
         : 'Informant ${index + 1}';
     final isCollapsed = _collapsedInformants.contains(index);
 
@@ -2294,8 +2590,12 @@ class _MgysdSocialInvestigationPageState
 
                   // ── Section B: Informant Details ──────────────────────
                   _subHeading('Section B: Informant Details'),
-                  _input(entry.fullNameController, 'Full Name',
-                      validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null),
+                  _two(
+                    _input(entry.firstNameController, 'First Name',
+                        validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null),
+                    _input(entry.surnameController, 'Surname',
+                        validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null),
+                  ),
                   _two(
                     _input(entry.ageController, 'Age', keyboardType: TextInputType.number),
                     _dropdown(
@@ -2306,11 +2606,50 @@ class _MgysdSocialInvestigationPageState
                       onChanged: (v) => setState(() => entry.gender = v),
                     ),
                   ),
-                  _input(entry.relationshipToClientController, 'Relationship to Client'),
-                  _two(
-                    _input(entry.occupationController, 'Occupation'),
-                    _input(entry.contactDetailsController, 'Contact Details', keyboardType: TextInputType.phone),
+                  _dropdown(
+                    label: 'Relationship to Client',
+                    value: entry.relationshipToClient,
+                    options: _informantRelationshipOptions,
+                    labels: _informantRelationshipLabels,
+                    onChanged: (v) => setState(() => entry.relationshipToClient = v),
                   ),
+                  if (entry.relationshipToClient == 'OTHER')
+                    _input(entry.relationshipToClientOtherController, 'Please specify relationship', maxLines: 2),
+                  _dropdown(
+                    label: 'Occupation',
+                    value: entry.occupation,
+                    options: _occupationOptions,
+                    labels: _occupationLabels,
+                    onChanged: (v) => setState(() => entry.occupation = v),
+                  ),
+                  if (entry.occupation == 'OTHER')
+                    _input(entry.occupationOtherController, 'Please specify occupation', maxLines: 2),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4, top: 4),
+                    child: Text('Contact Details',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.blueGrey)),
+                  ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 130,
+                        child: _dropdown(
+                          label: 'Code',
+                          value: entry.contactCountryCode,
+                          options: _countryCodeOptions,
+                          labels: _countryCodeLabels,
+                          onChanged: (v) => setState(() => entry.contactCountryCode = v),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _input(entry.contactNumberController, 'Phone Number', keyboardType: TextInputType.phone),
+                      ),
+                    ],
+                  ),
+                  if (entry.contactCountryCode == 'OTHER')
+                    _input(entry.contactCountryCodeOtherController, 'Please specify country code', keyboardType: TextInputType.phone),
                   _input(entry.physicalAddressController, 'Physical Address', maxLines: 2),
 
                   // ── Section C: Purpose of Interview ───────────────────
@@ -2329,11 +2668,53 @@ class _MgysdSocialInvestigationPageState
 
                   // ── Section D: Knowledge of Client ────────────────────
                   _subHeading('Section D: Knowledge of Client'),
-                  _input(entry.howLongKnownController, 'How long have you known the client?'),
+                  _dropdown(
+                    label: 'How long have you known the client?',
+                    value: entry.howLongKnown,
+                    options: _howLongKnownOptions,
+                    labels: _howLongKnownLabels,
+                    onChanged: (v) => setState(() => entry.howLongKnown = v),
+                  ),
                   _input(entry.currentSituationUnderstandingController,
                       "What is your understanding of the client's current situation?", maxLines: 4),
-                  _input(entry.responsibleForCareController,
-                      "Who is responsible for the client's care / support (if any)?", maxLines: 2),
+                  if (!entry.showResponsibleForCare)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: OutlinedButton.icon(
+                        onPressed: () => setState(() => entry.showResponsibleForCare = true),
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text("Add who is responsible for the client's care"),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: widget.color,
+                          side: BorderSide(color: widget.color.withOpacity(0.45)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                  if (entry.showResponsibleForCare) ...[
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text("Who is responsible for the client's care / support",
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.blueGrey)),
+                        ),
+                        IconButton(
+                          tooltip: 'Remove',
+                          onPressed: () => setState(() {
+                            entry.showResponsibleForCare = false;
+                            entry.responsibleForCareFirstNameController.clear();
+                            entry.responsibleForCareSurnameController.clear();
+                          }),
+                          icon: const Icon(Icons.close, size: 18),
+                          color: Colors.redAccent,
+                        ),
+                      ],
+                    ),
+                    _two(
+                      _input(entry.responsibleForCareFirstNameController, 'First Name'),
+                      _input(entry.responsibleForCareSurnameController, 'Surname'),
+                    ),
+                  ],
 
                   // ── Section E: Living Conditions ──────────────────────
                   _subHeading('Section E: Living Conditions and Basic Needs'),
@@ -2366,22 +2747,46 @@ class _MgysdSocialInvestigationPageState
                     child: Text('4. Access to Services',
                         style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.blueGrey)),
                   ),
-                  _two(
-                    _dropdown(
-                      label: 'Health services',
-                      value: entry.accessHealthServices,
-                      options: _yesNoOptions,
-                      labels: _yesNoLabels,
-                      onChanged: (v) => setState(() => entry.accessHealthServices = v),
-                    ),
-                    _dropdown(
-                      label: 'Social support',
-                      value: entry.accessSocialSupport,
-                      options: _yesNoOptions,
-                      labels: _yesNoLabels,
-                      onChanged: (v) => setState(() => entry.accessSocialSupport = v),
-                    ),
+                  _dropdown(
+                    label: 'Health services',
+                    value: entry.accessHealthServices,
+                    options: _yesNoOptions,
+                    labels: _yesNoLabels,
+                    onChanged: (v) => setState(() => entry.accessHealthServices = v),
                   ),
+                  if (entry.accessHealthServices == 'YES') ...[
+                    _checkboxGroup(
+                      label: 'Which health services?',
+                      options: _healthServiceOptions,
+                      labels: _healthServiceLabels,
+                      selected: entry.healthServiceTypes,
+                      onChanged: (option, checked) => setState(() {
+                        if (checked) { entry.healthServiceTypes.add(option); } else { entry.healthServiceTypes.remove(option); }
+                      }),
+                    ),
+                    if (entry.healthServiceTypes.contains('OTHER'))
+                      _input(entry.healthServiceOtherController, 'Please specify other health service', maxLines: 2),
+                  ],
+                  _dropdown(
+                    label: 'Social support',
+                    value: entry.accessSocialSupport,
+                    options: _yesNoOptions,
+                    labels: _yesNoLabels,
+                    onChanged: (v) => setState(() => entry.accessSocialSupport = v),
+                  ),
+                  if (entry.accessSocialSupport == 'YES') ...[
+                    _checkboxGroup(
+                      label: 'Which social support?',
+                      options: _socialSupportOptions,
+                      labels: _socialSupportLabels,
+                      selected: entry.socialSupportTypes,
+                      onChanged: (option, checked) => setState(() {
+                        if (checked) { entry.socialSupportTypes.add(option); } else { entry.socialSupportTypes.remove(option); }
+                      }),
+                    ),
+                    if (entry.socialSupportTypes.contains('OTHER'))
+                      _input(entry.socialSupportOtherController, 'Please specify other social support', maxLines: 2),
+                  ],
                   _dropdown(
                     label: 'School / work (if applicable)',
                     value: entry.accessSchoolWork,
@@ -2389,6 +2794,19 @@ class _MgysdSocialInvestigationPageState
                     labels: _yesNoLabels,
                     onChanged: (v) => setState(() => entry.accessSchoolWork = v),
                   ),
+                  if (entry.accessSchoolWork == 'YES') ...[
+                    _checkboxGroup(
+                      label: 'Which school / work situation?',
+                      options: _schoolWorkOptions,
+                      labels: _schoolWorkLabels,
+                      selected: entry.schoolWorkTypes,
+                      onChanged: (option, checked) => setState(() {
+                        if (checked) { entry.schoolWorkTypes.add(option); } else { entry.schoolWorkTypes.remove(option); }
+                      }),
+                    ),
+                    if (entry.schoolWorkTypes.contains('OTHER'))
+                      _input(entry.schoolWorkOtherController, 'Please specify other school / work situation', maxLines: 2),
+                  ],
                   _input(entry.accessServicesCommentsController, 'Comments', maxLines: 2),
 
                   // ── Section F: Safety and Protection Concerns ──────────────────────
@@ -2410,6 +2828,19 @@ class _MgysdSocialInvestigationPageState
                     labels: _yesNoLabels,
                     onChanged: (v) => setState(() => entry.signsOfNeglect = v),
                   ),
+                  if (entry.signsOfNeglect == 'YES') ...[
+                    _checkboxGroup(
+                      label: 'Which signs of neglect?',
+                      options: _neglectTypeOptions,
+                      labels: _neglectTypeLabels,
+                      selected: entry.neglectTypes,
+                      onChanged: (option, checked) => setState(() {
+                        if (checked) { entry.neglectTypes.add(option); } else { entry.neglectTypes.remove(option); }
+                      }),
+                    ),
+                    if (entry.neglectTypes.contains('OTHER'))
+                      _input(entry.neglectTypeOtherController, 'Please specify other sign of neglect', maxLines: 2),
+                  ],
                   _input(entry.neglectDetailsController, 'Details', maxLines: 2),
                   _checkboxGroup(
                     label: '3. Exposure to risk factors',
