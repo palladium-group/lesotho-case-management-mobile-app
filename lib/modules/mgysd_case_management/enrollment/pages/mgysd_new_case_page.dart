@@ -478,6 +478,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   ];
 
   static const List<_Opt> gradeOptions = [
+    _Opt('PRE_SCHOOL','Pre-School'),
     _Opt('1', 'Grade 1'),
     _Opt('2', 'Grade 2'),
     _Opt('3', 'Grade 3'),
