@@ -109,8 +109,10 @@ class MgysdDhis2Uids {
   static const String attNationality = 'ATTR_NATIONALITY';
   static const String attHomeLanguage = 'UQlbGvkSBJo';
   static const String attHomeLanguageOther = 'ATTR_HOME_LANGUAGE_OTHER';
+  static const String attNationalityOther = 'ATTR_NATIONALITY_OTHER';
   static const String attOccupation = 'qzPKtlcljyU';
   static const String attRelationshipToClient = 'ATTR_RELATIONSHIP_TO_CLIENT';
+  static const String attRelationshipToClientOther = 'ATTR_RELATIONSHIP_TO_CLIENT_OTHER';
   static const String attHasDisability = 'ATTR_HAS_DISABILITY';
   static const String attDisabilitySpecify = 'PeuzIMl3kI9';
 
@@ -198,26 +200,37 @@ class MgysdDhis2Uids {
 
   static const String attRiskFamilyBackground = 'ATTR_RISK_FAMILY_BACKGROUND';
   static const String attRiskFamilyBackgroundNotes = 'ATTR_RISK_FAMILY_BACKGROUND_NOTES';
+  static const String attRiskFamilyBackgroundMember = 'ATTR_RISK_FAMILY_BACKGROUND_MEMBER';
   static const String attRiskCaregiverWellbeing = 'ATTR_RISK_CAREGIVER_WELLBEING';
   static const String attRiskCaregiverWellbeingNotes = 'ATTR_RISK_CAREGIVER_WELLBEING_NOTES';
+  static const String attRiskCaregiverWellbeingMember = 'ATTR_RISK_CAREGIVER_WELLBEING_MEMBER';
   static const String attRiskExtendedFamilyRelationships = 'ATTR_RISK_EXTENDED_FAMILY_RELATIONSHIPS';
   static const String attRiskExtendedFamilyNotes = 'ATTR_RISK_EXTENDED_FAMILY_NOTES';
+  static const String attRiskExtendedFamilyMember = 'ATTR_RISK_EXTENDED_FAMILY_MEMBER';
   static const String attRiskClientRelationships = 'ATTR_RISK_CLIENT_RELATIONSHIPS';
   static const String attRiskClientRelationshipsNotes = 'ATTR_RISK_CLIENT_RELATIONSHIPS_NOTES';
+  static const String attRiskClientRelationshipsMember = 'ATTR_RISK_CLIENT_RELATIONSHIPS_MEMBER';
   static const String attRiskLivingCircumstances = 'ATTR_RISK_LIVING_CIRCUMSTANCES';
   static const String attRiskLivingCircumstancesNotes = 'ATTR_RISK_LIVING_CIRCUMSTANCES_NOTES';
+  static const String attRiskLivingCircumstancesMember = 'ATTR_RISK_LIVING_CIRCUMSTANCES_MEMBER';
   static const String attRiskHousing = 'ATTR_RISK_HOUSING';
   static const String attRiskHousingNotes = 'ATTR_RISK_HOUSING_NOTES';
+  static const String attRiskHousingMember = 'ATTR_RISK_HOUSING_MEMBER';
   static const String attRiskPhysicalHealth = 'ATTR_RISK_PHYSICAL_HEALTH';
   static const String attRiskPhysicalHealthNotes = 'ATTR_RISK_PHYSICAL_HEALTH_NOTES';
+  static const String attRiskPhysicalHealthMember = 'ATTR_RISK_PHYSICAL_HEALTH_MEMBER';
   static const String attRiskNutrition = 'ATTR_RISK_NUTRITION';
   static const String attRiskNutritionNotes = 'ATTR_RISK_NUTRITION_NOTES';
+  static const String attRiskNutritionMember = 'ATTR_RISK_NUTRITION_MEMBER';
   static const String attRiskEmotionalHealth = 'ATTR_RISK_EMOTIONAL_HEALTH';
   static const String attRiskEmotionalHealthNotes = 'ATTR_RISK_EMOTIONAL_HEALTH_NOTES';
+  static const String attRiskEmotionalHealthMember = 'ATTR_RISK_EMOTIONAL_HEALTH_MEMBER';
   static const String attRiskSupervision = 'ATTR_RISK_SUPERVISION';
   static const String attRiskSupervisionNotes = 'ATTR_RISK_SUPERVISION_NOTES';
+  static const String attRiskSupervisionMember = 'ATTR_RISK_SUPERVISION_MEMBER';
   static const String attRiskEducation = 'ATTR_RISK_EDUCATION';
   static const String attRiskEducationNotes = 'ATTR_RISK_EDUCATION_NOTES';
+  static const String attRiskEducationMember = 'ATTR_RISK_EDUCATION_MEMBER';
 
   static const String attRiskLevel = 'ATTR_RISK_LEVEL';
   static const String attRiskReason = 'ATTR_RISK_REASON';
