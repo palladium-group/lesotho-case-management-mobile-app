@@ -229,12 +229,10 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
   List<_CareGoal> _longGoals = [];
 
   static const String goalGroupClient = 'CLIENT';
-  static const String goalGroupParentGuardian = 'PARENT_GUARDIAN';
   static const String goalGroupSocialWorker = 'SOCIAL_WORKER';
 
   static const List<String> goalGroups = [
     goalGroupClient,
-    goalGroupParentGuardian,
     goalGroupSocialWorker,
   ];
 
@@ -688,7 +686,10 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       orderBy: 'createdAt ASC',
     );
 
-    final allGoals = goalRows.map(_CareGoal.fromRow).toList();
+    final allGoals = goalRows
+        .map(_CareGoal.fromRow)
+        .where((goal) => goal.goalGroup != 'PARENT_GUARDIAN')
+        .toList();
 
     _allGoals = allGoals;
     _shortGoals = allGoals.where((g) => g.term == 'SHORT_TERM').toList();
@@ -926,7 +927,6 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       'personsInvolvedInMakingPlan': _planParticipantsPayload(),
       'disagreementDetails': _disagreementDetailsPayload(),
       'clientGoals': _payloadForGoalGroup(goalGroupClient),
-      'parentGuardianGoals': _payloadForGoalGroup(goalGroupParentGuardian),
       'socialWorkerGoals': _payloadForGoalGroup(goalGroupSocialWorker),
       'updatedAt': nowIso,
     };
@@ -1124,20 +1124,6 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
 
       for (final subject in _subjects) {
         if (!subject.isHousehold) return subject.id;
-      }
-    }
-
-    if (goalGroup == goalGroupParentGuardian) {
-      for (final subject in _subjects) {
-        if (roleContains(subject, [
-          'PARENT',
-          'GUARDIAN',
-          'MOTHER',
-          'FATHER',
-          'CAREGIVER',
-        ])) {
-          return subject.id;
-        }
       }
     }
 
@@ -1541,8 +1527,6 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     switch (goalGroup) {
       case goalGroupClient:
         return 'Client’s goals';
-      case goalGroupParentGuardian:
-        return 'Parent/Guardian goals (if appropriate)';
       case goalGroupSocialWorker:
         return 'Social worker goals';
       default:
@@ -1554,8 +1538,6 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     switch (goalGroup) {
       case goalGroupClient:
         return 'Goals agreed with or directly related to the client.';
-      case goalGroupParentGuardian:
-        return 'Goals for the parent, caregiver, or guardian where relevant.';
       case goalGroupSocialWorker:
         return 'Goals and actions planned by the social worker.';
       default:
@@ -1567,8 +1549,6 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     switch (goalGroup) {
       case goalGroupClient:
         return Icons.person_outline;
-      case goalGroupParentGuardian:
-        return Icons.groups_2_outlined;
       case goalGroupSocialWorker:
         return Icons.badge_outlined;
       default:
@@ -1963,7 +1943,6 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     );
   }
 
-
   Widget _header() {
     final title = (widget.clientName ?? '').trim().isNotEmpty
         ? widget.clientName!.trim()
@@ -2165,6 +2144,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     );
   }
 
+
   @override
   Widget build(BuildContext context) {
     final totalGoals = _allGoals.length;
@@ -2232,7 +2212,6 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
                 _emptySubjects()
               else ...[
                 _goalGroupSection(goalGroupClient),
-                _goalGroupSection(goalGroupParentGuardian),
                 _goalGroupSection(goalGroupSocialWorker),
                 _agreedPlanActionSection(),
                 _personsInvolvedInPlanSection(),
