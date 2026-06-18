@@ -9,7 +9,7 @@
 
 ## Introduction <a name="intro"></a>
 
-This is a mobile application that facilitates tracking of households and beneficiaries along with service provision within different interventions across  the Lesotho Ministry of Gender, Youth and Social Development Units. It is an essential part of the Lesotho Case Management since it is the primary source of data within the system where it offers offline data capture from different implementing partners, with support for data synchronization.
+This is a mobile application that facilitates tracking of households and beneficiaries along with service provision within different interventions across  the Lesotho Ministry of Gender, Youth and Social Development Units. It is an essential part of the Lesotho Case Management since it is the primary source of data within the system where it offers offline data capture from different cadres, with support for data synchronization.
 
 
 
