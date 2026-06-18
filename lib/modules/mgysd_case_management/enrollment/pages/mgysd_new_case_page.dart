@@ -2162,7 +2162,18 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         return null;
       },
       decoration: InputDecoration(
-        labelText: label,
+        label: requiredField
+            ? RichText(
+          text: TextSpan(
+            style: const TextStyle(color: Colors.black87, fontSize: 14),
+            children: [
+              TextSpan(text: label),
+              const TextSpan(text: ' *', style: TextStyle(color: Colors.red)),
+            ],
+          ),
+        )
+            : null,
+        labelText: requiredField ? null : label,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
         contentPadding:
         const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -2184,6 +2195,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required TextEditingController controller,
     required String label,
     required String hint,
+    bool requiredField = false,
   }) {
     return GestureDetector(
       onTap: () => _pickDateFor(controller),
@@ -2193,6 +2205,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           label: label,
           hint: hint,
           suffixIcon: const Icon(Icons.date_range),
+          requiredField: requiredField,
+          validator: requiredField
+              ? (v) => (v == null || v.trim().isEmpty) ? 'Required' : null
+              : null,
         ),
       ),
     );
@@ -3289,55 +3305,67 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           onToggle: () => setState(() => caregiver.isExpanded = !caregiver.isExpanded),
           onDelete: () => _removeCaregiver(index),
         ),
-        if (caregiver.isExpanded) ...[
-          const SizedBox(height: 10),
-          _row2(
-            _Input(
-              controller: caregiver.nameController,
-              label: 'Name',
-              hint: 'Caregiver name',
-            ),
-            _Input(
-              controller: caregiver.surnameController,
-              label: 'Surname',
-              hint: 'Caregiver surname',
-            ),
-          ),
-          const SizedBox(height: 10),
-          _row2(
-            _dropdown(
-              label: 'Sex',
-              value: caregiver.sex,
-              options: sexOptions,
-              onChanged: (v) => setState(() => caregiver.sex = v ?? ''),
-            ),
-            _Input(
-              controller: caregiver.relationshipController,
-              label: 'Relationship with client',
-              hint: 'e.g. Aunt, Grandmother',
-            ),
-          ),
-          const SizedBox(height: 10),
-          _row2(
-            _dateInput(
-              controller: caregiver.dobController,
-              label: 'Date of Birth',
-              hint: 'Pick date',
-            ),
-            _Input(
-              controller: caregiver.occupationController,
-              label: 'Occupation',
-              hint: 'Enter occupation',
-            ),
-          ),
-          const SizedBox(height: 10),
-          _Input(
-            controller: caregiver.phoneController,
-            label: 'Phone Number',
-            hint: 'e.g. 5xxxxxxx',
-            keyboardType: TextInputType.phone,
-          ),
-        ],
+            if (caregiver.isExpanded) ...[
+              const SizedBox(height: 10),
+              _row2(
+                _Input(
+                  controller: caregiver.nameController,
+                  label: 'Name',
+                  hint: 'Caregiver name',
+                  requiredField: true,
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                ),
+                _Input(
+                  controller: caregiver.surnameController,
+                  label: 'Surname',
+                  hint: 'Caregiver surname',
+                  requiredField: true,
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _row2(
+                _dropdown(
+                  label: 'Sex',
+                  value: caregiver.sex,
+                  options: sexOptions,
+                  requiredField: true,
+                  onChanged: (v) => setState(() => caregiver.sex = v ?? ''),
+                ),
+                _Input(
+                  controller: caregiver.relationshipController,
+                  label: 'Relationship with client',
+                  hint: 'e.g. Aunt, Grandmother',
+                  requiredField: true,
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _row2(
+                _dateInput(
+                  controller: caregiver.dobController,
+                  label: 'Date of Birth',
+                  hint: 'Pick date',
+                  requiredField: true,
+                ),
+                _Input(
+                  controller: caregiver.occupationController,
+                  label: 'Occupation',
+                  hint: 'Enter occupation',
+                  requiredField: true,
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _Input(
+                controller: caregiver.phoneController,
+                label: 'Phone Number',
+                hint: 'e.g. 5xxxxxxx',
+                keyboardType: TextInputType.phone,
+                requiredField: true,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+              ),
+            ],
           ],
         ),
     );
@@ -3373,11 +3401,15 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 controller: nextOfKin.firstNameController,
                 label: 'First name',
                 hint: 'Next of kin first name',
+                requiredField: true,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
               ),
               _Input(
                 controller: nextOfKin.surnameController,
                 label: 'Surname',
                 hint: 'Next of kin surname',
+                requiredField: true,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
               ),
             ),
             const SizedBox(height: 10),
@@ -3386,6 +3418,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               label: 'Phone Number',
               hint: 'e.g. 5xxxxxxx',
               keyboardType: TextInputType.phone,
+              requiredField: true,
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
             ),
             const SizedBox(height: 10),
             _Input(
@@ -3393,6 +3427,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               label: 'Physical Address',
               hint: 'Describe physical address',
               maxLines: 3,
+              requiredField: true,
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
             ),
             const SizedBox(height: 10),
             _dropdown(
@@ -3656,11 +3692,15 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 controller: member.firstNameController,
                 label: 'First name',
                 hint: 'Enter first name',
+                requiredField: true,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
               ),
               _Input(
                 controller: member.surnameController,
                 label: 'Surname',
                 hint: 'Enter surname',
+                requiredField: true,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
               ),
             ),
             const SizedBox(height: 10),
@@ -3673,6 +3713,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                     label: 'Date of Birth',
                     hint: 'Pick date',
                     suffixIcon: const Icon(Icons.date_range),
+                    requiredField: true,
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
                   ),
                 ),
               ),
@@ -3689,6 +3731,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 label: 'Sex',
                 value: member.sex,
                 options: sexOptions,
+                requiredField: true,
                 onChanged: (v) {
                   setState(() {
                     member.sex = v ?? '';
@@ -3700,6 +3743,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 label: 'Relationship to client',
                 value: safeRelationship,
                 options: relationshipOptions,
+                requiredField: true,
                 onChanged: (v) {
                   setState(() {
                     member.relationshipToClient = v ?? '';
@@ -3731,12 +3775,16 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 controller: member.occupationController,
                 label: 'Occupation',
                 hint: 'Enter occupation',
+                requiredField: true,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
               ),
               _Input(
                 controller: member.contactsController,
                 label: 'Contacts',
                 hint: 'Phone / contact details',
                 keyboardType: TextInputType.phone,
+                requiredField: true,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
               ),
             ),
             const SizedBox(height: 10),
@@ -3744,6 +3792,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               label: 'Any Disability?',
               value: member.hasDisability,
               options: yesNoOptions,
+              requiredField: true,
               onChanged: (v) {
                 setState(() {
                   member.hasDisability = v ?? '';
@@ -4353,6 +4402,7 @@ class _Input extends StatelessWidget {
     this.maxLines = 1,
     this.readOnly = false,
     this.keyboardType,
+    this.requiredField = false,
   }) : super(key: key);
 
   final TextEditingController controller;
@@ -4363,6 +4413,7 @@ class _Input extends StatelessWidget {
   final int maxLines;
   final bool readOnly;
   final TextInputType? keyboardType;
+  final bool requiredField;
 
   @override
   Widget build(BuildContext context) {
@@ -4373,7 +4424,18 @@ class _Input extends StatelessWidget {
       readOnly: readOnly,
       keyboardType: keyboardType,
       decoration: InputDecoration(
-        labelText: label,
+        label: requiredField
+            ? RichText(
+          text: TextSpan(
+            style: const TextStyle(color: Colors.black87, fontSize: 14),
+            children: [
+              TextSpan(text: label),
+              const TextSpan(text: ' *', style: TextStyle(color: Colors.red)),
+            ],
+          ),
+        )
+            : null,
+        labelText: requiredField ? null : label,
         hintText: hint,
         suffixIcon: suffixIcon,
         filled: true,
