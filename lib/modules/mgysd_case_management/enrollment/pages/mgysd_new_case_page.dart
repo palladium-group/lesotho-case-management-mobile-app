@@ -262,9 +262,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
 
   final _reasonOtherController = TextEditingController();
 
-  final _emergencyActionTakenController = TextEditingController();
-  final _emergencyNoActionRefusedSpecifyController = TextEditingController();
-  final _emergencyNoActionOtherSpecifyController = TextEditingController();
 
   final _riskAssessmentDateController = TextEditingController();
   final _riskSocialWorkerController = TextEditingController();
@@ -313,8 +310,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
 
   String _personalAssistantSex = '';
 
-  String _hasEmergencyActionTaken = '';
-  String _emergencyNoActionReason = '';
 
   String _riskReportSource = '';
   String _riskHasActionTaken = '';
@@ -927,9 +922,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _personalAssistantOccupationController.dispose();
     _personalAssistantPhoneController.dispose();
     _reasonOtherController.dispose();
-    _emergencyActionTakenController.dispose();
-    _emergencyNoActionRefusedSpecifyController.dispose();
-    _emergencyNoActionOtherSpecifyController.dispose();
     _riskAssessmentDateController.dispose();
     _riskSocialWorkerController.dispose();
     _riskReasonController.dispose();
@@ -1700,14 +1692,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           attHouseholdAddress: _physicalAddressController.text,
           attReasonForEnrolment: jsonEncode(_selectedReasonPayload()),
           attReasonForEnrolmentOther: _reasonOtherController.text,
-          attHasEmergencyActionTaken: _hasEmergencyActionTaken,
-          attEmergencyNoActionReason: _emergencyNoActionReason,
-          attEmergencyNoActionRefusedSpecify:
-          _emergencyNoActionRefusedSpecifyController.text,
-          attEmergencyNoActionOtherSpecify:
-          _emergencyNoActionOtherSpecifyController.text,
-          attEmergencyActionTakenDescription:
-          _emergencyActionTakenController.text,
           attEmergencyContactedPhoneNumbers:
           jsonEncode(_dynamicValues(_contactedPhoneNumbers)),
           attEmergencyServicesAlreadyProvided:
@@ -1794,14 +1778,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         attMotherWhyNotLiving: _motherWhyNotLivingController.text,
         attReasonForEnrolment: jsonEncode(_selectedReasonPayload()),
         attReasonForEnrolmentOther: _reasonOtherController.text,
-        attHasEmergencyActionTaken: _hasEmergencyActionTaken,
-        attEmergencyNoActionReason: _emergencyNoActionReason,
-        attEmergencyNoActionRefusedSpecify:
-        _emergencyNoActionRefusedSpecifyController.text,
-        attEmergencyNoActionOtherSpecify:
-        _emergencyNoActionOtherSpecifyController.text,
-        attEmergencyActionTakenDescription:
-        _emergencyActionTakenController.text,
         attEmergencyContactedPhoneNumbers:
         jsonEncode(_dynamicValues(_contactedPhoneNumbers)),
         attEmergencyServicesAlreadyProvided:
@@ -2461,113 +2437,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
         contentPadding:
         const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      ),
-    );
-  }
-
-  Widget _buildEmergencyActionSection(Color primary) {
-    return MaterialCard(
-      body: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _titleRow(
-              color: primary,
-              title: 'Any Emergency Actions Already Taken',
-              subtitle:
-              'Capture immediate actions, people contacted, and services already provided.',
-              icon: Icons.emergency_outlined,
-            ),
-            const SizedBox(height: 12),
-            _dropdown(
-              label: 'Has any action already been taken?',
-              value: _hasEmergencyActionTaken,
-              options: yesNoOptions,
-              requiredField: true,
-              onChanged: (v) {
-                setState(() {
-                  _hasEmergencyActionTaken = v ?? '';
-                  if (_hasEmergencyActionTaken != 'YES') {
-                    _emergencyActionTakenController.clear();
-                  }
-                  if (_hasEmergencyActionTaken != 'NO') {
-                    _emergencyNoActionReason = '';
-                    _emergencyNoActionRefusedSpecifyController.clear();
-                    _emergencyNoActionOtherSpecifyController.clear();
-                  }
-                });
-              },
-            ),
-            if (_hasEmergencyActionTaken == 'NO') ...[
-              const SizedBox(height: 10),
-              _dropdown(
-                label: 'If no, specify',
-                value: _emergencyNoActionReason,
-                options: emergencyNoActionOptions,
-                requiredField: true,
-                onChanged: (v) {
-                  setState(() {
-                    _emergencyNoActionReason = v ?? '';
-                    if (_emergencyNoActionReason != 'REFUSED') {
-                      _emergencyNoActionRefusedSpecifyController.clear();
-                    }
-                    if (_emergencyNoActionReason != 'OTHER') {
-                      _emergencyNoActionOtherSpecifyController.clear();
-                    }
-                  });
-                },
-              ),
-              if (_emergencyNoActionReason == 'REFUSED') ...[
-                const SizedBox(height: 10),
-                _Input(
-                  controller: _emergencyNoActionRefusedSpecifyController,
-                  label: 'Specify refusal reason',
-                  hint: 'Explain why action was refused',
-                  maxLines: 3,
-                ),
-              ],
-              if (_emergencyNoActionReason == 'OTHER') ...[
-                const SizedBox(height: 10),
-                _Input(
-                  controller: _emergencyNoActionOtherSpecifyController,
-                  label: 'Specify other reason',
-                  hint: 'Explain other reason',
-                  maxLines: 3,
-                ),
-              ],
-            ],
-            if (_hasEmergencyActionTaken == 'YES') ...[
-              const SizedBox(height: 10),
-              _Input(
-                controller: _emergencyActionTakenController,
-                label: 'Explain what action was taken',
-                hint: 'Describe emergency action already taken',
-                maxLines: 4,
-              ),
-            ],
-            const SizedBox(height: 14),
-            _dynamicTextList(
-              title: 'Phone numbers of people contacted, if any',
-              items: _contactedPhoneNumbers,
-              label: 'Phone number',
-              hint: 'e.g. 5xxxxxxx',
-              keyboardType: TextInputType.phone,
-              onAdd: _addContactedPhoneNumber,
-              onRemove: _removeContactedPhoneNumber,
-            ),
-            const SizedBox(height: 14),
-            _dynamicTextList(
-              title: 'Services already provided, if any',
-              items: _servicesAlreadyProvided,
-              label: 'Service',
-              hint: 'e.g. Police notified, counselling, temporary shelter',
-              keyboardType: TextInputType.text,
-              onAdd: _addServiceProvided,
-              onRemove: _removeServiceProvided,
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -4362,8 +4231,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                   _buildOtherHouseholdMembersSection(primary),
                   const SizedBox(height: 12),
                   _buildReasonSection(primary),
-                  const SizedBox(height: 12),
-                  _buildEmergencyActionSection(primary),
                   const SizedBox(height: 12),
                   _buildInitialRiskAssessmentSection(primary),
                   const SizedBox(height: 12),
