@@ -6,6 +6,7 @@ import 'package:lncmis_mobile_app/core/utils/app_util.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/models/mgysd_case.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:lncmis_mobile_app/modules/mgysd_case_management/care_plan/pages/mgysd_care_plan_page.dart';
 
 class MgysdSocialInvestigationPage extends StatefulWidget {
   const MgysdSocialInvestigationPage({
@@ -1390,6 +1391,7 @@ class _MgysdSocialInvestigationPageState
   bool _loading = true;
   bool _saving = false;
   String _savedStatus = 'NOT_STARTED';
+  Map<String, Object?>? _linkedCarePlan;
 
   String _clientTei = '';
   String _caseOrgUnit = '';
@@ -2701,6 +2703,7 @@ class _MgysdSocialInvestigationPageState
       await _loadIntakeSummary(db);
       await _loadSavedForm(db);
       await _loadCurrentUserIntoSocialWorker(db);
+      await _loadLinkedCarePlan(db);
     } catch (e) {
       _showSnack('Failed to load social investigation: $e');
     } finally {
@@ -3494,6 +3497,93 @@ class _MgysdSocialInvestigationPageState
     }
   }
 
+
+  Future<void> _loadLinkedCarePlan(Database db) async {
+    await _ensureCarePlanLinkColumns(db);
+
+    try {
+      final rows = await db.query(
+        'mgysd_care_plan',
+        where: 'socialInvestigationId = ? OR id = ?',
+        whereArgs: [_eventId, 'CP_$_eventId'],
+        orderBy: 'updatedAt DESC',
+        limit: 1,
+      );
+
+      _linkedCarePlan = rows.isNotEmpty ? rows.first : null;
+    } catch (_) {
+      _linkedCarePlan = null;
+    }
+  }
+
+  String _linkedCarePlanRawStatus() {
+    final carePlan = _linkedCarePlan;
+    if (carePlan == null) return '';
+
+    String value = _text(carePlan['carePlanStatus']);
+    if (value.isEmpty) value = _text(carePlan['lifecycle']);
+    if (value.isEmpty) value = _text(carePlan['status']);
+
+    if (value.isNotEmpty) return value;
+
+    final payloadText = _text(carePlan['payloadJson']);
+    if (payloadText.isEmpty) return '';
+
+    try {
+      final decoded = jsonDecode(payloadText);
+      if (decoded is Map<String, dynamic>) {
+        value = _text(decoded['carePlanStatus']);
+        if (value.isEmpty) value = _text(decoded['lifecycle']);
+        if (value.isEmpty) value = _text(decoded['status']);
+      }
+    } catch (_) {}
+
+    return value;
+  }
+
+  bool _isLinkedCarePlanSuperseded() {
+    return _linkedCarePlanRawStatus().toUpperCase().contains('SUPERSEDED');
+  }
+
+  String _linkedCarePlanLifecycleLabel() {
+    final status = _linkedCarePlanRawStatus().toUpperCase();
+
+    if (status.contains('SUPERSEDED')) return 'Superseded';
+    if (status.contains('ACTIVE')) return 'In progress';
+    if (status.contains('IN_PROGRESS')) return 'In progress';
+    if (status.contains('DRAFT')) return 'In progress';
+    if (status.contains('COMPLETED')) return 'Completed';
+
+    return status.isEmpty ? 'In progress' : status.replaceAll('_', ' ');
+  }
+
+  Future<void> _openLinkedCarePlan() async {
+    final carePlan = _linkedCarePlan;
+    if (carePlan == null) return;
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MgysdCarePlanPage(
+          color: widget.color,
+          mgysdCase: widget.mgysdCase,
+          householdTei: widget.householdTei,
+          householdName: widget.householdName,
+          clientName: widget.clientName,
+          socialInvestigationId: _eventId,
+          socialInvestigationDate: _eventDateController.text.trim(),
+          viewOnly: _isLinkedCarePlanSuperseded(),
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+
+    final db = await _db();
+    await _loadLinkedCarePlan(db);
+    if (mounted) setState(() {});
+  }
+
   Future<void> _ensureCarePlanForSocialInvestigation(Database db, String status) async {
     if (status != 'COMPLETED') return;
 
@@ -3581,6 +3671,7 @@ class _MgysdSocialInvestigationPageState
       );
 
       await _ensureCarePlanForSocialInvestigation(db, status);
+      await _loadLinkedCarePlan(db);
 
       if (!mounted) return;
       setState(() => _savedStatus = status);
@@ -4043,9 +4134,9 @@ class _MgysdSocialInvestigationPageState
   Widget _part3() {
     return _surface(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _sectionTitle('Part 3: Social Investigation', 'Record amendments to intake data and comprehensive information about risks, strengths, opportunities and desired wellbeing outcomes.'),
-      _dropdown(label: 'Has the assessment changed since initial assessment?', value: _changedSinceInitialAssessment, options: _yesNoOptions, onChanged: (v) => setState(() => _changedSinceInitialAssessment = v)),
-      _input(_changesSinceInitialReasonController, 'Reason for any change from initial assessment', maxLines: 3),
-      _input(_changesSinceInitialObservationsController, 'Additional observations', maxLines: 3),
+      //_dropdown(label: 'Has the assessment changed since initial assessment?', value: _changedSinceInitialAssessment, options: _yesNoOptions, onChanged: (v) => setState(() => _changedSinceInitialAssessment = v)),
+      //_input(_changesSinceInitialReasonController, 'Reason for any change from initial assessment', maxLines: 3),
+      //_input(_changesSinceInitialObservationsController, 'Additional observations', maxLines: 3),
       _domainSection(title: 'Client physical health', subtitle: 'Client access to health information and services, caregiver input, disability/rehabilitation barriers and support.', rating: _physicalHealthRating, options: _physicalHealthOptions, labels: _physicalHealthLabels, onRatingChanged: (v) => setState(() => _physicalHealthRating = v), observations: _physicalHealthObservationsController, strengths: _physicalHealthStrengthsController, challenges: _physicalHealthChallengesController),
       _domainSection(title: 'Client emotional health', subtitle: 'Emotional wellbeing, support, stressors, distress and protective factors.', rating: _emotionalHealthRating, options: _emotionalHealthOptions, labels: _emotionalHealthLabels, onRatingChanged: (v) => setState(() => _emotionalHealthRating = v), observations: _emotionalHealthObservationsController, strengths: _emotionalHealthStrengthsController, challenges: _emotionalHealthChallengesController),
       _domainSection(title: 'Education', subtitle: 'Client and caregiver expectations, education support, learning development and barriers.', rating: _educationRating, options: _educationOptions, labels: _educationLabels, onRatingChanged: (v) => setState(() => _educationRating = v), observations: _educationObservationsController, strengths: _educationStrengthsController, challenges: _educationChallengesController),
@@ -5933,6 +6024,85 @@ class _MgysdSocialInvestigationPageState
     );
   }
 
+
+  Widget _linkedCarePlanSection() {
+    final carePlan = _linkedCarePlan;
+    if (carePlan == null) return const SizedBox.shrink();
+
+    final isSuperseded = _isLinkedCarePlanSuperseded();
+    final lifecycleLabel = _linkedCarePlanLifecycleLabel();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5FB),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: widget.color.withOpacity(0.18)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.025),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 21,
+            backgroundColor: widget.color.withOpacity(0.12),
+            child: Icon(
+              Icons.assignment_outlined,
+              color: widget.color,
+              size: 21,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Linked Care Plan',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'Lifecycle: $lifecycleLabel • one plan per investigation',
+                  style: const TextStyle(
+                    color: Colors.blueGrey,
+                    fontSize: 12.2,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          OutlinedButton.icon(
+            onPressed: _openLinkedCarePlan,
+            icon: Icon(
+              isSuperseded ? Icons.visibility_outlined : Icons.open_in_new,
+              size: 17,
+            ),
+            label: Text(isSuperseded ? 'View' : 'Open'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: widget.color,
+              side: BorderSide(color: widget.color.withOpacity(0.45)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _actions() {
     return Row(children: [
       Expanded(child: OutlinedButton(onPressed: _saving ? null : () => _save('DRAFT'), style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14), side: BorderSide(color: widget.color), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13))), child: const Text('Save Draft'))),
@@ -5954,6 +6124,7 @@ class _MgysdSocialInvestigationPageState
           padding: const EdgeInsets.all(16),
           children: [
             _header(),
+            _linkedCarePlanSection(),
             _part1(),
             _part2(),
             _part3(),
