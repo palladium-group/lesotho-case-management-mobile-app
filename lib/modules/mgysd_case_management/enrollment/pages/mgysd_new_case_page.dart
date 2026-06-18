@@ -270,6 +270,24 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   String _riskSupervisionMember = '';
   String _riskEducationMember = '';
 
+  String _selfCareIndependent = '';
+  String _hasDisabilityDiagnosis = '';
+  String _usesAssistiveDevice = '';
+  String _receivesRehabilitationServices = '';
+
+  final Set<String> _selfCareDomainsNeeded = {};
+  final Set<String> _disabilityTypes = {};
+  final Set<String> _assistiveDevices = {};
+  final Set<String> _rehabilitationServices = {};
+  final Set<String> _employabilityBarriers = {};
+
+  final _selfCareOtherController = TextEditingController();
+  final _disabilityTypeOtherController = TextEditingController();
+  final _assistiveDeviceOtherController = TextEditingController();
+  final _rehabilitationServiceOtherController = TextEditingController();
+  final _employabilityBarrierOtherController = TextEditingController();
+  final _skillsDevelopmentController = TextEditingController();
+
   final Set<String> _selectedReasonOptions = {};
   final List<_DynamicTextItem> _contactedPhoneNumbers = [];
   final List<_DynamicTextItem> _servicesAlreadyProvided = [];
@@ -637,6 +655,46 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _Opt('HIGH', 'High Risk'),
   ];
 
+  static const List<_Opt> selfCareDomains = [
+    _Opt('GROOMING', 'Grooming'),
+    _Opt('DRESSING', 'Dressing'),
+    _Opt('FEEDING', 'Feeding'),
+    _Opt('BATHING', 'Bathing'),
+    _Opt('TOILETING', 'Toileting'),
+    _Opt('LAUNDRY', 'Laundry'),
+    _Opt('OTHER', 'Other'),
+  ];
+
+  static const List<_Opt> disabilityTypeOptions = [
+    _Opt('HEARING_LOSS', 'Hearing loss'),
+    _Opt('BLINDNESS', 'Blindness'),
+    _Opt('SPEECH_IMPAIRMENT', 'Speech impairment'),
+    _Opt('MOBILITY_IMPAIRMENT', 'Mobility impairment'),
+    _Opt('OTHER', 'Other'),
+  ];
+
+  static const List<_Opt> assistiveDeviceOptions = [
+    _Opt('WHEELCHAIR', 'Wheelchair'),
+    _Opt('HEARING_AID', 'Hearing aid'),
+    _Opt('SPECTACLES', 'Spectacles'),
+    _Opt('CRUTCHES', 'Crutches'),
+    _Opt('WHITE_CANE', 'White cane'),
+    _Opt('OTHER', 'Other'),
+  ];
+
+  static const List<_Opt> rehabilitationServiceOptions = [
+    _Opt('PHYSIOTHERAPY', 'Physiotherapy'),
+    _Opt('COUNSELLING', 'Counselling'),
+    _Opt('OTHER', 'Other'),
+  ];
+
+  static const List<_Opt> employabilityBarrierOptions = [
+    _Opt('LACK_OF_SKILLS_TRAINING', 'Lack of skills / training'),
+    _Opt('DISABILITY', 'Disability'),
+    _Opt('SUBSTANCE_ABUSE', 'Substance abuse'),
+    _Opt('OTHER', 'Other'),
+  ];
+
   static const List<_ReasonGroup> groupedReasons = [
     _ReasonGroup(
       code: 'ABUSE',
@@ -816,6 +874,12 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _riskEmotionalHealthNotesController.dispose();
     _riskSupervisionNotesController.dispose();
     _riskEducationNotesController.dispose();
+    _selfCareOtherController.dispose();
+    _disabilityTypeOtherController.dispose();
+    _assistiveDeviceOtherController.dispose();
+    _rehabilitationServiceOtherController.dispose();
+    _employabilityBarrierOtherController.dispose();
+    _skillsDevelopmentController.dispose();
 
     for (final item in _contactedPhoneNumbers) {
       item.dispose();
@@ -2411,6 +2475,88 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       ),
     );
   }
+
+  Widget _yesNoGatedMultiSelect({
+    required String title,
+    required String subtitle,
+    required String gateValue,
+    required void Function(String?) onGateChanged,
+    required String revealOn,
+    required List<_Opt> options,
+    required Set<String> selectedValues,
+    required TextEditingController otherController,
+  }) {
+    final showOther = selectedValues.contains('OTHER');
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FBFD),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: const TextStyle(color: Colors.blueGrey, fontSize: 12.5, height: 1.3),
+          ),
+          const SizedBox(height: 10),
+          _dropdown(
+            label: 'Yes / No',
+            value: gateValue,
+            options: yesNoOptions,
+            requiredField: true,
+            onChanged: (v) {
+              onGateChanged(v);
+              if (v != revealOn) {
+                setState(() {
+                  selectedValues.clear();
+                  otherController.clear();
+                });
+              }
+            },
+          ),
+          if (gateValue == revealOn) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: options
+                  .map((option) => _riskChoiceChip(
+                option: option,
+                selectedValues: selectedValues,
+              ))
+                  .toList(),
+            ),
+            if (showOther) ...[
+              const SizedBox(height: 10),
+              _Input(
+                controller: otherController,
+                label: 'Specify other',
+                hint: 'Enter details',
+                validator: (v) {
+                  if (showOther && (v == null || v.trim().isEmpty)) {
+                    return 'Please specify';
+                  }
+                  return null;
+                },
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
   ////
   List<_Opt> _availableHouseholdMembersForRisk() {
     final List<_Opt> members = [];
@@ -2721,6 +2867,123 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       ),
     );
   }
+
+  Widget _buildAdditionalAssessmentSection(Color primary) {
+    return MaterialCard(
+      body: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _titleRow(
+              color: primary,
+              title: 'Part 4b: Additional Assessment',
+              subtitle: 'Self-care, disability, assistive devices, rehabilitation and employability.',
+              icon: Icons.accessible_outlined,
+            ),
+            const SizedBox(height: 12),
+            _yesNoGatedMultiSelect(
+              title: 'Self-Care',
+              subtitle: 'Is the client able to perform daily tasks on their own? e.g. grooming, dressing, feeding, bathing, toileting, laundry.',
+              gateValue: _selfCareIndependent,
+              onGateChanged: (v) => setState(() => _selfCareIndependent = v ?? ''),
+              revealOn: 'NO',
+              options: selfCareDomains,
+              selectedValues: _selfCareDomainsNeeded,
+              otherController: _selfCareOtherController,
+            ),
+            _yesNoGatedMultiSelect(
+              title: 'Disability diagnosis',
+              subtitle: 'Have you ever been diagnosed with any form of disability? e.g. hearing loss, blindness, speech impairment, mobility impairment.',
+              gateValue: _hasDisabilityDiagnosis,
+              onGateChanged: (v) => setState(() => _hasDisabilityDiagnosis = v ?? ''),
+              revealOn: 'YES',
+              options: disabilityTypeOptions,
+              selectedValues: _disabilityTypes,
+              otherController: _disabilityTypeOtherController,
+            ),
+            _yesNoGatedMultiSelect(
+              title: 'Assistive devices',
+              subtitle: 'Is there any assistive device the client is using? e.g. wheelchair, hearing aid, spectacles, crutches, white cane.',
+              gateValue: _usesAssistiveDevice,
+              onGateChanged: (v) => setState(() => _usesAssistiveDevice = v ?? ''),
+              revealOn: 'YES',
+              options: assistiveDeviceOptions,
+              selectedValues: _assistiveDevices,
+              otherController: _assistiveDeviceOtherController,
+            ),
+            _yesNoGatedMultiSelect(
+              title: 'Rehabilitation services',
+              subtitle: 'Does the client receive any rehabilitation services? e.g. physiotherapy, counselling.',
+              gateValue: _receivesRehabilitationServices,
+              onGateChanged: (v) => setState(() => _receivesRehabilitationServices = v ?? ''),
+              revealOn: 'YES',
+              options: rehabilitationServiceOptions,
+              selectedValues: _rehabilitationServices,
+              otherController: _rehabilitationServiceOtherController,
+            ),
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FBFD),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Employability',
+                    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'What barriers does the client face in finding a job?',
+                    style: TextStyle(color: Colors.blueGrey, fontSize: 12.5, height: 1.3),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: employabilityBarrierOptions
+                        .map((option) => _riskChoiceChip(
+                      option: option,
+                      selectedValues: _employabilityBarriers,
+                    ))
+                        .toList(),
+                  ),
+                  if (_employabilityBarriers.contains('OTHER')) ...[
+                    const SizedBox(height: 10),
+                    _Input(
+                      controller: _employabilityBarrierOtherController,
+                      label: 'Specify other',
+                      hint: 'Enter other barrier',
+                      validator: (v) {
+                        if (_employabilityBarriers.contains('OTHER') &&
+                            (v == null || v.trim().isEmpty)) {
+                          return 'Please specify';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            _Input(
+              controller: _skillsDevelopmentController,
+              label: 'Skills development',
+              hint: 'What skills does the client have to improve his/her livelihood/wellbeing?',
+              maxLines: 3,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 
   Widget _parentSection({
     required String title,
@@ -3786,6 +4049,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                   _buildEmergencyActionSection(primary),
                   const SizedBox(height: 12),
                   _buildInitialRiskAssessmentSection(primary),
+                  const SizedBox(height: 12),
+                  _buildAdditionalAssessmentSection(primary),
                   const SizedBox(height: 16),
                   EntryFormSaveButton(
                     marginLeft: 20.0,
