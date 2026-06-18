@@ -82,6 +82,7 @@ class _HouseholdMemberEntry {
   final TextEditingController occupationController;
   final TextEditingController contactsController;
   final TextEditingController disabilitySpecifyController;
+  final TextEditingController relationshipOtherController;
 
   String sex;
   String relationshipToClient;
@@ -98,7 +99,9 @@ class _HouseholdMemberEntry {
         ageController = TextEditingController(),
         occupationController = TextEditingController(),
         contactsController = TextEditingController(),
-        disabilitySpecifyController = TextEditingController();
+        disabilitySpecifyController = TextEditingController(),
+        relationshipOtherController = TextEditingController();
+
 
   bool get hasAnyData {
     return firstNameController.text.trim().isNotEmpty ||
@@ -121,6 +124,7 @@ class _HouseholdMemberEntry {
     occupationController.dispose();
     contactsController.dispose();
     disabilitySpecifyController.dispose();
+    relationshipOtherController.dispose();
   }
 }
 
@@ -141,6 +145,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   final _phoneController = TextEditingController();
   final _alternativePhoneController = TextEditingController();
   final _homeLanguageOtherController = TextEditingController();
+  final _nationalityOtherController = TextEditingController();
 
   final _schoolNameController = TextEditingController();
   final _employerNameController = TextEditingController();
@@ -253,6 +258,18 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   String _riskEducation = '';
   String _riskLevel = '';
 
+  String _riskFamilyBackgroundMember = '';
+  String _riskCaregiverWellbeingMember = '';
+  String _riskExtendedFamilyMember = '';
+  String _riskClientRelationshipsMember = '';
+  String _riskLivingCircumstancesMember = '';
+  String _riskHousingMember = '';
+  String _riskPhysicalHealthMember = '';
+  String _riskNutritionMember = '';
+  String _riskEmotionalHealthMember = '';
+  String _riskSupervisionMember = '';
+  String _riskEducationMember = '';
+
   final Set<String> _selectedReasonOptions = {};
   final List<_DynamicTextItem> _contactedPhoneNumbers = [];
   final List<_DynamicTextItem> _servicesAlreadyProvided = [];
@@ -290,8 +307,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   static const String attNationality = MgysdDhis2Uids.attNationality;
   static const String attHomeLanguage = MgysdDhis2Uids.attHomeLanguage;
   static const String attHomeLanguageOther = MgysdDhis2Uids.attHomeLanguageOther;
+  static const String attNationalityOther = MgysdDhis2Uids.attNationalityOther;
   static const String attOccupation = MgysdDhis2Uids.attOccupation;
   static const String attRelationshipToClient = MgysdDhis2Uids.attRelationshipToClient;
+  static const String attRelationshipToClientOther = MgysdDhis2Uids.attRelationshipToClientOther;
   static const String attHasDisability = MgysdDhis2Uids.attHasDisability;
   static const String attDisabilitySpecify = MgysdDhis2Uids.attDisabilitySpecify;
 
@@ -744,6 +763,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _phoneController.dispose();
     _alternativePhoneController.dispose();
     _homeLanguageOtherController.dispose();
+    _nationalityOtherController.dispose();
     _schoolNameController.dispose();
     _employerNameController.dispose();
     _nextOfKinFirstNameController.dispose();
@@ -1581,6 +1601,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         attNationality: _nationality,
         attHomeLanguage: _homeLanguage,
         attHomeLanguageOther: _homeLanguageOtherController.text,
+        attNationalityOther: _nationalityOtherController.text,
         attPhone: _phoneController.text,
         attAlternativePhone: _alternativePhoneController.text,
         attIsClientInSchool: _isClientInSchool,
@@ -1834,6 +1855,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             attAge: member.ageController.text,
             attSex: member.sex,
             attRelationshipToClient: member.relationshipToClient,
+            attRelationshipToClientOther: member.relationshipOtherController.text,
             attOccupation: member.occupationController.text,
             attPhone: member.contactsController.text,
             attHasDisability: member.hasDisability,
@@ -2018,7 +2040,32 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               icon: Icons.fact_check_outlined,
             ),
             const SizedBox(height: 12),
-            ..._visibleGroupedReasons().map(_reasonGroupCard).toList(),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: primary.withOpacity(0.04),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: primary.withOpacity(0.16)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Identified Concerns',
+                    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'These are the specific concerns identified for this client.',
+                    style: TextStyle(color: Colors.blueGrey, fontSize: 12.5, height: 1.3),
+                  ),
+                  const SizedBox(height: 12),
+                  ..._visibleGroupedReasons().map(_reasonGroupCard).toList(),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
@@ -2349,14 +2396,59 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       ),
     );
   }
+  ////
+  List<_Opt> _availableHouseholdMembersForRisk() {
+    final List<_Opt> members = [];
 
+    final clientName = '${_clientFirstNameController.text.trim()} ${_clientSurnameController.text.trim()}'.trim();
+    if (clientName.isNotEmpty) {
+      members.add(_Opt('CLIENT', 'Client: $clientName'));
+    }
+
+    if (_fatherAlive == 'YES') {
+      final fatherName = '${_fatherFirstNameController.text.trim()} ${_fatherSurnameController.text.trim()}'.trim();
+      if (fatherName.isNotEmpty) {
+        members.add(_Opt('FATHER', 'Father: $fatherName'));
+      }
+    }
+
+    if (_motherAlive == 'YES') {
+      final motherName = '${_motherFirstNameController.text.trim()} ${_motherSurnameController.text.trim()}'.trim();
+      if (motherName.isNotEmpty) {
+        members.add(_Opt('MOTHER', 'Mother: $motherName'));
+      }
+    }
+
+    final caregiverName = '${_caregiverNameController.text.trim()} ${_caregiverSurnameController.text.trim()}'.trim();
+    if (caregiverName.isNotEmpty) {
+      members.add(_Opt('CAREGIVER', 'Caregiver: $caregiverName'));
+    }
+
+    final personalAssistantName = '${_personalAssistantNameController.text.trim()} ${_personalAssistantSurnameController.text.trim()}'.trim();
+    if (personalAssistantName.isNotEmpty) {
+      members.add(_Opt('PERSONAL_ASSISTANT', 'Personal Assistant: $personalAssistantName'));
+    }
+
+    for (final member in _otherHouseholdMembers) {
+      final memberName = '${member.firstNameController.text.trim()} ${member.surnameController.text.trim()}'.trim();
+      if (memberName.isNotEmpty) {
+        members.add(_Opt(member.id, memberName));
+      }
+    }
+
+    return members;
+  }
   Widget _riskDomainItem({
     required String title,
     required String value,
     required List<_Opt> options,
     required void Function(String?) onChanged,
     required TextEditingController notesController,
+    required String selectedMember,
+    required void Function(String?) onMemberChanged,
   }) {
+    final memberOptions = _availableHouseholdMembersForRisk();
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
@@ -2380,11 +2472,19 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             onChanged: onChanged,
           ),
           const SizedBox(height: 10),
+          _dropdown(
+            label: 'Household member this note is about',
+            value: selectedMember,
+            options: memberOptions,
+            onChanged: onMemberChanged,
+          ),
+          const SizedBox(height: 10),
           _Input(
             controller: notesController,
             label: 'Notes / supporting evidence',
             hint: 'Add notes or evidence observed during intake',
             maxLines: 3,
+            validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null,
           ),
         ],
       ),
@@ -2473,6 +2573,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               options: riskFamilyBackgroundOptions,
               onChanged: (v) => setState(() => _riskFamilyBackground = v ?? ''),
               notesController: _riskFamilyBackgroundNotesController,
+              selectedMember: _riskFamilyBackgroundMember,
+              onMemberChanged: (v) => setState(() => _riskFamilyBackgroundMember = v ?? ''),
             ),
             _riskDomainItem(
               title: 'Caregiver wellbeing',
@@ -2480,6 +2582,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               options: riskCaregiverWellbeingOptions,
               onChanged: (v) => setState(() => _riskCaregiverWellbeing = v ?? ''),
               notesController: _riskCaregiverWellbeingNotesController,
+              selectedMember: _riskCaregiverWellbeingMember,
+              onMemberChanged: (v) => setState(() => _riskCaregiverWellbeingMember = v ?? ''),
             ),
             _riskDomainItem(
               title: 'Extended family relationships',
@@ -2487,6 +2591,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               options: riskRelationshipOptions,
               onChanged: (v) => setState(() => _riskExtendedFamilyRelationships = v ?? ''),
               notesController: _riskExtendedFamilyNotesController,
+              selectedMember: _riskExtendedFamilyMember,
+              onMemberChanged: (v) => setState(() => _riskExtendedFamilyMember = v ?? ''),
             ),
             _riskDomainItem(
               title: 'Client relationships',
@@ -2494,6 +2600,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               options: riskRelationshipOptions,
               onChanged: (v) => setState(() => _riskClientRelationships = v ?? ''),
               notesController: _riskClientRelationshipsNotesController,
+              selectedMember: _riskClientRelationshipsMember,
+              onMemberChanged: (v) => setState(() => _riskClientRelationshipsMember = v ?? ''),
             ),
             _riskDomainItem(
               title: 'Living circumstances',
@@ -2501,6 +2609,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               options: riskLivingCircumstancesOptions,
               onChanged: (v) => setState(() => _riskLivingCircumstances = v ?? ''),
               notesController: _riskLivingCircumstancesNotesController,
+              selectedMember: _riskLivingCircumstancesMember,
+              onMemberChanged: (v) => setState(() => _riskLivingCircumstancesMember = v ?? ''),
             ),
             _riskDomainItem(
               title: 'Housing',
@@ -2508,6 +2618,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               options: riskHousingOptions,
               onChanged: (v) => setState(() => _riskHousing = v ?? ''),
               notesController: _riskHousingNotesController,
+              selectedMember: _riskHousingMember,
+              onMemberChanged: (v) => setState(() => _riskHousingMember = v ?? ''),
             ),
             _riskDomainItem(
               title: 'Physical health',
@@ -2515,6 +2627,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               options: riskPhysicalHealthOptions,
               onChanged: (v) => setState(() => _riskPhysicalHealth = v ?? ''),
               notesController: _riskPhysicalHealthNotesController,
+              selectedMember: _riskPhysicalHealthMember,
+              onMemberChanged: (v) => setState(() => _riskPhysicalHealthMember = v ?? ''),
             ),
             _riskDomainItem(
               title: 'Nutrition',
@@ -2522,6 +2636,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               options: riskNutritionOptions,
               onChanged: (v) => setState(() => _riskNutrition = v ?? ''),
               notesController: _riskNutritionNotesController,
+              selectedMember: _riskNutritionMember,
+              onMemberChanged: (v) => setState(() => _riskNutritionMember = v ?? ''),
             ),
             _riskDomainItem(
               title: 'Emotional health',
@@ -2529,6 +2645,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               options: riskEmotionalHealthOptions,
               onChanged: (v) => setState(() => _riskEmotionalHealth = v ?? ''),
               notesController: _riskEmotionalHealthNotesController,
+              selectedMember: _riskEmotionalHealthMember,
+              onMemberChanged: (v) => setState(() => _riskEmotionalHealthMember = v ?? ''),
             ),
             _riskDomainItem(
               title: 'Supervision',
@@ -2536,6 +2654,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               options: riskSupervisionOptions,
               onChanged: (v) => setState(() => _riskSupervision = v ?? ''),
               notesController: _riskSupervisionNotesController,
+              selectedMember: _riskSupervisionMember,
+              onMemberChanged: (v) => setState(() => _riskSupervisionMember = v ?? ''),
             ),
             _riskDomainItem(
               title: 'Education',
@@ -2543,6 +2663,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               options: riskEducationOptions,
               onChanged: (v) => setState(() => _riskEducation = v ?? ''),
               notesController: _riskEducationNotesController,
+              selectedMember: _riskEducationMember,
+              onMemberChanged: (v) => setState(() => _riskEducationMember = v ?? ''),
             ),
             const SizedBox(height: 8),
             _dropdown(
@@ -3002,10 +3124,28 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               onChanged: (v) {
                 setState(() {
                   member.relationshipToClient = v ?? '';
+                  if (member.relationshipToClient != 'OTHER') {
+                    member.relationshipOtherController.clear();
+                  }
                 });
               },
             ),
           ),
+          if (member.relationshipToClient == 'OTHER') ...[
+            const SizedBox(height: 10),
+            _Input(
+              controller: member.relationshipOtherController,
+              label: 'Specify other relationship',
+              hint: 'Enter relationship to client',
+              validator: (v) {
+                if (member.relationshipToClient == 'OTHER' &&
+                    (v == null || v.trim().isEmpty)) {
+                  return 'Please specify relationship';
+                }
+                return null;
+              },
+            ),
+          ],
           const SizedBox(height: 10),
           _row2(
             _Input(
@@ -3344,9 +3484,30 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                             value: _nationality,
                             options: nationalityOptions,
                             requiredField: true,
-                            onChanged: (v) =>
-                                setState(() => _nationality = v ?? ''),
+                            onChanged: (v) {
+                              setState(() {
+                                _nationality = v ?? '';
+                                if (_nationality != 'OTHER') {
+                                  _nationalityOtherController.clear();
+                                }
+                              });
+                            },
                           ),
+                          if (_nationality == 'OTHER') ...[
+                            const SizedBox(height: 10),
+                            _Input(
+                              controller: _nationalityOtherController,
+                              label: 'Specify other nationality',
+                              hint: 'Enter nationality',
+                              validator: (v) {
+                                if (_nationality == 'OTHER' &&
+                                    (v == null || v.trim().isEmpty)) {
+                                  return 'Please specify nationality';
+                                }
+                                return null;
+                              },
+                            ),
+                          ],
                           const SizedBox(height: 10),
                           _dropdown(
                             label: 'Home Language',
