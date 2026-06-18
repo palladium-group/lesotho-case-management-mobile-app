@@ -16,6 +16,7 @@ class MgysdCarePlanPage extends StatefulWidget {
     this.clientName,
     this.socialInvestigationId,
     this.socialInvestigationDate,
+    this.viewOnly = false,
   }) : super(key: key);
 
   final Color color;
@@ -25,6 +26,7 @@ class MgysdCarePlanPage extends StatefulWidget {
   final String? clientName;
   final String? socialInvestigationId;
   final String? socialInvestigationDate;
+  final bool viewOnly;
 
   @override
   State<MgysdCarePlanPage> createState() => _MgysdCarePlanPageState();
@@ -210,6 +212,8 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
   bool _loading = true;
   bool _saving = false;
   String _status = 'DRAFT';
+
+  bool get _viewOnly => widget.viewOnly;
 
   final Map<String, TextEditingController> _goalControllers = {};
   final Map<String, String> _selectedSubjectIds = {};
@@ -730,19 +734,6 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     return _subjects.isEmpty ? null : _subjects.first;
   }
 
-  List<_CareGoal> _goalsByTerm(String term) {
-    switch (term) {
-      case 'SHORT_TERM':
-        return _shortGoals;
-      case 'MEDIUM_TERM':
-        return _mediumGoals;
-      case 'LONG_TERM':
-        return _longGoals;
-      default:
-        return <_CareGoal>[];
-    }
-  }
-
   List<_CareGoal> _goalsByGroupAndTerm(String goalGroup, String term) {
     return _allGoals
         .where((goal) => goal.goalGroup == goalGroup && goal.term == term)
@@ -755,6 +746,8 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     required TextEditingController controller,
     required String selectedSubjectId,
   }) async {
+    if (_viewOnly) return;
+
     final goalText = controller.text.trim();
 
     if (goalText.isEmpty) {
@@ -836,6 +829,8 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
   }
 
   Future<void> _deleteGoal(_CareGoal goal) async {
+    if (_viewOnly) return;
+
     setState(() => _saving = true);
 
     try {
@@ -955,6 +950,8 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
   }
 
   Future<void> _saveDraft() async {
+    if (_viewOnly) return;
+
     if (!_validatePlanParticipants()) return;
 
     setState(() => _saving = true);
@@ -979,6 +976,8 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
   }
 
   Future<void> _markComplete() async {
+    if (_viewOnly) return;
+
     if (_allGoals.isEmpty) {
       _showSnack('Please add at least one care plan goal.');
       return;
@@ -1181,12 +1180,16 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
   }
 
   void _addPlanParticipant() {
+    if (_viewOnly) return;
+
     setState(() {
       _planParticipants.add(_PlanParticipantEntry());
     });
   }
 
   void _removePlanParticipant(int index) {
+    if (_viewOnly) return;
+
     setState(() {
       final removed = _planParticipants.removeAt(index);
       removed.dispose();
@@ -1230,12 +1233,15 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
   }
 
   void _addDisagreementEntry() {
+    if (_viewOnly) return;
+
     setState(() {
       _disagreementEntries.add(_DisagreementEntry());
     });
   }
 
   void _removeDisagreementEntry(int index) {
+    if (_viewOnly) return;
     if (_disagreementEntries.length <= 1) return;
 
     setState(() {
@@ -1245,6 +1251,8 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
   }
 
   Future<void> _pickDisagreementDate(_DisagreementEntry entry) async {
+    if (_viewOnly) return;
+
     final now = DateTime.now();
 
     final picked = await showDatePicker(
@@ -1376,7 +1384,9 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
           ),
         );
       }).toList(),
-      onChanged: (value) {
+      onChanged: _viewOnly
+          ? null
+          : (value) {
         if (value == null) return;
         _setSelectedSubjectForGoal(goalGroup, term, value);
       },
@@ -1394,6 +1404,8 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     required String goalGroup,
     required String term,
   }) {
+    if (_viewOnly) return const SizedBox.shrink();
+
     final controller = _controllerForGoal(goalGroup, term);
     final selectedSubject = _selectedSubjectForGoal(goalGroup, term);
 
@@ -1512,12 +1524,13 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
               ],
             ),
           ),
-          IconButton(
-            tooltip: 'Remove goal',
-            onPressed: _saving ? null : () => _deleteGoal(goal),
-            icon: const Icon(Icons.delete_outline),
-            color: Colors.redAccent,
-          ),
+          if (!_viewOnly)
+            IconButton(
+              tooltip: 'Remove goal',
+              onPressed: _saving ? null : () => _deleteGoal(goal),
+              icon: const Icon(Icons.delete_outline),
+              color: Colors.redAccent,
+            ),
         ],
       ),
     );
@@ -1642,6 +1655,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
           const SizedBox(height: 14),
           TextFormField(
             controller: _agreedPlanActionController,
+            readOnly: _viewOnly,
             maxLines: 5,
             textInputAction: TextInputAction.newline,
             decoration: InputDecoration(
@@ -1707,6 +1721,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
                         Expanded(
                           child: TextFormField(
                             controller: entry.firstNameController,
+                            readOnly: _viewOnly,
                             decoration: InputDecoration(
                               label: RichText(
                                 text: const TextSpan(
@@ -1735,6 +1750,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
                         Expanded(
                           child: TextFormField(
                             controller: entry.lastNameController,
+                            readOnly: _viewOnly,
                             decoration: InputDecoration(
                               label: RichText(
                                 text: const TextSpan(
@@ -1771,7 +1787,9 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
                           child: Text(role),
                         );
                       }).toList(),
-                      onChanged: (value) {
+                      onChanged: _viewOnly
+                          ? null
+                          : (value) {
                         setState(() {
                           entry.role = value ?? '';
                         });
@@ -1799,30 +1817,33 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
                         fillColor: Colors.white,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        onPressed: () => _removePlanParticipant(index),
-                        icon: const Icon(Icons.delete_outline),
-                        label: const Text('Remove'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.redAccent,
+                    if (!_viewOnly) ...[
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: () => _removePlanParticipant(index),
+                          icon: const Icon(Icons.delete_outline),
+                          label: const Text('Remove'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.redAccent,
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               );
             }).toList(),
-          TextButton.icon(
-            onPressed: _addPlanParticipant,
-            icon: const Icon(Icons.add),
-            label: const Text('Add person'),
-            style: TextButton.styleFrom(
-              foregroundColor: widget.color,
+          if (!_viewOnly)
+            TextButton.icon(
+              onPressed: _addPlanParticipant,
+              icon: const Icon(Icons.add),
+              label: const Text('Add person'),
+              style: TextButton.styleFrom(
+                foregroundColor: widget.color,
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -1870,6 +1891,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
                       Expanded(
                         child: TextFormField(
                           controller: entry.fullNamesController,
+                          readOnly: _viewOnly,
                           decoration: InputDecoration(
                             labelText: 'First name',
                             border: OutlineInputBorder(
@@ -1884,6 +1906,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
                       Expanded(
                         child: TextFormField(
                           controller: entry.signatureController,
+                          readOnly: _viewOnly,
                           decoration: InputDecoration(
                             labelText: 'Last name',
                             border: OutlineInputBorder(
@@ -1899,6 +1922,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
                   const SizedBox(height: 10),
                   TextFormField(
                     controller: entry.reasonsController,
+                    readOnly: _viewOnly,
                     maxLines: 4,
                     decoration: InputDecoration(
                       labelText: 'Reasons',
@@ -1912,7 +1936,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
                       fillColor: Colors.white,
                     ),
                   ),
-                  if (_disagreementEntries.length > 1) ...[
+                  if (!_viewOnly && _disagreementEntries.length > 1) ...[
                     const SizedBox(height: 8),
                     Align(
                       alignment: Alignment.centerRight,
@@ -1930,14 +1954,15 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
               ),
             );
           }).toList(),
-          TextButton.icon(
-            onPressed: _addDisagreementEntry,
-            icon: const Icon(Icons.add),
-            label: const Text('Add person'),
-            style: TextButton.styleFrom(
-              foregroundColor: widget.color,
+          if (!_viewOnly)
+            TextButton.icon(
+              onPressed: _addDisagreementEntry,
+              icon: const Icon(Icons.add),
+              label: const Text('Add person'),
+              style: TextButton.styleFrom(
+                foregroundColor: widget.color,
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -2051,6 +2076,8 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
   }
 
   Widget _bottomButtons() {
+    if (_viewOnly) return const SizedBox.shrink();
+
     return Row(
       children: [
         Expanded(
@@ -2144,7 +2171,6 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     final totalGoals = _allGoals.length;
@@ -2152,7 +2178,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9FC),
       appBar: AppBar(
-        title: const Text('Care Plan'),
+        title: Text(_viewOnly ? 'View Care Plan' : 'Care Plan'),
         backgroundColor: widget.color,
       ),
       body: SafeArea(
