@@ -286,7 +286,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   final _assistiveDeviceOtherController = TextEditingController();
   final _rehabilitationServiceOtherController = TextEditingController();
   final _employabilityBarrierOtherController = TextEditingController();
-  final _skillsDevelopmentController = TextEditingController();
+  final Set<String> _skillsDevelopmentAreas = {};
+  final _skillsDevelopmentOtherController = TextEditingController();
 
   final Set<String> _selectedReasonOptions = {};
   final List<_DynamicTextItem> _contactedPhoneNumbers = [];
@@ -695,6 +696,14 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _Opt('OTHER', 'Other'),
   ];
 
+  static const List<_Opt> skillsDevelopmentOptions = [
+    _Opt('ECONOMICAL', 'Economical'),
+    _Opt('POLITICAL', 'Political'),
+    _Opt('SOCIAL', 'Social'),
+    _Opt('COMMUNITY', 'Community'),
+    _Opt('OTHER', 'Other'),
+  ];
+
   static const List<_ReasonGroup> groupedReasons = [
     _ReasonGroup(
       code: 'ABUSE',
@@ -879,7 +888,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _assistiveDeviceOtherController.dispose();
     _rehabilitationServiceOtherController.dispose();
     _employabilityBarrierOtherController.dispose();
-    _skillsDevelopmentController.dispose();
+    _skillsDevelopmentOtherController.dispose();
 
     for (final item in _contactedPhoneNumbers) {
       item.dispose();
@@ -2972,11 +2981,54 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 ],
               ),
             ),
-            _Input(
-              controller: _skillsDevelopmentController,
-              label: 'Skills development',
-              hint: 'What skills does the client have to improve his/her livelihood/wellbeing?',
-              maxLines: 3,
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FBFD),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Skills development',
+                    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'What skills does the client have to improve his/her livelihood/wellbeing?',
+                    style: TextStyle(color: Colors.blueGrey, fontSize: 12.5, height: 1.3),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: skillsDevelopmentOptions
+                        .map((option) => _riskChoiceChip(
+                      option: option,
+                      selectedValues: _skillsDevelopmentAreas,
+                    ))
+                        .toList(),
+                  ),
+                  if (_skillsDevelopmentAreas.contains('OTHER')) ...[
+                    const SizedBox(height: 10),
+                    _Input(
+                      controller: _skillsDevelopmentOtherController,
+                      label: 'Specify other',
+                      hint: 'Enter other skill area',
+                      validator: (v) {
+                        if (_skillsDevelopmentAreas.contains('OTHER') &&
+                            (v == null || v.trim().isEmpty)) {
+                          return 'Please specify';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
+                ],
+              ),
             ),
           ],
         ),
