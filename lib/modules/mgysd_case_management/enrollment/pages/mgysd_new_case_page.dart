@@ -1008,10 +1008,17 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     );
 
     if (picked != null) {
+      final age = _calculateAge(picked);
       setState(() {
         _selectedDob = picked;
         _clientDobController.text = _formatDate(picked);
-        _clientAgeController.text = _calculateAge(picked).toString();
+        _clientAgeController.text = age.toString();
+        _clientCategory = age < 18 ? 'CHILD' : 'ADULT_ELDERLY_PERSON';
+        if (!_isAdultOrElderly) {
+          _isAdultEmployed = '';
+          _employerNameController.clear();
+        }
+        if (_isAdultOrElderly) _grade = '';
         _removeHiddenReasonOptions();
       });
     }
@@ -1468,6 +1475,13 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     if (_reasonOtherSelected && _reasonOtherController.text.trim().isEmpty) {
       AppUtil.showToastMessage(
         message: 'Please specify the other reason for enrolment.',
+      );
+      return;
+    }
+
+    if (_clientCategory.trim().isEmpty) {
+      AppUtil.showToastMessage(
+        message: 'Please enter the client\'s date of birth to determine client category.',
       );
       return;
     }
@@ -3371,22 +3385,47 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                             icon: Icons.person_outline,
                           ),
                           const SizedBox(height: 12),
-                          _dropdown(
-                            label: 'Client category',
-                            value: _clientCategory,
-                            options: clientCategoryOptions,
-                            requiredField: true,
-                            onChanged: (v) {
-                              setState(() {
-                                _clientCategory = v ?? '';
-                                if (!_isAdultOrElderly) {
-                                  _isAdultEmployed = '';
-                                  _employerNameController.clear();
-                                }
-                                if (_isAdultOrElderly) _grade = '';
-                                _removeHiddenReasonOptions();
-                              });
-                            },
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF3F5F7),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _clientCategory.isEmpty
+                                      ? Icons.info_outline
+                                      : Icons.check_circle_outline,
+                                  color: Colors.blueGrey,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Client category',
+                                        style: TextStyle(color: Colors.blueGrey, fontSize: 12.5),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        _clientCategory.isEmpty
+                                            ? 'Not yet determined — pick the Date of Birth below'
+                                            : (_isChild ? 'Child' : 'Adult / Elderly Person'),
+                                        style: const TextStyle(
+                                          fontSize: 14.5,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                           const SizedBox(height: 10),
                           _dropdown(
