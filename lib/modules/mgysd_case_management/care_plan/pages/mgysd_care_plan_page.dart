@@ -217,6 +217,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
 
   final Map<String, TextEditingController> _goalControllers = {};
   final Map<String, String> _selectedSubjectIds = {};
+  final Set<String> _expandedGoalCategories = <String>{};
 
   final TextEditingController _agreedPlanActionController =
   TextEditingController();
@@ -1059,6 +1060,22 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
 
   String _goalKey(String goalGroup, String term) => '$goalGroup::$term';
 
+  bool _isGoalCategoryExpanded(String goalGroup, String term) {
+    return _expandedGoalCategories.contains(_goalKey(goalGroup, term));
+  }
+
+  void _toggleGoalCategory(String goalGroup, String term) {
+    final key = _goalKey(goalGroup, term);
+
+    setState(() {
+      if (_expandedGoalCategories.contains(key)) {
+        _expandedGoalCategories.remove(key);
+      } else {
+        _expandedGoalCategories.add(key);
+      }
+    });
+  }
+
   TextEditingController _controllerForGoal(String goalGroup, String term) {
     final key = _goalKey(goalGroup, term);
 
@@ -1574,40 +1591,88 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     required String term,
   }) {
     final goals = _goalsByGroupAndTerm(goalGroup, term);
+    final isExpanded = _isGoalCategoryExpanded(goalGroup, term);
 
     return _card(
       color: const Color(0xFFFBFCFE),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _sectionTitle(
-            title: _termTitle(term),
-            subtitle: _termSubtitle(term),
-            icon: term == 'SHORT_TERM'
-                ? Icons.flash_on_outlined
-                : term == 'MEDIUM_TERM'
-                ? Icons.trending_up_outlined
-                : Icons.flag_outlined,
-          ),
-          const SizedBox(height: 12),
-          _goalInputCard(goalGroup: goalGroup, term: term),
-          if (goals.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(13),
-              decoration: BoxDecoration(
-                color: Colors.blueGrey.withOpacity(0.045),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const Text(
-                'No goals added yet.',
-                style: TextStyle(color: Colors.blueGrey),
-              ),
-            )
-          else
-            Column(
-              children: goals.map(_goalTile).toList(),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _toggleGoalCategory(goalGroup, term),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _sectionTitle(
+                    title: _termTitle(term),
+                    subtitle: _termSubtitle(term),
+                    icon: term == 'SHORT_TERM'
+                        ? Icons.flash_on_outlined
+                        : term == 'MEDIUM_TERM'
+                        ? Icons.trending_up_outlined
+                        : Icons.flag_outlined,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: widget.color.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: widget.color.withOpacity(0.12),
+                        ),
+                      ),
+                      child: Text(
+                        '${goals.length} goal${goals.length == 1 ? '' : 's'}',
+                        style: TextStyle(
+                          color: widget.color,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 11.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Icon(
+                      isExpanded
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                      color: Colors.blueGrey,
+                    ),
+                  ],
+                ),
+              ],
             ),
+          ),
+          if (isExpanded) ...[
+            const SizedBox(height: 12),
+            _goalInputCard(goalGroup: goalGroup, term: term),
+            if (goals.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(13),
+                decoration: BoxDecoration(
+                  color: Colors.blueGrey.withOpacity(0.045),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Text(
+                  'No goals added yet.',
+                  style: TextStyle(color: Colors.blueGrey),
+                ),
+              )
+            else
+              Column(
+                children: goals.map(_goalTile).toList(),
+              ),
+          ],
         ],
       ),
     );
