@@ -273,6 +273,33 @@ class _MgysdRepeatableStageListPageState
     }
   }
 
+  bool _isCarePlanSuperseded(String status) {
+    final value = status.trim().toUpperCase();
+    return value.contains('SUPERSEDED');
+  }
+
+  String _carePlanLifecycleLabel(String status) {
+    final value = status.trim().toUpperCase();
+
+    if (value.contains('SUPERSEDED')) return 'Superseded';
+
+    if (value.isEmpty ||
+        value == 'ACTIVE' ||
+        value == 'DRAFT' ||
+        value == 'IN_PROGRESS' ||
+        value == 'IN PROGRESS' ||
+        value == 'STARTED') {
+      return 'In progress';
+    }
+
+    if (value == 'COMPLETED' || value == 'COMPLETE' || value == 'DONE') {
+      return 'Completed';
+    }
+
+    return value.replaceAll('_', ' ');
+  }
+
+
   Color _statusColor(String status) {
     switch (status.toUpperCase()) {
       case 'COMPLETED':
@@ -571,6 +598,11 @@ class _MgysdRepeatableStageListPageState
       investigationDate: record.date,
     );
 
+    final latestCarePlan = await _carePlanForInvestigation(db, record.id);
+    final latestCarePlanStatus =
+    (latestCarePlan['status'] ?? record.carePlanStatus).trim();
+    final isSuperseded = _isCarePlanSuperseded(latestCarePlanStatus);
+
     final carePlanCase = _caseForRecord(carePlanId);
 
     await Navigator.push(
@@ -584,12 +616,14 @@ class _MgysdRepeatableStageListPageState
           clientName: widget.clientName,
           socialInvestigationId: record.id,
           socialInvestigationDate: record.date,
+          viewOnly: isSuperseded,
         ),
       ),
     );
 
     await _refresh();
   }
+
 
   Future<void> _openForm(String id) async {
     final mgysdCase = _caseForRecord(id);
@@ -764,9 +798,8 @@ class _MgysdRepeatableStageListPageState
       return const SizedBox.shrink();
     }
 
-    final status = record.carePlanStatus.trim().isEmpty
-        ? 'Active'
-        : _statusLabel(record.carePlanStatus);
+    final isSuperseded = _isCarePlanSuperseded(record.carePlanStatus);
+    final status = _carePlanLifecycleLabel(record.carePlanStatus);
 
     return Container(
       margin: const EdgeInsets.only(top: 10),
@@ -803,8 +836,11 @@ class _MgysdRepeatableStageListPageState
           const SizedBox(width: 8),
           OutlinedButton.icon(
             onPressed: () => _openCarePlanForInvestigation(record),
-            icon: const Icon(Icons.open_in_new, size: 16),
-            label: const Text('Open'),
+            icon: Icon(
+              isSuperseded ? Icons.visibility_outlined : Icons.open_in_new,
+              size: 16,
+            ),
+            label: Text(isSuperseded ? 'View' : 'Open'),
             style: OutlinedButton.styleFrom(
               foregroundColor: widget.color,
               side: BorderSide(color: widget.color.withOpacity(0.40)),
@@ -818,6 +854,7 @@ class _MgysdRepeatableStageListPageState
       ),
     );
   }
+
 
   Widget _recordCard(_StageRecord record, int index) {
     final color = _statusColor(record.status);
