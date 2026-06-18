@@ -1268,7 +1268,7 @@ class _MgysdServiceProvisionPageState extends State<MgysdServiceProvisionPage> {
     );
   }
 
-  Widget _generalServiceCard() {
+/*  Widget _generalServiceCard() {
     final plan = _selectedPlan;
     if (plan == null) return const SizedBox.shrink();
 
@@ -1305,7 +1305,7 @@ class _MgysdServiceProvisionPageState extends State<MgysdServiceProvisionPage> {
         ],
       ),
     );
-  }
+  }*/
 
   Widget _goalsSection() {
     final plan = _selectedPlan;
@@ -1510,7 +1510,7 @@ class _MgysdServiceProvisionPageState extends State<MgysdServiceProvisionPage> {
               _header(),
               _carePlanList(),
               _goalsSection(),
-              _generalServiceCard(),
+             // _generalServiceCard(),
               const SizedBox(height: 24),
             ],
           ),
