@@ -97,6 +97,7 @@ class MgysdCountryCodeOption {
   final int minNationalDigits;
   final int maxNationalDigits;
   final List<String> allowedNationalPrefixes;
+  final List<String> disallowedNationalPrefixes;
   final String prefixHint;
   final bool useNanpRules;
 
@@ -107,6 +108,7 @@ class MgysdCountryCodeOption {
     this.minNationalDigits = 7,
     this.maxNationalDigits = 12,
     this.allowedNationalPrefixes = const [],
+    this.disallowedNationalPrefixes = const [],
     this.prefixHint = '',
     this.useNanpRules = false,
   });
@@ -319,6 +321,7 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
   final Map<String, String> _values = {};
   bool _submitting = false;
   bool _loadingLocationTree = true;
+  bool _countryPickerBusy = false;
 
   final List<OrganisationUnit> _districts = [];
   final List<OrganisationUnit> _communityCouncils = [];
@@ -367,6 +370,14 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     deReporterAltPhone: 'LS',
   };
 
+  final Map<String, TextEditingController> _reporterPhoneControllers = {};
+
+  TextEditingController _reporterPhoneController(String fieldId) {
+    return _reporterPhoneControllers.putIfAbsent(
+      fieldId,
+          () => TextEditingController(text: (_values[fieldId] ?? '').trim()),
+    );
+  }
 
   List<MgysdFormFieldDef> get aboutReporterFields => const [
     MgysdFormFieldDef(
@@ -379,28 +390,33 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       id: deReporterFirstName,
       label: 'Reporter First name',
       type: MgysdFieldType.textShort,
+      requiredField: true,
       maxLen: 40,
     ),
     MgysdFormFieldDef(
       id: deReporterLastName,
       label: 'Reporter Last name',
       type: MgysdFieldType.textShort,
+      requiredField: true,
       maxLen: 40,
     ),
     MgysdFormFieldDef(
       id: deReporterDob,
       label: 'Date of Birth',
       type: MgysdFieldType.date,
+      requiredField: true,
     ),
     MgysdFormFieldDef(
       id: deReporterAge,
       label: 'Age',
       type: MgysdFieldType.integer,
+      requiredField: true,
     ),
     MgysdFormFieldDef(
       id: deReporterSex,
       label: 'Sex',
       type: MgysdFieldType.option,
+      requiredField: true,
       options: [
         MgysdOption(code: 'Male', label: 'Male'),
         MgysdOption(code: 'Female', label: 'Female'),
@@ -410,30 +426,33 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       id: deReporterVillage,
       label: 'Reporter Village',
       type: MgysdFieldType.textShort,
+      requiredField: true,
       maxLen: 80,
     ),
     MgysdFormFieldDef(
       id: deReporterPhysicalAddress,
       label: 'Physical Address',
       type: MgysdFieldType.textLong,
+      requiredField: true,
     ),
     MgysdFormFieldDef(
       id: deChiefFirstName,
       label: 'Chief First name',
       type: MgysdFieldType.textShort,
+      requiredField: true,
       maxLen: 40,
     ),
     MgysdFormFieldDef(
       id: deChiefLastName,
       label: 'Chief Last name',
       type: MgysdFieldType.textShort,
+      requiredField: true,
       maxLen: 40,
     ),
     MgysdFormFieldDef(
       id: deReporterPhone,
       label: 'Reporter phone',
       type: MgysdFieldType.phone,
-      requiredField: true,
     ),
     MgysdFormFieldDef(
       id: deReporterAltPhone,
@@ -506,8 +525,9 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       dialCode: '+266',
       minNationalDigits: 8,
       maxNationalDigits: 8,
-      allowedNationalPrefixes: ['5', '6'],
-      prefixHint: 'Lesotho mobile numbers must start with 5 or 6',
+      allowedNationalPrefixes: ['2', '5', '6'],
+      disallowedNationalPrefixes: ['54', '55'],
+      prefixHint: 'Lesotho numbers must start with 2, 5 or 6. Prefixes 54 and 55 are not allowed',
     ),
     MgysdCountryCodeOption(
       code: 'ZA',
@@ -540,24 +560,6 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       prefixHint: 'South African mobile numbers usually start with 6, 7 or 8 ranges such as 60, 71 or 82',
     ),
     MgysdCountryCodeOption(
-      code: 'BW',
-      label: 'Botswana (+267)',
-      dialCode: '+267',
-      minNationalDigits: 8,
-      maxNationalDigits: 8,
-      allowedNationalPrefixes: ['71', '72', '73', '74', '75', '76'],
-      prefixHint: 'Botswana mobile numbers must start with 71, 72, 73, 74, 75 or 76',
-    ),
-    MgysdCountryCodeOption(
-      code: 'SZ',
-      label: 'Eswatini (+268)',
-      dialCode: '+268',
-      minNationalDigits: 8,
-      maxNationalDigits: 8,
-      allowedNationalPrefixes: ['75', '76', '77', '78', '79'],
-      prefixHint: 'Eswatini mobile numbers must start with 75, 76, 77, 78 or 79',
-    ),
-    MgysdCountryCodeOption(
       code: 'ZW',
       label: 'Zimbabwe (+263)',
       dialCode: '+263',
@@ -576,13 +578,13 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       prefixHint: 'Mozambique mobile numbers must start with 82, 83, 84, 85, 86 or 87',
     ),
     MgysdCountryCodeOption(
-      code: 'MW',
-      label: 'Malawi (+265)',
-      dialCode: '+265',
-      minNationalDigits: 7,
-      maxNationalDigits: 9,
-      allowedNationalPrefixes: ['1', '3', '7', '8', '9'],
-      prefixHint: 'Malawi numbers must start with an allocated range such as 1, 3, 7, 8 or 9',
+      code: 'BW',
+      label: 'Botswana (+267)',
+      dialCode: '+267',
+      minNationalDigits: 8,
+      maxNationalDigits: 8,
+      allowedNationalPrefixes: ['71', '72', '73', '74', '75', '76'],
+      prefixHint: 'Botswana mobile numbers must start with 71, 72, 73, 74, 75 or 76',
     ),
     MgysdCountryCodeOption(
       code: 'NA',
@@ -592,6 +594,33 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       maxNationalDigits: 9,
       allowedNationalPrefixes: ['81', '82', '83', '84', '85'],
       prefixHint: 'Namibia mobile/electronic communications numbers must start with 81, 82, 83, 84 or 85',
+    ),
+    MgysdCountryCodeOption(
+      code: 'SZ',
+      label: 'Eswatini (+268)',
+      dialCode: '+268',
+      minNationalDigits: 8,
+      maxNationalDigits: 8,
+      allowedNationalPrefixes: ['75', '76', '77', '78', '79'],
+      prefixHint: 'Eswatini mobile numbers must start with 75, 76, 77, 78 or 79',
+    ),
+    MgysdCountryCodeOption(
+      code: 'ZM',
+      label: 'Zambia (+260)',
+      dialCode: '+260',
+      minNationalDigits: 9,
+      maxNationalDigits: 9,
+      allowedNationalPrefixes: ['76', '77', '95', '96', '97'],
+      prefixHint: 'Zambia mobile numbers must start with 76, 77, 95, 96 or 97',
+    ),
+    MgysdCountryCodeOption(
+      code: 'MW',
+      label: 'Malawi (+265)',
+      dialCode: '+265',
+      minNationalDigits: 7,
+      maxNationalDigits: 9,
+      allowedNationalPrefixes: ['1', '3', '7', '8', '9'],
+      prefixHint: 'Malawi numbers must start with an allocated range such as 1, 3, 7, 8 or 9',
     ),
     MgysdCountryCodeOption(
       code: 'US',
@@ -656,6 +685,11 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       });
     }
 
+    _reporterPhoneControllers[deReporterPhone] =
+        TextEditingController(text: (_values[deReporterPhone] ?? '').trim());
+    _reporterPhoneControllers[deReporterAltPhone] =
+        TextEditingController(text: (_values[deReporterAltPhone] ?? '').trim());
+
     // initialize selected concerns from saved value if present
     final saved = (_values[deConcernReason] ?? '').trim();
     if (saved.isNotEmpty) {
@@ -682,12 +716,40 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     for (final person in _peopleInvolved) {
       person.dispose();
     }
+    for (final controller in _reporterPhoneControllers.values) {
+      controller.dispose();
+    }
     _concernOtherController.dispose();
     super.dispose();
   }
 
   bool get _reporterIsAnonymous =>
       (_values[deReporterAnonymous] ?? 'false') == 'true';
+
+
+  bool _isAboutReporterField(String id) {
+    return aboutReporterFields.any((field) => field.id == id);
+  }
+
+  bool _isOptionalReporterPhoneField(String id) {
+    return id == deReporterPhone || id == deReporterAltPhone;
+  }
+
+  bool _fieldIsRequiredNow(MgysdFormFieldDef field) {
+    if (field.id == deReporterAnonymous) return false;
+
+    // About Reporter rule:
+    // When anonymous is NO, every visible reporter field is mandatory
+    // except Reporter phone and Alternate phone.
+    // When anonymous is YES, the reporter detail fields are hidden, so they
+    // should not participate in validation.
+    if (_isAboutReporterField(field.id)) {
+      if (_reporterIsAnonymous) return false;
+      return !_isOptionalReporterPhoneField(field.id);
+    }
+
+    return field.requiredField;
+  }
 
   Color get _softBg => const Color(0xFFF6F7FB);
 
@@ -720,6 +782,8 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     return InputDecoration(
       label: _requiredLabel(label, requiredField: requiredField),
       hintText: hint,
+      errorMaxLines: 4,
+      helperMaxLines: 4,
       floatingLabelBehavior: FloatingLabelBehavior.auto,
       isDense: true,
       prefixIcon: icon != null ? Icon(icon, size: 20) : null,
@@ -849,11 +913,54 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
         nationalDigits.length <= country.maxNationalDigits;
   }
 
+  bool _hasDisallowedNationalPrefix(
+      String nationalDigits,
+      MgysdCountryCodeOption country,
+      ) {
+    if (country.code == 'INTL' || nationalDigits.isEmpty) return false;
+    return country.disallowedNationalPrefixes.any(nationalDigits.startsWith);
+  }
+
+  bool _hasPossibleNetworkPrefix(
+      String nationalDigits,
+      MgysdCountryCodeOption country,
+      ) {
+    if (country.code == 'INTL' || nationalDigits.isEmpty) return true;
+
+    if (_hasDisallowedNationalPrefix(nationalDigits, country)) {
+      return false;
+    }
+
+    if (country.useNanpRules) {
+      // NANP: area code first digit and exchange code first digit cannot be 0 or 1.
+      if (nationalDigits.isNotEmpty && !RegExp(r'^[2-9]').hasMatch(nationalDigits)) {
+        return false;
+      }
+      if (nationalDigits.length >= 4 &&
+          !RegExp(r'^[2-9][0-9]{2}[2-9]').hasMatch(nationalDigits)) {
+        return false;
+      }
+      return true;
+    }
+
+    if (country.allowedNationalPrefixes.isEmpty) return true;
+
+    // Allows partial typing when the current digits can still become a valid
+    // prefix, e.g. South Africa: typing "8" can still become "81" or "82".
+    return country.allowedNationalPrefixes.any((prefix) {
+      return prefix.startsWith(nationalDigits) || nationalDigits.startsWith(prefix);
+    });
+  }
+
   bool _hasValidNetworkPrefix(
       String nationalDigits,
       MgysdCountryCodeOption country,
       ) {
     if (country.code == 'INTL') return true;
+
+    if (_hasDisallowedNationalPrefix(nationalDigits, country)) {
+      return false;
+    }
 
     if (country.useNanpRules) {
       return RegExp(r'^[2-9][0-9]{2}[2-9][0-9]{6}$')
@@ -863,6 +970,12 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     if (country.allowedNationalPrefixes.isEmpty) return true;
 
     return country.allowedNationalPrefixes.any(nationalDigits.startsWith);
+  }
+
+  String _phonePrefixMessage(MgysdCountryCodeOption country) {
+    return country.prefixHint.isNotEmpty
+        ? country.prefixHint
+        : 'Phone number prefix does not match selected country';
   }
 
   String _phoneLengthMessage(MgysdCountryCodeOption country) {
@@ -877,16 +990,18 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       String nationalDigits,
       MgysdCountryCodeOption country,
       ) {
+    // Prefix is checked before length so invalid prefixes such as Lesotho
+    // "54" or "55" show an error immediately while the user is typing.
+    if (!_hasPossibleNetworkPrefix(nationalDigits, country)) {
+      throw FormatException(_phonePrefixMessage(country));
+    }
+
     if (!_hasValidNationalLength(nationalDigits, country)) {
       throw FormatException(_phoneLengthMessage(country));
     }
 
     if (!_hasValidNetworkPrefix(nationalDigits, country)) {
-      throw FormatException(
-        country.prefixHint.isNotEmpty
-            ? country.prefixHint
-            : 'Phone number prefix does not match selected country',
-      );
+      throw FormatException(_phonePrefixMessage(country));
     }
   }
 
@@ -1055,6 +1170,8 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
   }
 
 
+  // Keep saved values in DHIS2-friendly yyyy-mm-dd format,
+  // but display date fields to the user as dd-mm-yyyy.
   String _formatDate(DateTime date) {
     final y = date.year.toString().padLeft(4, '0');
     final m = date.month.toString().padLeft(2, '0');
@@ -1062,14 +1179,44 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     return '$y-$m-$d';
   }
 
+  String _formatDisplayDate(DateTime date) {
+    final d = date.day.toString().padLeft(2, '0');
+    final m = date.month.toString().padLeft(2, '0');
+    final y = date.year.toString().padLeft(4, '0');
+    return '$d-$m-$y';
+  }
+
+  String _dateDisplayValue(String value) {
+    final parsed = _parseDate(value);
+    if (parsed == null) return value.trim();
+    return _formatDisplayDate(parsed);
+  }
+
   DateTime? _parseDate(String value) {
     final parts = value.trim().split('-');
     if (parts.length != 3) return null;
-    final y = int.tryParse(parts[0]);
-    final m = int.tryParse(parts[1]);
-    final d = int.tryParse(parts[2]);
+
+    int? y;
+    int? m;
+    int? d;
+
+    // Accept both stored yyyy-mm-dd and displayed dd-mm-yyyy values.
+    if (parts[0].length == 4) {
+      y = int.tryParse(parts[0]);
+      m = int.tryParse(parts[1]);
+      d = int.tryParse(parts[2]);
+    } else {
+      d = int.tryParse(parts[0]);
+      m = int.tryParse(parts[1]);
+      y = int.tryParse(parts[2]);
+    }
+
     if (y == null || m == null || d == null) return null;
-    return DateTime(y, m, d);
+
+    final parsed = DateTime(y, m, d);
+    if (parsed.year != y || parsed.month != m || parsed.day != d) return null;
+
+    return parsed;
   }
 
   Future<void> _pickDate(String fieldId) async {
@@ -1160,30 +1307,310 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     return !_reporterIsAnonymous;
   }
 
-  Widget _countryCodeDropdown({
+  String _countryDisplayName(MgysdCountryCodeOption country) {
+    final label = country.label.trim();
+    final bracketIndex = label.indexOf(' (');
+    if (bracketIndex > 0) return label.substring(0, bracketIndex);
+    return label;
+  }
+
+  String _countryFlag(MgysdCountryCodeOption country) {
+    switch (country.code) {
+      case 'LS':
+        return '🇱🇸';
+      case 'ZA':
+        return '🇿🇦';
+      case 'ZW':
+        return '🇿🇼';
+      case 'MZ':
+        return '🇲🇿';
+      case 'BW':
+        return '🇧🇼';
+      case 'NA':
+        return '🇳🇦';
+      case 'SZ':
+        return '🇸🇿';
+      case 'ZM':
+        return '🇿🇲';
+      case 'MW':
+        return '🇲🇼';
+      case 'US':
+        return '🇺🇸';
+      case 'GB':
+        return '🇬🇧';
+      case 'INTL':
+        return '🌐';
+      default:
+        return '🌐';
+    }
+  }
+
+  String _phoneFieldLabel(String label, MgysdCountryCodeOption country) {
+    if (country.code == 'INTL') return label;
+
+    if (country.minNationalDigits == country.maxNationalDigits) {
+      return '$label (${country.maxNationalDigits} digits)';
+    }
+
+    return '$label (${country.minNationalDigits}-${country.maxNationalDigits} digits)';
+  }
+
+  String _formatPhoneTextForSelectedCountry(String value, String countryCode) {
+    final country = _phoneCountryByCode(countryCode);
+    return MgysdPhoneNumberInputFormatter(country).formatEditUpdate(
+      const TextEditingValue(),
+      TextEditingValue(text: value),
+    ).text;
+  }
+
+  void _formatPhoneControllerForSelectedCountry(
+      TextEditingController controller,
+      String countryCode,
+      ) {
+    final formatted = _formatPhoneTextForSelectedCountry(
+      controller.text,
+      countryCode,
+    );
+
+    controller.value = TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+      composing: TextRange.empty,
+    );
+  }
+
+  Future<String?> _showCountryPicker({
+    required String selectedCode,
+  }) async {
+    String query = '';
+
+    final selectedCountryCode = await showDialog<String>(
+      context: context,
+      useRootNavigator: true,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setModalState) {
+            final normalizedQuery = query.trim().toLowerCase();
+            final countries = normalizedQuery.isEmpty
+                ? _phoneCountryOptions
+                : _phoneCountryOptions.where((country) {
+              final countryName = _countryDisplayName(country).toLowerCase();
+              final label = country.label.toLowerCase();
+              final dialCode = country.dialCode.toLowerCase();
+              final code = country.code.toLowerCase();
+
+              return countryName.contains(normalizedQuery) ||
+                  label.contains(normalizedQuery) ||
+                  dialCode.contains(normalizedQuery) ||
+                  code.contains(normalizedQuery);
+            }).toList();
+
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 24,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: 620,
+                  maxHeight: MediaQuery.of(dialogContext).size.height * 0.82,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Select Country',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () {
+                              FocusScope.of(dialogContext).unfocus();
+                              Navigator.of(dialogContext, rootNavigator: true).pop();
+                            },
+                            icon: const Icon(Icons.close),
+                            tooltip: 'Close',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        autofocus: false,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.search),
+                          hintText: 'Search by country or code (e.g. Lesotho or +266)',
+                          isDense: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: Colors.blueGrey.withOpacity(0.25),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: widget.color,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                        onChanged: (value) => setModalState(() {
+                          query = value;
+                        }),
+                      ),
+                      const SizedBox(height: 12),
+                      Flexible(
+                        child: countries.isEmpty
+                            ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Text('No countries found'),
+                          ),
+                        )
+                            : ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: countries.length,
+                          itemBuilder: (itemContext, index) {
+                            final country = countries[index];
+                            final selected = country.code == selectedCode;
+
+                            return Material(
+                              color: selected
+                                  ? widget.color.withOpacity(0.10)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(10),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(10),
+                                onTap: () {
+                                  FocusScope.of(dialogContext).unfocus();
+                                  Navigator.of(dialogContext, rootNavigator: true)
+                                      .pop(country.code);
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 12,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        _countryFlag(country),
+                                        style: const TextStyle(fontSize: 24),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          _countryDisplayName(country),
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: selected
+                                                ? FontWeight.w800
+                                                : FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                      Text(
+                                        country.dialCode,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.blueGrey,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    return selectedCountryCode;
+  }
+
+  Widget _countryCodeSelectorButton({
     required String value,
     required void Function(String?) onChanged,
   }) {
-    final safeValue = _phoneCountryOptions.any((country) => country.code == value)
-        ? value
-        : _phoneCountryOptions.first.code;
+    final country = _phoneCountryByCode(value);
 
-    return DropdownButtonFormField<String>(
-      value: safeValue,
-      isExpanded: true,
-      decoration: _decoration('Country code'),
-      items: _phoneCountryOptions
-          .map(
-            (country) => DropdownMenuItem<String>(
-          value: country.code,
-          child: Text(
-            country.label,
-            overflow: TextOverflow.ellipsis,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () async {
+        if (_countryPickerBusy) return;
+        _countryPickerBusy = true;
+
+        final selectedCode = await _showCountryPicker(
+          selectedCode: country.code,
+        );
+
+        _countryPickerBusy = false;
+
+        if (!mounted || selectedCode == null || selectedCode == value) return;
+
+        // The picker is awaited first, so the dialog has already closed.
+        // Updating on the next frame keeps the previous assertion fix while
+        // removing the slow 250ms delay that made the selector feel unresponsive.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          onChanged(selectedCode);
+        });
+      },
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.blueGrey.withOpacity(0.25)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _countryFlag(country),
+                style: const TextStyle(fontSize: 20),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                country.dialCode,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.keyboard_arrow_down, size: 18),
+            ],
           ),
         ),
-      )
-          .toList(),
-      onChanged: onChanged,
+      ),
     );
   }
 
@@ -1201,16 +1628,14 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     final phoneHint = country.code == 'INTL'
         ? 'Start with + country code'
         : country.minNationalDigits == country.maxNationalDigits
-        ? 'Enter ${country.maxNationalDigits} digits only'
-        : 'Enter ${country.minNationalDigits}-${country.maxNationalDigits} digits only';
+        ? 'Phone Number (${country.maxNationalDigits} digits)'
+        : 'Phone Number (${country.minNationalDigits}-${country.maxNationalDigits} digits)';
 
     final phoneField = TextFormField(
-      key: ValueKey('${label}_$countryCode'),
       controller: controller,
       initialValue: controller == null ? initialValue : null,
       decoration: _decoration(
-        label,
-        icon: Icons.phone,
+        _phoneFieldLabel(label, country),
         hint: phoneHint,
         requiredField: requiredField,
       ),
@@ -1220,40 +1645,29 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       inputFormatters: [
         MgysdPhoneNumberInputFormatter(country),
       ],
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       onChanged: onChanged,
       validator: validator,
     );
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final twoCols = constraints.maxWidth >= 420;
-        final countryDropdown = _countryCodeDropdown(
-          value: countryCode,
-          onChanged: onCountryChanged,
-        );
-
-        if (twoCols) {
-          return Row(
-            children: [
-              SizedBox(width: 210, child: countryDropdown),
-              const SizedBox(width: 10),
-              Expanded(child: phoneField),
-            ],
-          );
-        }
-
-        return Column(
-          children: [
-            countryDropdown,
-            const SizedBox(height: 8),
-            phoneField,
-          ],
-        );
-      },
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 108,
+          child: _countryCodeSelectorButton(
+            value: countryCode,
+            onChanged: onCountryChanged,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(child: phoneField),
+      ],
     );
   }
 
   Widget _buildField(MgysdFormFieldDef f) {
+    final requiredNow = _fieldIsRequiredNow(f);
     switch (f.type) {
       case MgysdFieldType.option:
       // Special-case multi-select for Concern reason
@@ -1274,7 +1688,7 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
             initialValue: selected,
             validator: (set) {
               // avoid calling contains on null
-              if (f.requiredField && (set == null || set.isEmpty)) {
+              if (requiredNow && (set == null || set.isEmpty)) {
                 return 'Required';
               }
               if (set != null && set.contains('OTHER') && _concernOtherController.text.trim().isEmpty) {
@@ -1376,7 +1790,7 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
                                             _values[deConcernReasonOther] = v.trim();
                                           },
                                           validator: (v) {
-                                            if (f.requiredField && selected.contains('OTHER')) {
+                                            if (requiredNow && selected.contains('OTHER')) {
                                               if ((v ?? '').trim().isEmpty) return 'Required';
                                             }
                                             return null;
@@ -1441,7 +1855,7 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
                                       _values[deConcernReasonOther] = v.trim();
                                     },
                                     validator: (v) {
-                                      if (f.requiredField && selected.contains('OTHER')) {
+                                      if (requiredNow && selected.contains('OTHER')) {
                                         if ((v ?? '').trim().isEmpty) return 'Required';
                                       }
                                       return null;
@@ -1487,8 +1901,8 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
           onChanged: (v) => setState(() {
             _values[f.id] = v ?? '';
           }),
-          validator: (v) => _requiredValidator(v, requiredField: f.requiredField),
-          decoration: _decoration(f.label, requiredField: f.requiredField),
+          validator: (v) => _requiredValidator(v, requiredField: requiredNow),
+          decoration: _decoration(f.label, requiredField: requiredNow),
         );
 
       case MgysdFieldType.boolean:
@@ -1536,23 +1950,24 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
 
       case MgysdFieldType.date:
         final value = (_values[f.id] ?? '').trim();
+        final displayValue = _dateDisplayValue(value);
 
         return InkWell(
           borderRadius: BorderRadius.circular(14),
           onTap: () => _pickDate(f.id),
           child: IgnorePointer(
             child: TextFormField(
-              key: ValueKey('${f.id}_$value'),
-              initialValue: value,
+              key: ValueKey('${f.id}_$displayValue'),
+              initialValue: displayValue,
               decoration: _decoration(
                 f.label,
                 icon: Icons.calendar_month,
-                hint: 'yyyy-mm-dd',
-                requiredField: f.requiredField,
+                hint: 'dd-mm-yyyy',
+                requiredField: requiredNow,
               ),
               validator: (v) => _dateValidator(
                 v,
-                requiredField: f.requiredField,
+                requiredField: requiredNow,
                 fieldId: f.id,
               ),
             ),
@@ -1561,18 +1976,25 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
 
       case MgysdFieldType.phone:
         final countryCode = _phoneCountryCodes[f.id] ?? 'LS';
+        final phoneController = _reporterPhoneController(f.id);
         return _phoneInputField(
           label: f.label,
           countryCode: countryCode,
-          requiredField: f.requiredField,
-          initialValue: (_values[f.id] ?? '').trim(),
+          requiredField: requiredNow,
+          controller: phoneController,
           onChanged: (v) => _values[f.id] = v.trim(),
           onCountryChanged: (v) => setState(() {
-            _phoneCountryCodes[f.id] = v ?? 'LS';
+            final newCountryCode = v ?? 'LS';
+            _phoneCountryCodes[f.id] = newCountryCode;
+            _formatPhoneControllerForSelectedCountry(
+              phoneController,
+              newCountryCode,
+            );
+            _values[f.id] = phoneController.text.trim();
           }),
           validator: (v) => _phoneValidator(
             v,
-            requiredField: f.requiredField,
+            requiredField: requiredNow,
             countryCode: _phoneCountryCodes[f.id] ?? 'LS',
           ),
         );
@@ -1581,31 +2003,31 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
         return TextFormField(
           key: ValueKey('${f.id}_${_values[f.id] ?? ''}'),
           initialValue: (_values[f.id] ?? '').trim(),
-          decoration: _decoration(f.label, requiredField: f.requiredField),
+          decoration: _decoration(f.label, requiredField: requiredNow),
           keyboardType: TextInputType.number,
           readOnly: f.id == deReporterAge,
           onChanged: (v) => _values[f.id] = v.trim(),
           validator: (v) =>
-              _requiredValidator(v, requiredField: f.requiredField),
+              _requiredValidator(v, requiredField: requiredNow),
         );
 
       case MgysdFieldType.textLong:
         return TextFormField(
           initialValue: (_values[f.id] ?? '').trim(),
-          decoration: _decoration(f.label, requiredField: f.requiredField),
+          decoration: _decoration(f.label, requiredField: requiredNow),
           maxLines: 4,
           inputFormatters: _titleCaseInputFormatters,
           textCapitalization: TextCapitalization.sentences,
           onChanged: (v) => _values[f.id] = v.trim(),
           validator: (v) =>
-              _requiredValidator(v, requiredField: f.requiredField),
+              _requiredValidator(v, requiredField: requiredNow),
         );
 
       case MgysdFieldType.textShort:
         final isNameField = _isNameFieldId(f.id);
         return TextFormField(
           initialValue: (_values[f.id] ?? '').trim(),
-          decoration: _decoration(f.label, requiredField: f.requiredField),
+          decoration: _decoration(f.label, requiredField: requiredNow),
           maxLength: f.maxLen,
           inputFormatters: isNameField
               ? _nameInputFormatters
@@ -1621,8 +2043,8 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
           },
           onChanged: (v) => _values[f.id] = v.trim(),
           validator: (v) => isNameField
-              ? _nameValidator(v, requiredField: f.requiredField)
-              : _requiredValidator(v, requiredField: f.requiredField),
+              ? _nameValidator(v, requiredField: requiredNow)
+              : _requiredValidator(v, requiredField: requiredNow),
         );
     }
   }
@@ -2019,6 +2441,10 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       requiredField: true,
       onCountryChanged: (v) => setState(() {
         client.phoneCountryCode = v ?? 'LS';
+        _formatPhoneControllerForSelectedCountry(
+          client.phoneController,
+          client.phoneCountryCode,
+        );
       }),
       validator: (v) => _clientPhoneValidator(client: client, value: v),
     );
@@ -2030,6 +2456,10 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       requiredField: true,
       onCountryChanged: (v) => setState(() {
         client.alternatePhoneCountryCode = v ?? 'LS';
+        _formatPhoneControllerForSelectedCountry(
+          client.alternatePhoneController,
+          client.alternatePhoneCountryCode,
+        );
       }),
       validator: (v) => _clientAlternativePhoneValidator(client: client, value: v),
     );
