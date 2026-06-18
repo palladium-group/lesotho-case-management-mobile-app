@@ -6,6 +6,7 @@ import 'package:lncmis_mobile_app/core/utils/app_util.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/models/mgysd_case.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:lncmis_mobile_app/modules/mgysd_case_management/care_plan/pages/mgysd_care_plan_page.dart';
 
 class MgysdSocialInvestigationPage extends StatefulWidget {
   const MgysdSocialInvestigationPage({
@@ -298,6 +299,396 @@ class _ExternalInformantEntry {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Form 5: Case Conference Record
+// ─────────────────────────────────────────────────────────────────────────────
+class _CaseConferenceEntry {
+  final String id;
+
+  // Header (auto-filled from Part 1)
+  final TextEditingController conferenceDateController;
+  final TextEditingController conferenceTimeController;
+  String conferenceType;        // SCHEDULED | UNPLANNED
+  String locationType;          // CLIENTS_HOME | OFFICE | OTHER
+  final TextEditingController locationOtherController;
+  String aimOfConference;
+  final TextEditingController aimOtherController;
+
+  // Non-family participants (name + agency) — starts empty
+  final List<Map<String, TextEditingController>> nonFamilyParticipants;
+
+  // Family participants (firstName + surname + relationship dropdown) — starts empty
+  final List<Map<String, dynamic>> familyParticipants;
+
+  // Discussion & outcomes
+  final TextEditingController keyDiscussionPointsController;
+  final TextEditingController keyOutcomesController;
+  final TextEditingController observationsOnDynamicsController;
+
+  // Client consultation
+  String clientSpokenToIndividually;
+  final TextEditingController clientConsultationOutcomeController;
+
+  // Next conference / follow-up
+  final TextEditingController nextConferenceDateController;
+  String nextConferenceType;
+  String nextConferenceLocation;
+  final TextEditingController nextConferenceLocationOtherController;
+  final TextEditingController nextConferencePurposeController;
+
+  _CaseConferenceEntry({
+    required this.id,
+    String conferenceDate = '',
+    String conferenceTime = '',
+    this.conferenceType = '',
+    this.locationType = '',
+    String locationOther = '',
+    this.aimOfConference = '',
+    String aimOther = '',
+    List<Map<String, TextEditingController>>? nonFamilyParticipants,
+    List<Map<String, dynamic>>? familyParticipants,
+    String keyDiscussionPoints = '',
+    String keyOutcomes = '',
+    String observationsOnDynamics = '',
+    this.clientSpokenToIndividually = '',
+    String clientConsultationOutcome = '',
+    String nextConferenceDate = '',
+    this.nextConferenceType = '',
+    this.nextConferenceLocation = '',
+    String nextConferenceLocationOther = '',
+    String nextConferencePurpose = '',
+  })  : conferenceDateController = TextEditingController(text: conferenceDate),
+        conferenceTimeController = TextEditingController(text: conferenceTime),
+        locationOtherController = TextEditingController(text: locationOther),
+        aimOtherController = TextEditingController(text: aimOther),
+        nonFamilyParticipants = nonFamilyParticipants ?? [],
+        familyParticipants = familyParticipants ?? [],
+        keyDiscussionPointsController = TextEditingController(text: keyDiscussionPoints),
+        keyOutcomesController = TextEditingController(text: keyOutcomes),
+        observationsOnDynamicsController = TextEditingController(text: observationsOnDynamics),
+        clientConsultationOutcomeController = TextEditingController(text: clientConsultationOutcome),
+        nextConferenceDateController = TextEditingController(text: nextConferenceDate),
+        nextConferenceLocationOtherController = TextEditingController(text: nextConferenceLocationOther),
+        nextConferencePurposeController = TextEditingController(text: nextConferencePurpose);
+
+  static Map<String, TextEditingController> _newParticipantRow() =>
+      {'name': TextEditingController(), 'agency': TextEditingController()};
+
+  // family row: controllers for firstName, surname; String for relationship + relationshipOther
+  static Map<String, dynamic> _newFamilyRow() => {
+    'firstName': TextEditingController(),
+    'surname': TextEditingController(),
+    'relationship': '',
+    'relationshipOther': TextEditingController(),
+  };
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'conferenceDate': conferenceDateController.text.trim(),
+    'conferenceTime': conferenceTimeController.text.trim(),
+    'conferenceType': conferenceType,
+    'locationType': locationType,
+    'locationOther': locationOtherController.text.trim(),
+    'aimOfConference': aimOfConference,
+    'aimOther': aimOtherController.text.trim(),
+    'nonFamilyParticipants': nonFamilyParticipants
+        .map((r) => {'name': r['name']!.text.trim(), 'agency': r['agency']!.text.trim()})
+        .toList(),
+    'familyParticipants': familyParticipants.map((r) => {
+      'firstName': (r['firstName'] as TextEditingController).text.trim(),
+      'surname': (r['surname'] as TextEditingController).text.trim(),
+      'relationship': r['relationship'] as String,
+      'relationshipOther': (r['relationshipOther'] as TextEditingController).text.trim(),
+    }).toList(),
+    'keyDiscussionPoints': keyDiscussionPointsController.text.trim(),
+    'keyOutcomes': keyOutcomesController.text.trim(),
+    'observationsOnDynamics': observationsOnDynamicsController.text.trim(),
+    'clientSpokenToIndividually': clientSpokenToIndividually,
+    'clientConsultationOutcome': clientConsultationOutcomeController.text.trim(),
+    'nextConferenceDate': nextConferenceDateController.text.trim(),
+    'nextConferenceType': nextConferenceType,
+    'nextConferenceLocation': nextConferenceLocation,
+    'nextConferenceLocationOther': nextConferenceLocationOtherController.text.trim(),
+    'nextConferencePurpose': nextConferencePurposeController.text.trim(),
+  };
+
+  void dispose() {
+    conferenceDateController.dispose();
+    conferenceTimeController.dispose();
+    locationOtherController.dispose();
+    aimOtherController.dispose();
+    for (final r in nonFamilyParticipants) { r['name']!.dispose(); r['agency']!.dispose(); }
+    for (final r in familyParticipants) {
+      (r['firstName'] as TextEditingController).dispose();
+      (r['surname'] as TextEditingController).dispose();
+      (r['relationshipOther'] as TextEditingController).dispose();
+    }
+    keyDiscussionPointsController.dispose();
+    keyOutcomesController.dispose();
+    observationsOnDynamicsController.dispose();
+    clientConsultationOutcomeController.dispose();
+    nextConferenceDateController.dispose();
+    nextConferenceLocationOtherController.dispose();
+    nextConferencePurposeController.dispose();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Self-contained phone input with searchable country picker.
+// Owns its own State so the bottom sheet never touches the parent's setState.
+// ─────────────────────────────────────────────────────────────────────────────
+class _PhoneInputField extends StatefulWidget {
+  final _ExternalInformantEntry entry;
+  final List<Map<String, dynamic>> countries;
+  final Color accentColor;
+  final void Function(String code) onCountryChanged;
+
+  const _PhoneInputField({
+    required this.entry,
+    required this.countries,
+    required this.accentColor,
+    required this.onCountryChanged,
+  });
+
+  @override
+  State<_PhoneInputField> createState() => _PhoneInputFieldState();
+}
+
+class _PhoneInputFieldState extends State<_PhoneInputField> {
+  // Validate a phone number against the selected country's rules
+  String? _validatePhone(String number, String dialCode) {
+    if (number.trim().isEmpty) return null;
+    Map<String, dynamic>? country;
+    try {
+      country = widget.countries.firstWhere(
+              (c) => c['code'] == dialCode && c['name'] != 'Other');
+    } catch (_) {
+      return null;
+    }
+    final digits = number.trim().replaceAll(RegExp(r'\D'), '');
+    final expectedDigits = country['digits'] as int;
+    final validPrefixes = country['validPrefixes'] as List<dynamic>;
+    if (validPrefixes.isNotEmpty &&
+        !validPrefixes.any((p) => digits.startsWith(p.toString()))) {
+      final prefixList = validPrefixes.map((p) => p.toString()).join(', ');
+      return '${country['name']} numbers must start with $prefixList';
+    }
+    if (expectedDigits > 0 && digits.length != expectedDigits) {
+      return '${country['name']} numbers must be $expectedDigits digits';
+    }
+    return null;
+  }
+
+  Map<String, dynamic>? get _selectedCountry {
+    final code = widget.entry.contactCountryCode;
+    if (code.isEmpty) return null;
+    try {
+      return widget.countries.firstWhere(
+              (c) => c['code'] == code && c['name'] != 'Other');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _openPicker() async {
+    final TextEditingController searchCtrl = TextEditingController();
+    // Use a ValueNotifier so the ListView rebuilds without touching any
+    // external setState at all during the sheet's lifetime.
+    final filteredNotifier =
+    ValueNotifier<List<Map<String, dynamic>>>(List.from(widget.countries));
+
+    final String? picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.65,
+          maxChildSize: 0.92,
+          minChildSize: 0.4,
+          builder: (_, scrollController) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 16,
+                bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 16,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text('Select Country',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w900)),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(sheetCtx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: searchCtrl,
+                    autofocus: true,
+                    onChanged: (q) {
+                      final lower = q.trim().toLowerCase();
+                      filteredNotifier.value = widget.countries.where((c) {
+                        return (c['name'] as String)
+                            .toLowerCase()
+                            .contains(lower) ||
+                            (c['code'] as String)
+                                .toLowerCase()
+                                .contains(lower);
+                      }).toList();
+                    },
+                    decoration: InputDecoration(
+                      hintText: 'Search by country or code (e.g. Lesotho or +266)',
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      filled: true,
+                      fillColor: const Color(0xFFF3F4F6),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: ValueListenableBuilder<List<Map<String, dynamic>>>(
+                      valueListenable: filteredNotifier,
+                      builder: (_, filtered, __) {
+                        return ListView.builder(
+                          controller: scrollController,
+                          itemCount: filtered.length,
+                          itemBuilder: (_, i) {
+                            final c = filtered[i];
+                            final code = c['name'] == 'Other'
+                                ? ''
+                                : c['code'] as String;
+                            final currentCode =
+                                widget.entry.contactCountryCode;
+                            final isSelected = code.isNotEmpty &&
+                                currentCode == code;
+                            final isOtherSelected =
+                                c['name'] == 'Other' && currentCode.isEmpty;
+                            return ListTile(
+                              dense: true,
+                              selected: isSelected || isOtherSelected,
+                              selectedTileColor:
+                              widget.accentColor.withOpacity(0.07),
+                              leading: Text(c['flag'] as String,
+                                  style: const TextStyle(fontSize: 22)),
+                              title: Text(c['name'] as String,
+                                  style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600)),
+                              trailing: Text(
+                                c['name'] == 'Other' ? '' : c['code'] as String,
+                                style: const TextStyle(
+                                    fontSize: 13, color: Colors.blueGrey),
+                              ),
+                              // Return the code as the sheet result — no setState here
+                              onTap: () => Navigator.pop(sheetCtx, code),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    searchCtrl.dispose();
+    filteredNotifier.dispose();
+
+    // Sheet is fully gone. Now it is safe to update state.
+    if (picked != null && mounted) {
+      // Update local display
+      setState(() {});
+      // Notify the parent so it can persist the value on the entry object
+      widget.onCountryChanged(picked);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final country = _selectedCountry;
+    final code = widget.entry.contactCountryCode;
+    final flagAndCode = code.isEmpty
+        ? '🌍  Other'
+        : '${country?['flag'] ?? '🌍'}  $code';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Country picker button
+          GestureDetector(
+            onTap: _openPicker,
+            child: Container(
+              height: 50,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FBFD),
+                borderRadius: BorderRadius.circular(13),
+                border: Border.all(color: Colors.blueGrey.withOpacity(0.35)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(flagAndCode,
+                      style: const TextStyle(
+                          fontSize: 13.5, fontWeight: FontWeight.w600)),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.arrow_drop_down,
+                      size: 18, color: Colors.blueGrey),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Phone number field
+          Expanded(
+            child: TextFormField(
+              controller: widget.entry.contactNumberController,
+              keyboardType: TextInputType.phone,
+              validator: (v) =>
+                  _validatePhone(v ?? '', widget.entry.contactCountryCode),
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              decoration: InputDecoration(
+                labelText: country != null
+                    ? 'Phone Number (${country['digits']} digits)'
+                    : 'Phone Number',
+                filled: true,
+                fillColor: const Color(0xFFF9FBFD),
+                border:
+                OutlineInputBorder(borderRadius: BorderRadius.circular(13)),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MgysdSocialInvestigationPageState
     extends State<MgysdSocialInvestigationPage> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
@@ -308,6 +699,7 @@ class _MgysdSocialInvestigationPageState
   bool _loading = true;
   bool _saving = false;
   String _savedStatus = 'NOT_STARTED';
+  Map<String, Object?>? _linkedCarePlan;
 
   String _clientTei = '';
   String _caseOrgUnit = '';
@@ -408,6 +800,60 @@ class _MgysdSocialInvestigationPageState
 
   final List<_ExternalInformantEntry> _externalInformantEntries = [];
   final Set<int> _collapsedInformants = {};
+
+  // Case Conference (Form 5)
+  final List<_CaseConferenceEntry> _caseConferenceEntries = [];
+  final Set<int> _collapsedConferences = {};
+
+  static const List<String> _conferenceTypeOptions = ['SCHEDULED', 'UNPLANNED'];
+  static const Map<String, String> _conferenceTypeLabels = {
+    'SCHEDULED': 'Scheduled',
+    'UNPLANNED': 'Unplanned',
+  };
+  static const List<String> _conferenceLocationOptions = [
+    'CLIENTS_HOME', 'OFFICE', 'OTHER',
+  ];
+  static const Map<String, String> _conferenceLocationLabels = {
+    'CLIENTS_HOME': "Client's home",
+    'OFFICE': 'Office',
+    'OTHER': 'Other (specify)',
+  };
+  static const List<String> _conferenceAimOptions = [
+    'DURING_ASSESSMENT',
+    'ROUTINE_MONITORING',
+    'SUPPORT',
+    'CRISIS_INTERVENTION',
+    'CASE_REVIEW',
+    'CASE_CLOSURE',
+    'OTHER',
+  ];
+  static const Map<String, String> _conferenceAimLabels = {
+    'DURING_ASSESSMENT': 'During assessment',
+    'ROUTINE_MONITORING': 'Routine monitoring',
+    'SUPPORT': 'Support',
+    'CRISIS_INTERVENTION': 'Crisis intervention',
+    'CASE_REVIEW': 'Case review',
+    'CASE_CLOSURE': 'Case closure',
+    'OTHER': 'Other (specify)',
+  };
+
+  static const List<String> _familyRelationshipOptions = [
+    'PARENT', 'GUARDIAN', 'SPOUSE_PARTNER', 'CHILD', 'SIBLING',
+    'GRANDPARENT', 'AUNT_UNCLE', 'COUSIN', 'CAREGIVER', 'CLIENT_SELF', 'OTHER',
+  ];
+  static const Map<String, String> _familyRelationshipLabels = {
+    'PARENT': 'Parent',
+    'GUARDIAN': 'Guardian',
+    'SPOUSE_PARTNER': 'Spouse / partner',
+    'CHILD': 'Child',
+    'SIBLING': 'Sibling',
+    'GRANDPARENT': 'Grandparent',
+    'AUNT_UNCLE': 'Aunt / uncle',
+    'COUSIN': 'Cousin',
+    'CAREGIVER': 'Caregiver',
+    'CLIENT_SELF': 'Client (self)',
+    'OTHER': 'Other (specify)',
+  };
 
   static const List<String> _purposeOfInterviewOptions = [
     'SOCIAL_INVESTIGATION', 'RISK_ASSESSMENT', 'PLACEMENT_SUPPORT',
@@ -799,6 +1245,7 @@ class _MgysdSocialInvestigationPageState
     _socialInclusionStrengthsController.dispose();
     _socialInclusionChallengesController.dispose();
     for (final entry in _externalInformantEntries) { entry.dispose(); }
+    for (final entry in _caseConferenceEntries) { entry.dispose(); }
     super.dispose();
   }
 
@@ -836,6 +1283,45 @@ class _MgysdSocialInvestigationPageState
       lastDate: DateTime(2100),
     );
     if (picked != null) setState(() => controller.text = _formatDate(picked));
+  }
+
+  // Conference date must not be in the past
+  Future<void> _pickConferenceDate(TextEditingController controller) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final initial = () {
+      final parsed = DateTime.tryParse(controller.text.trim());
+      if (parsed == null) return today;
+      return parsed.isBefore(today) ? today : parsed;
+    }();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: today,
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) setState(() => controller.text = _formatDate(picked));
+  }
+
+  Future<void> _pickConferenceTime(TextEditingController controller) async {
+    TimeOfDay initial = TimeOfDay.now();
+    final existing = controller.text.trim();
+    if (existing.isNotEmpty) {
+      final parts = existing.split(':');
+      if (parts.length == 2) {
+        final h = int.tryParse(parts[0]);
+        final m = int.tryParse(parts[1]);
+        if (h != null && m != null) initial = TimeOfDay(hour: h, minute: m);
+      }
+    }
+    final picked = await showTimePicker(context: context, initialTime: initial);
+    if (picked != null) {
+      setState(() {
+        final hh = picked.hour.toString().padLeft(2, '0');
+        final mm = picked.minute.toString().padLeft(2, '0');
+        controller.text = '$hh:$mm';
+      });
+    }
   }
 
   int _calculateAgeFromDob(String dobText) {
@@ -1164,6 +1650,7 @@ class _MgysdSocialInvestigationPageState
       await _loadIntakeSummary(db);
       await _loadSavedForm(db);
       await _loadCurrentUserIntoSocialWorker(db);
+      await _loadLinkedCarePlan(db);
     } catch (e) {
       _showSnack('Failed to load social investigation: $e');
     } finally {
@@ -1338,6 +1825,48 @@ class _MgysdSocialInvestigationPageState
         riskLevel: _text(item['riskLevel']),
       ));
     }
+
+    final conferences = (part4['caseConferences'] ?? []) as List<dynamic>;
+    for (final entry in _caseConferenceEntries) { entry.dispose(); }
+    _caseConferenceEntries.clear();
+    for (final raw in conferences) {
+      final item = (raw ?? {}) as Map<String, dynamic>;
+      final nonFamily = ((item['nonFamilyParticipants'] ?? []) as List<dynamic>).map((p) {
+        final m = (p ?? {}) as Map<String, dynamic>;
+        return {'name': TextEditingController(text: _text(m['name'])), 'agency': TextEditingController(text: _text(m['agency']))};
+      }).toList();
+      final family = ((item['familyParticipants'] ?? []) as List<dynamic>).map((p) {
+        final m = (p ?? {}) as Map<String, dynamic>;
+        return <String, dynamic>{
+          'firstName': TextEditingController(text: _text(m['firstName'])),
+          'surname': TextEditingController(text: _text(m['surname'])),
+          'relationship': _text(m['relationship']),
+          'relationshipOther': TextEditingController(text: _text(m['relationshipOther'])),
+        };
+      }).toList();
+      _caseConferenceEntries.add(_CaseConferenceEntry(
+        id: _text(item['id']).isEmpty ? AppUtil.getUid() : _text(item['id']),
+        conferenceDate: _text(item['conferenceDate']),
+        conferenceTime: _text(item['conferenceTime']),
+        conferenceType: _text(item['conferenceType']),
+        locationType: _text(item['locationType']),
+        locationOther: _text(item['locationOther']),
+        aimOfConference: _text(item['aimOfConference']),
+        aimOther: _text(item['aimOther']),
+        nonFamilyParticipants: nonFamily.isEmpty ? null : nonFamily,
+        familyParticipants: family.isEmpty ? null : family,
+        keyDiscussionPoints: _text(item['keyDiscussionPoints']),
+        keyOutcomes: _text(item['keyOutcomes']),
+        observationsOnDynamics: _text(item['observationsOnDynamics']),
+        clientSpokenToIndividually: _text(item['clientSpokenToIndividually']),
+        clientConsultationOutcome: _text(item['clientConsultationOutcome']),
+        nextConferenceDate: _text(item['nextConferenceDate']),
+        nextConferenceType: _text(item['nextConferenceType']),
+        nextConferenceLocation: _text(item['nextConferenceLocation']),
+        nextConferenceLocationOther: _text(item['nextConferenceLocationOther']),
+        nextConferencePurpose: _text(item['nextConferencePurpose']),
+      ));
+    }
   }
 
   int? _intOrNull(dynamic value) => value == null ? null : int.tryParse(value.toString());
@@ -1414,6 +1943,7 @@ class _MgysdSocialInvestigationPageState
       },
       'part4': {
         'externalInformants': _externalInformantEntries.map((e) => e.toJson()).toList(),
+        'caseConferences': _caseConferenceEntries.map((e) => e.toJson()).toList(),
       },
     };
   }
@@ -1527,6 +2057,93 @@ class _MgysdSocialInvestigationPageState
     }
   }
 
+
+  Future<void> _loadLinkedCarePlan(Database db) async {
+    await _ensureCarePlanLinkColumns(db);
+
+    try {
+      final rows = await db.query(
+        'mgysd_care_plan',
+        where: 'socialInvestigationId = ? OR id = ?',
+        whereArgs: [_eventId, 'CP_$_eventId'],
+        orderBy: 'updatedAt DESC',
+        limit: 1,
+      );
+
+      _linkedCarePlan = rows.isNotEmpty ? rows.first : null;
+    } catch (_) {
+      _linkedCarePlan = null;
+    }
+  }
+
+  String _linkedCarePlanRawStatus() {
+    final carePlan = _linkedCarePlan;
+    if (carePlan == null) return '';
+
+    String value = _text(carePlan['carePlanStatus']);
+    if (value.isEmpty) value = _text(carePlan['lifecycle']);
+    if (value.isEmpty) value = _text(carePlan['status']);
+
+    if (value.isNotEmpty) return value;
+
+    final payloadText = _text(carePlan['payloadJson']);
+    if (payloadText.isEmpty) return '';
+
+    try {
+      final decoded = jsonDecode(payloadText);
+      if (decoded is Map<String, dynamic>) {
+        value = _text(decoded['carePlanStatus']);
+        if (value.isEmpty) value = _text(decoded['lifecycle']);
+        if (value.isEmpty) value = _text(decoded['status']);
+      }
+    } catch (_) {}
+
+    return value;
+  }
+
+  bool _isLinkedCarePlanSuperseded() {
+    return _linkedCarePlanRawStatus().toUpperCase().contains('SUPERSEDED');
+  }
+
+  String _linkedCarePlanLifecycleLabel() {
+    final status = _linkedCarePlanRawStatus().toUpperCase();
+
+    if (status.contains('SUPERSEDED')) return 'Superseded';
+    if (status.contains('ACTIVE')) return 'In progress';
+    if (status.contains('IN_PROGRESS')) return 'In progress';
+    if (status.contains('DRAFT')) return 'In progress';
+    if (status.contains('COMPLETED')) return 'Completed';
+
+    return status.isEmpty ? 'In progress' : status.replaceAll('_', ' ');
+  }
+
+  Future<void> _openLinkedCarePlan() async {
+    final carePlan = _linkedCarePlan;
+    if (carePlan == null) return;
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MgysdCarePlanPage(
+          color: widget.color,
+          mgysdCase: widget.mgysdCase,
+          householdTei: widget.householdTei,
+          householdName: widget.householdName,
+          clientName: widget.clientName,
+          socialInvestigationId: _eventId,
+          socialInvestigationDate: _eventDateController.text.trim(),
+          viewOnly: _isLinkedCarePlanSuperseded(),
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+
+    final db = await _db();
+    await _loadLinkedCarePlan(db);
+    if (mounted) setState(() {});
+  }
+
   Future<void> _ensureCarePlanForSocialInvestigation(Database db, String status) async {
     if (status != 'COMPLETED') return;
 
@@ -1614,6 +2231,7 @@ class _MgysdSocialInvestigationPageState
       );
 
       await _ensureCarePlanForSocialInvestigation(db, status);
+      await _loadLinkedCarePlan(db);
 
       if (!mounted) return;
       setState(() => _savedStatus = status);
@@ -1651,6 +2269,28 @@ class _MgysdSocialInvestigationPageState
       _collapsedInformants
         ..clear()
         ..addAll(updated);
+    });
+  }
+
+  void _addCaseConferenceEntry() {
+    setState(() {
+      for (int i = 0; i < _caseConferenceEntries.length; i++) {
+        _collapsedConferences.add(i);
+      }
+      _caseConferenceEntries.add(_CaseConferenceEntry(id: AppUtil.getUid()));
+    });
+  }
+
+  void _removeCaseConferenceEntry(int index) {
+    setState(() {
+      final item = _caseConferenceEntries.removeAt(index);
+      item.dispose();
+      final updated = <int>{};
+      for (final i in _collapsedConferences) {
+        if (i < index) updated.add(i);
+        if (i > index) updated.add(i - 1);
+      }
+      _collapsedConferences..clear()..addAll(updated);
     });
   }
 
@@ -2170,6 +2810,38 @@ class _MgysdSocialInvestigationPageState
     );
   }
 
+  // Auto-capitalizes the first letter of every word as the user types
+  Widget _capitalizedInput(TextEditingController controller, String label,
+      {String? Function(String?)? validator}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextFormField(
+        controller: controller,
+        textCapitalization: TextCapitalization.words,
+        validator: validator,
+        onChanged: (value) {
+          final capitalized = value.split(' ').map((word) {
+            if (word.isEmpty) return word;
+            return word[0].toUpperCase() + word.substring(1);
+          }).join(' ');
+          if (capitalized != value) {
+            controller.value = controller.value.copyWith(
+              text: capitalized,
+              selection: TextSelection.collapsed(offset: capitalized.length),
+            );
+          }
+        },
+        decoration: InputDecoration(
+          labelText: label,
+          filled: true,
+          fillColor: const Color(0xFFF9FBFD),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(13)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
+      ),
+    );
+  }
+
   Widget _externalInformantCard(int index, _ExternalInformantEntry entry) {
     final cardLabel = entry.fullNameController.text.trim().isNotEmpty
         ? entry.fullNameController.text.trim()
@@ -2548,14 +3220,341 @@ class _MgysdSocialInvestigationPageState
     );
   }
 
+  Widget _caseConferenceCard(int index, _CaseConferenceEntry entry) {
+    final isCollapsed = _collapsedConferences.contains(index);
+    final dateLabel = entry.conferenceDateController.text.trim();
+    final cardLabel = dateLabel.isNotEmpty
+        ? 'Conference — $dateLabel'
+        : 'Case Conference ${index + 1}';
+
+    final primaryClient = _familyMembers.isNotEmpty
+        ? _familyMembers.firstWhere((m) => m.isPrimaryClient, orElse: () => _familyMembers.first)
+        : null;
+    final clientName = primaryClient != null ? primaryClient.fullName : (widget.clientName ?? '').trim();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 13),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FBFD),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(
+          color: isCollapsed ? Colors.blueGrey.withOpacity(0.08) : Colors.blueGrey.withOpacity(0.12),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: widget.color.withOpacity(0.12),
+                  child: Icon(Icons.groups_outlined, color: widget.color, size: 18),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(cardLabel, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900)),
+                      if (isCollapsed && entry.conferenceType.isNotEmpty)
+                        Text(
+                          _conferenceTypeLabels[entry.conferenceType] ?? entry.conferenceType,
+                          style: const TextStyle(fontSize: 11.5, color: Colors.blueGrey),
+                        ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: isCollapsed ? 'Expand' : 'Minimise',
+                  onPressed: () => setState(() {
+                    if (isCollapsed) { _collapsedConferences.remove(index); }
+                    else { _collapsedConferences.add(index); }
+                  }),
+                  icon: AnimatedRotation(
+                    turns: isCollapsed ? 0 : 0.5,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(Icons.keyboard_arrow_down_rounded, size: 22),
+                  ),
+                  color: Colors.blueGrey,
+                ),
+                const SizedBox(width: 2),
+                IconButton(
+                  tooltip: 'Remove conference',
+                  onPressed: () => _removeCaseConferenceEntry(index),
+                  icon: const Icon(Icons.delete_outline, size: 20),
+                  color: Colors.redAccent,
+                ),
+              ],
+            ),
+          ),
+
+          if (!isCollapsed) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+
+                  // ── Auto-filled case info ──────────────────────────────
+                  _subHeading('Case Information'),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: widget.color.withOpacity(0.04),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: widget.color.withOpacity(0.14)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _readOnlyInfoRow('Case Number', widget.mgysdCase.caseNo),
+                        _readOnlyInfoRow('File Number', _householdFileNumberController.text.trim().isNotEmpty
+                            ? _householdFileNumberController.text.trim() : '—'),
+                        _readOnlyInfoRow('Name of Client', clientName.isNotEmpty ? clientName : '—'),
+                        _readOnlyInfoRow('Social Worker',
+                            '${_socialWorkerFirstNameController.text.trim()} ${_socialWorkerSurnameController.text.trim()}'.trim().isNotEmpty
+                                ? '${_socialWorkerFirstNameController.text.trim()} ${_socialWorkerSurnameController.text.trim()}'.trim()
+                                : '—'),
+                      ],
+                    ),
+                  ),
+
+                  // ── Conference details ─────────────────────────────────
+                  _subHeading('Conference Details'),
+                  _two(
+                    _input(entry.conferenceDateController, 'Date of Conference',
+                        readOnly: true,
+                        onTap: () => _pickConferenceDate(entry.conferenceDateController),
+                        validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null),
+                    _input(entry.conferenceTimeController, 'Time of Conference',
+                        readOnly: true,
+                        onTap: () => _pickConferenceTime(entry.conferenceTimeController)),
+                  ),
+                  _two(
+                    _dropdown(
+                      label: 'Type of Case Conference',
+                      value: entry.conferenceType,
+                      options: _conferenceTypeOptions,
+                      labels: _conferenceTypeLabels,
+                      onChanged: (v) => setState(() => entry.conferenceType = v),
+                    ),
+                    _dropdown(
+                      label: 'Location',
+                      value: entry.locationType,
+                      options: _conferenceLocationOptions,
+                      labels: _conferenceLocationLabels,
+                      onChanged: (v) => setState(() => entry.locationType = v),
+                    ),
+                  ),
+                  if (entry.locationType == 'OFFICE' || entry.locationType == 'OTHER')
+                    _input(entry.locationOtherController, 'Specify location'),
+                  _dropdown(
+                    label: 'Aim of Case Conference',
+                    value: entry.aimOfConference,
+                    options: _conferenceAimOptions,
+                    labels: _conferenceAimLabels,
+                    onChanged: (v) => setState(() => entry.aimOfConference = v),
+                  ),
+                  if (entry.aimOfConference == 'OTHER')
+                    _input(entry.aimOtherController, 'Please specify aim', maxLines: 2),
+
+                  // ── Non-family participants ────────────────────────────
+                  _subHeading('Non-Family Participants'),
+                  const Text('Names and agencies of all non-family participants',
+                      style: TextStyle(fontSize: 12.5, color: Colors.blueGrey)),
+                  const SizedBox(height: 8),
+                  if (entry.nonFamilyParticipants.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text('No non-family participants added.',
+                          style: TextStyle(fontSize: 13, color: Colors.blueGrey.withOpacity(0.7),
+                              fontStyle: FontStyle.italic)),
+                    ),
+                  ...List.generate(entry.nonFamilyParticipants.length, (i) {
+                    final row = entry.nonFamilyParticipants[i];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(flex: 5, child: _capitalizedInput(row['name']!, 'Name')),
+                          const SizedBox(width: 8),
+                          Expanded(flex: 5, child: _capitalizedInput(row['agency']!, 'Agency / Organisation')),
+                          const SizedBox(width: 4),
+                          IconButton(
+                            onPressed: () => setState(() {
+                              row['name']!.dispose();
+                              row['agency']!.dispose();
+                              entry.nonFamilyParticipants.removeAt(i);
+                            }),
+                            icon: const Icon(Icons.remove_circle_outline, size: 18),
+                            color: Colors.redAccent,
+                            padding: const EdgeInsets.only(top: 4),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                  TextButton.icon(
+                    onPressed: () => setState(() {
+                      entry.nonFamilyParticipants.add(_CaseConferenceEntry._newParticipantRow());
+                    }),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add non-family participant'),
+                  ),
+
+                  // ── Family participants ────────────────────────────────
+                  _subHeading('Family Participants'),
+                  const Text('Names of all family participants (including client)',
+                      style: TextStyle(fontSize: 12.5, color: Colors.blueGrey)),
+                  const SizedBox(height: 8),
+                  if (entry.familyParticipants.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text('No family participants added.',
+                          style: TextStyle(fontSize: 13, color: Colors.blueGrey.withOpacity(0.7),
+                              fontStyle: FontStyle.italic)),
+                    ),
+                  ...List.generate(entry.familyParticipants.length, (i) {
+                    final row = entry.familyParticipants[i];
+                    final rel = row['relationship'] as String;
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.blueGrey.withOpacity(0.03),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.blueGrey.withOpacity(0.10)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text('Family Member ${i + 1}',
+                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                              ),
+                              IconButton(
+                                onPressed: () => setState(() {
+                                  (row['firstName'] as TextEditingController).dispose();
+                                  (row['surname'] as TextEditingController).dispose();
+                                  (row['relationshipOther'] as TextEditingController).dispose();
+                                  entry.familyParticipants.removeAt(i);
+                                }),
+                                icon: const Icon(Icons.remove_circle_outline, size: 18),
+                                color: Colors.redAccent,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          _two(
+                            _capitalizedInput(row['firstName'] as TextEditingController, 'First Name'),
+                            _capitalizedInput(row['surname'] as TextEditingController, 'Surname'),
+                          ),
+                          _dropdown(
+                            label: 'Relationship to Client',
+                            value: rel,
+                            options: _familyRelationshipOptions,
+                            labels: _familyRelationshipLabels,
+                            onChanged: (v) => setState(() => row['relationship'] = v),
+                          ),
+                          if (rel == 'OTHER')
+                            _input(row['relationshipOther'] as TextEditingController,
+                                'Please specify relationship', maxLines: 2),
+                        ],
+                      ),
+                    );
+                  }),
+                  TextButton.icon(
+                    onPressed: () => setState(() {
+                      entry.familyParticipants.add(_CaseConferenceEntry._newFamilyRow());
+                    }),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add family member'),
+                  ),
+
+                  // ── Discussion & outcomes ──────────────────────────────
+                  _subHeading('Discussion & Outcomes'),
+                  _input(entry.keyDiscussionPointsController,
+                      'Key Discussion Points (biopsychosocial factors)', maxLines: 5),
+                  _input(entry.keyOutcomesController, 'Key Outcomes of Meeting', maxLines: 4),
+                  _input(entry.observationsOnDynamicsController,
+                      'Any Observations on Dynamics of Meeting', maxLines: 4),
+
+                  // ── Client consultation ────────────────────────────────
+                  _subHeading('Client Consultation'),
+                  _dropdown(
+                    label: 'Did you have the opportunity to speak with the client individually?',
+                    value: entry.clientSpokenToIndividually,
+                    options: _yesNoOptions,
+                    labels: _yesNoLabels,
+                    onChanged: (v) => setState(() => entry.clientSpokenToIndividually = v),
+                  ),
+                  if (entry.clientSpokenToIndividually == 'YES')
+                    _input(entry.clientConsultationOutcomeController,
+                        'Outcome of the discussion', maxLines: 4),
+                  if (entry.clientSpokenToIndividually == 'NO')
+                    _input(entry.clientConsultationOutcomeController,
+                        'Note date for follow-up visit', readOnly: true,
+                        onTap: () => _pickDate(entry.clientConsultationOutcomeController)),
+
+                  // ── Next conference / follow-up ────────────────────────
+                  _subHeading('Next Case Conference / Follow-up'),
+                  _input(entry.nextConferenceDateController, 'Date',
+                      readOnly: true, onTap: () => _pickDate(entry.nextConferenceDateController)),
+                  _two(
+                    _dropdown(
+                      label: 'Type',
+                      value: entry.nextConferenceType,
+                      options: _conferenceTypeOptions,
+                      labels: _conferenceTypeLabels,
+                      onChanged: (v) => setState(() => entry.nextConferenceType = v),
+                    ),
+                    _dropdown(
+                      label: 'Location',
+                      value: entry.nextConferenceLocation,
+                      options: _conferenceLocationOptions,
+                      labels: _conferenceLocationLabels,
+                      onChanged: (v) => setState(() => entry.nextConferenceLocation = v),
+                    ),
+                  ),
+                  if (entry.nextConferenceLocation == 'OFFICE' || entry.nextConferenceLocation == 'OTHER')
+                    _input(entry.nextConferenceLocationOtherController, 'Specify location'),
+                  _input(entry.nextConferencePurposeController,
+                      'Type, location, purpose and aim', maxLines: 3),
+                ],
+              ),
+            ),
+          ], // end if (!isCollapsed)
+        ],
+      ),
+    );
+  }
+
+
   Widget _part4() {
     return _surface(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _sectionTitle(
-            'Part 4: External Informant Interviews',
-            'Record information gathered from neighbours, teachers, community leaders, relatives, nurses, or other external sources who know the client.',
+            'Part 4: Supplementary Assessments',
+            'Optional records gathered outside the core investigation — external informant interviews and case conference proceedings.',
+          ),
+
+          // ── External Informant Interviews ─────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 6),
+            child: Text('External Informant Interviews',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: widget.color)),
           ),
           if (_externalInformantEntries.isEmpty)
             _optionalAddCard(
@@ -2568,7 +3567,8 @@ class _MgysdSocialInvestigationPageState
             Row(
               children: [
                 const Expanded(
-                  child: Text('External Informants', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900)),
+                  child: Text('External Informants',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
                 ),
                 TextButton.icon(
                   onPressed: _addExternalInformantEntry,
@@ -2577,12 +3577,129 @@ class _MgysdSocialInvestigationPageState
                 ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             ...List.generate(
               _externalInformantEntries.length,
                   (index) => _externalInformantCard(index, _externalInformantEntries[index]),
             ),
           ],
+
+          const SizedBox(height: 8),
+          const Divider(),
+          const SizedBox(height: 4),
+
+          // ── Case Conference Records ───────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 6),
+            child: Text('Case Conference Records',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: widget.color)),
+          ),
+          if (_caseConferenceEntries.isEmpty)
+            _optionalAddCard(
+              title: 'Case Conference Record',
+              subtitle: 'Add a record when a multi-party case conference has been held.',
+              icon: Icons.groups_outlined,
+              onAdd: _addCaseConferenceEntry,
+            ),
+          if (_caseConferenceEntries.isNotEmpty) ...[
+            Row(
+              children: [
+                const Expanded(
+                  child: Text('Case Conferences',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                ),
+                TextButton.icon(
+                  onPressed: _addCaseConferenceEntry,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add conference'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ...List.generate(
+              _caseConferenceEntries.length,
+                  (index) => _caseConferenceCard(index, _caseConferenceEntries[index]),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+
+  Widget _linkedCarePlanSection() {
+    final carePlan = _linkedCarePlan;
+    if (carePlan == null) return const SizedBox.shrink();
+
+    final isSuperseded = _isLinkedCarePlanSuperseded();
+    final lifecycleLabel = _linkedCarePlanLifecycleLabel();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5FB),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: widget.color.withOpacity(0.18)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.025),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 21,
+            backgroundColor: widget.color.withOpacity(0.12),
+            child: Icon(
+              Icons.assignment_outlined,
+              color: widget.color,
+              size: 21,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Linked Care Plan',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'Lifecycle: $lifecycleLabel • one plan per investigation',
+                  style: const TextStyle(
+                    color: Colors.blueGrey,
+                    fontSize: 12.2,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          OutlinedButton.icon(
+            onPressed: _openLinkedCarePlan,
+            icon: Icon(
+              isSuperseded ? Icons.visibility_outlined : Icons.open_in_new,
+              size: 17,
+            ),
+            label: Text(isSuperseded ? 'View' : 'Open'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: widget.color,
+              side: BorderSide(color: widget.color.withOpacity(0.45)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -2609,6 +3726,7 @@ class _MgysdSocialInvestigationPageState
           padding: const EdgeInsets.all(16),
           children: [
             _header(),
+            _linkedCarePlanSection(),
             _part1(),
             _part2(),
             _part3(),
