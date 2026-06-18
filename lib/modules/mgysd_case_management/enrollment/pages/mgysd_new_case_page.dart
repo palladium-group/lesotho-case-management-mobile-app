@@ -87,12 +87,14 @@ class _HouseholdMemberEntry {
   String sex;
   String relationshipToClient;
   String hasDisability;
+  bool isExpanded;
 
   _HouseholdMemberEntry({
     required this.id,
     this.sex = '',
     this.relationshipToClient = '',
     this.hasDisability = '',
+    this.isExpanded = true,
   })  : firstNameController = TextEditingController(),
         surnameController = TextEditingController(),
         dobController = TextEditingController(),
@@ -101,6 +103,9 @@ class _HouseholdMemberEntry {
         contactsController = TextEditingController(),
         disabilitySpecifyController = TextEditingController(),
         relationshipOtherController = TextEditingController();
+
+
+
 
 
   bool get hasAnyData {
@@ -128,6 +133,88 @@ class _HouseholdMemberEntry {
   }
 }
 
+class _CaregiverEntry {
+  final String id;
+  final TextEditingController nameController;
+  final TextEditingController surnameController;
+  final TextEditingController relationshipController;
+  final TextEditingController dobController;
+  final TextEditingController occupationController;
+  final TextEditingController phoneController;
+
+  String sex;
+  bool isExpanded;
+
+  _CaregiverEntry({
+    required this.id,
+    this.sex = '',
+    this.isExpanded = true,
+  })  : nameController = TextEditingController(),
+        surnameController = TextEditingController(),
+        relationshipController = TextEditingController(),
+        dobController = TextEditingController(),
+        occupationController = TextEditingController(),
+        phoneController = TextEditingController();
+
+  bool get hasAnyData {
+    return nameController.text.trim().isNotEmpty ||
+        surnameController.text.trim().isNotEmpty ||
+        relationshipController.text.trim().isNotEmpty ||
+        dobController.text.trim().isNotEmpty ||
+        occupationController.text.trim().isNotEmpty ||
+        phoneController.text.trim().isNotEmpty ||
+        sex.trim().isNotEmpty;
+  }
+
+  void dispose() {
+    nameController.dispose();
+    surnameController.dispose();
+    relationshipController.dispose();
+    dobController.dispose();
+    occupationController.dispose();
+    phoneController.dispose();
+  }
+}
+
+class _NextOfKinEntry {
+  final String id;
+  final TextEditingController firstNameController;
+  final TextEditingController surnameController;
+  final TextEditingController phoneController;
+  final TextEditingController physicalAddressController;
+  final TextEditingController relationshipOtherController;
+
+  String relationship;
+  bool isExpanded;
+
+
+  _NextOfKinEntry({
+    required this.id,
+    this.relationship = '',
+    this.isExpanded = true,
+  })  : firstNameController = TextEditingController(),
+        surnameController = TextEditingController(),
+        phoneController = TextEditingController(),
+        physicalAddressController = TextEditingController(),
+        relationshipOtherController = TextEditingController();
+
+  bool get hasAnyData {
+    return firstNameController.text.trim().isNotEmpty ||
+        surnameController.text.trim().isNotEmpty ||
+        phoneController.text.trim().isNotEmpty ||
+        physicalAddressController.text.trim().isNotEmpty ||
+        relationship.trim().isNotEmpty;
+  }
+
+  void dispose() {
+    firstNameController.dispose();
+    surnameController.dispose();
+    phoneController.dispose();
+    physicalAddressController.dispose();
+    relationshipOtherController.dispose();
+  }
+}
+
 class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   final _formKey = GlobalKey<FormState>();
 
@@ -150,11 +237,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   final _schoolNameController = TextEditingController();
   final _employerNameController = TextEditingController();
 
-  final _nextOfKinFirstNameController = TextEditingController();
-  final _nextOfKinSurnameController = TextEditingController();
-  final _nextOfKinPhoneController = TextEditingController();
-  final _nextOfKinPhysicalAddressController = TextEditingController();
-  final _nextOfKinRelationshipOtherController = TextEditingController();
 
   final _fatherFirstNameController = TextEditingController();
   final _fatherSurnameController = TextEditingController();
@@ -170,12 +252,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   final _motherWhyNotLivingController = TextEditingController();
   final _motherPhoneController = TextEditingController();
 
-  final _caregiverNameController = TextEditingController();
-  final _caregiverSurnameController = TextEditingController();
-  final _caregiverRelationshipController = TextEditingController();
-  final _caregiverDobController = TextEditingController();
-  final _caregiverOccupationController = TextEditingController();
-  final _caregiverPhoneController = TextEditingController();
 
   final _personalAssistantNameController = TextEditingController();
   final _personalAssistantSurnameController = TextEditingController();
@@ -229,14 +305,12 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   String _grade = '';
   String _schoolAttendanceStatus = '';
   String _isAdultEmployed = '';
-  String _nextOfKinRelationship = '';
 
   String _fatherAlive = '';
   String _fatherLivingWithChild = '';
   String _motherAlive = '';
   String _motherLivingWithChild = '';
 
-  String _caregiverSex = '';
   String _personalAssistantSex = '';
 
   String _hasEmergencyActionTaken = '';
@@ -296,6 +370,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   final Set<String> _riskServicesAccessed = {};
   final Set<String> _riskNextSteps = {};
   final List<_HouseholdMemberEntry> _otherHouseholdMembers = [];
+  final List<_CaregiverEntry> _caregivers = [];
+  final List<_NextOfKinEntry> _nextOfKins = [];
 
   static const String mgysdAssessedHouseholdsProgramId =
       MgysdDhis2Uids.assessedHouseholdsProgram;
@@ -793,7 +869,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   bool get _isChild => _clientCategory == 'CHILD';
   bool get _isDisabledYes => _isDisabled == 'YES';
   bool get _showGuardianOption => _isDisabledYes;
-  bool get _nextOfKinRelationshipIsOther => _nextOfKinRelationship == 'OTHER';
   bool get _reasonOtherSelected => _selectedReasonOptions.contains('OTHER');
 
   int? get _clientAge => int.tryParse(_clientAgeController.text.trim());
@@ -812,7 +887,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
 
     _addContactedPhoneNumber();
     _addServiceProvided();
-    _addOtherHouseholdMember();
     _loadLocationTree();
   }
 
@@ -834,11 +908,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _nationalityOtherController.dispose();
     _schoolNameController.dispose();
     _employerNameController.dispose();
-    _nextOfKinFirstNameController.dispose();
-    _nextOfKinSurnameController.dispose();
-    _nextOfKinPhoneController.dispose();
-    _nextOfKinPhysicalAddressController.dispose();
-    _nextOfKinRelationshipOtherController.dispose();
     _fatherFirstNameController.dispose();
     _fatherSurnameController.dispose();
     _fatherDobController.dispose();
@@ -851,12 +920,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _motherOccupationController.dispose();
     _motherWhyNotLivingController.dispose();
     _motherPhoneController.dispose();
-    _caregiverNameController.dispose();
-    _caregiverSurnameController.dispose();
-    _caregiverRelationshipController.dispose();
-    _caregiverDobController.dispose();
-    _caregiverOccupationController.dispose();
-    _caregiverPhoneController.dispose();
     _personalAssistantNameController.dispose();
     _personalAssistantSurnameController.dispose();
     _personalAssistantRelationshipController.dispose();
@@ -897,6 +960,13 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       item.dispose();
     }
     for (final item in _otherHouseholdMembers) {
+      item.dispose();
+    }
+    for (final item in _caregivers) {
+      item.dispose();
+    }
+
+    for (final item in _nextOfKins) {
       item.dispose();
     }
 
@@ -1279,9 +1349,32 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     setState(() {
       final item = _otherHouseholdMembers.removeAt(index);
       item.dispose();
-      if (_otherHouseholdMembers.isEmpty) {
-        _otherHouseholdMembers.add(_HouseholdMemberEntry(id: _newId()));
-      }
+    });
+  }
+
+  void _addCaregiver() {
+    setState(() {
+      _caregivers.add(_CaregiverEntry(id: _newId()));
+    });
+  }
+
+  void _removeCaregiver(int index) {
+    setState(() {
+      final item = _caregivers.removeAt(index);
+      item.dispose();
+    });
+  }
+
+  void _addNextOfKin() {
+    setState(() {
+      _nextOfKins.add(_NextOfKinEntry(id: _newId()));
+    });
+  }
+
+  void _removeNextOfKin(int index) {
+    setState(() {
+      final item = _nextOfKins.removeAt(index);
+      item.dispose();
     });
   }
 
@@ -1311,15 +1404,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         _controllerHasData(_motherPhoneController);
   }
 
-  bool _caregiverHasData() {
-    return _controllerHasData(_caregiverNameController) ||
-        _controllerHasData(_caregiverSurnameController) ||
-        _caregiverSex.trim().isNotEmpty ||
-        _controllerHasData(_caregiverRelationshipController) ||
-        _controllerHasData(_caregiverDobController) ||
-        _controllerHasData(_caregiverOccupationController) ||
-        _controllerHasData(_caregiverPhoneController);
-  }
 
   bool _personalAssistantHasData() {
     return _isDisabledYes &&
@@ -1698,13 +1782,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         attSchoolAttendanceStatus: _schoolAttendanceStatus,
         attIsAdultEmployed: _isAdultEmployed,
         attEmployerName: _employerNameController.text,
-        attNextOfKinFirstName: _nextOfKinFirstNameController.text,
-        attNextOfKinSurname: _nextOfKinSurnameController.text,
-        attNextOfKinPhone: _nextOfKinPhoneController.text,
-        attNextOfKinPhysicalAddress: _nextOfKinPhysicalAddressController.text,
-        attNextOfKinRelationship: _nextOfKinRelationship,
-        attNextOfKinRelationshipOther:
-        _nextOfKinRelationshipOtherController.text,
         // Parent/caregiver/person details are NOT stored on the client TEI.
         // They are saved below as their own separate TEIs using the same generic
         // person attributes: firstName, lastName, dob, sex, occupation, phone.
@@ -1888,7 +1965,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         );
       }
 
-      if (_caregiverHasData()) {
+      for (final caregiver in _caregivers.where((c) => c.hasAnyData)) {
         await _savePersonAsFamilyMember(
           db: db,
           householdTeiId: householdTeiId,
@@ -1896,13 +1973,30 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           memberRole: 'CAREGIVER',
           enrollInFamilyMembersProgram: shouldEnrollForCaseManagement,
           attrs: {
-            attFirstName: _caregiverNameController.text,
-            attLastName: _caregiverSurnameController.text,
-            attSex: _caregiverSex,
-            attRelationshipToClient: _caregiverRelationshipController.text,
-            attDob: _caregiverDobController.text,
-            attOccupation: _caregiverOccupationController.text,
-            attPhone: _caregiverPhoneController.text,
+            attFirstName: caregiver.nameController.text,
+            attLastName: caregiver.surnameController.text,
+            attSex: caregiver.sex,
+            attRelationshipToClient: caregiver.relationshipController.text,
+            attDob: caregiver.dobController.text,
+            attOccupation: caregiver.occupationController.text,
+            attPhone: caregiver.phoneController.text,
+          },
+        );
+      }
+
+      for (final nextOfKin in _nextOfKins.where((n) => n.hasAnyData)) {
+        await _savePersonAsFamilyMember(
+          db: db,
+          householdTeiId: householdTeiId,
+          orgUnit: orgUnit,
+          memberRole: nextOfKin.relationship.isEmpty ? 'NEXT_OF_KIN' : nextOfKin.relationship,
+          enrollInFamilyMembersProgram: shouldEnrollForCaseManagement,
+          attrs: {
+            attFirstName: nextOfKin.firstNameController.text,
+            attLastName: nextOfKin.surnameController.text,
+            attPhone: nextOfKin.phoneController.text,
+            attRelationshipToClient: nextOfKin.relationship,
+            attRelationshipToClientOther: nextOfKin.relationshipOtherController.text,
           },
         );
       }
@@ -1964,6 +2058,45 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Widget _collapsibleCardHeader({
+    required String title,
+    required String summary,
+    required bool isExpanded,
+    required VoidCallback onToggle,
+    required VoidCallback onDelete,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: GestureDetector(
+            onTap: onToggle,
+            child: Row(
+              children: [
+                Icon(
+                  isExpanded ? Icons.expand_less : Icons.expand_more,
+                  color: Colors.blueGrey,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    summary.trim().isEmpty ? title : summary,
+                    style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        IconButton(
+          onPressed: onDelete,
+          icon: const Icon(Icons.delete_outline),
+          color: Colors.redAccent,
+        ),
+      ],
+    );
   }
 
   Widget _titleRow({
@@ -2589,9 +2722,11 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       }
     }
 
-    final caregiverName = '${_caregiverNameController.text.trim()} ${_caregiverSurnameController.text.trim()}'.trim();
-    if (caregiverName.isNotEmpty) {
-      members.add(_Opt('CAREGIVER', 'Caregiver: $caregiverName'));
+    for (final caregiver in _caregivers) {
+      final caregiverName = '${caregiver.nameController.text.trim()} ${caregiver.surnameController.text.trim()}'.trim();
+      if (caregiverName.isNotEmpty) {
+        members.add(_Opt(caregiver.id, 'Caregiver: $caregiverName'));
+      }
     }
 
     final personalAssistantName = '${_personalAssistantNameController.text.trim()} ${_personalAssistantSurnameController.text.trim()}'.trim();
@@ -3131,7 +3266,87 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     );
   }
 
-  Widget _caregiverSection() {
+
+  Widget _caregiverCard(int index, _CaregiverEntry caregiver) {
+    final summary = '${caregiver.nameController.text.trim()} ${caregiver.surnameController.text.trim()}'.trim();
+
+    return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF9FBFD),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+        _collapsibleCardHeader(
+        title: 'Caregiver ${index + 1}',
+          summary: summary,
+          isExpanded: caregiver.isExpanded,
+          onToggle: () => setState(() => caregiver.isExpanded = !caregiver.isExpanded),
+          onDelete: () => _removeCaregiver(index),
+        ),
+        if (caregiver.isExpanded) ...[
+          const SizedBox(height: 10),
+          _row2(
+            _Input(
+              controller: caregiver.nameController,
+              label: 'Name',
+              hint: 'Caregiver name',
+            ),
+            _Input(
+              controller: caregiver.surnameController,
+              label: 'Surname',
+              hint: 'Caregiver surname',
+            ),
+          ),
+          const SizedBox(height: 10),
+          _row2(
+            _dropdown(
+              label: 'Sex',
+              value: caregiver.sex,
+              options: sexOptions,
+              onChanged: (v) => setState(() => caregiver.sex = v ?? ''),
+            ),
+            _Input(
+              controller: caregiver.relationshipController,
+              label: 'Relationship with client',
+              hint: 'e.g. Aunt, Grandmother',
+            ),
+          ),
+          const SizedBox(height: 10),
+          _row2(
+            _dateInput(
+              controller: caregiver.dobController,
+              label: 'Date of Birth',
+              hint: 'Pick date',
+            ),
+            _Input(
+              controller: caregiver.occupationController,
+              label: 'Occupation',
+              hint: 'Enter occupation',
+            ),
+          ),
+          const SizedBox(height: 10),
+          _Input(
+            controller: caregiver.phoneController,
+            label: 'Phone Number',
+            hint: 'e.g. 5xxxxxxx',
+            keyboardType: TextInputType.phone,
+          ),
+        ],
+          ],
+        ),
+    );
+  }
+
+  Widget _nextOfKinCard(int index, _NextOfKinEntry nextOfKin) {
+    final isOther = nextOfKin.relationship == 'OTHER';
+    final summary = '${nextOfKin.firstNameController.text.trim()} ${nextOfKin.surnameController.text.trim()}'.trim();
+
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 12),
@@ -3144,57 +3359,98 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Caregiver',
-              style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 10),
-          _row2(
-            _Input(
-              controller: _caregiverNameController,
-              label: 'Name',
-              hint: 'Caregiver name',
-            ),
-            _Input(
-              controller: _caregiverSurnameController,
-              label: 'Surname',
-              hint: 'Caregiver surname',
-            ),
+          _collapsibleCardHeader(
+            title: 'Next of Kin ${index + 1}',
+            summary: summary,
+            isExpanded: nextOfKin.isExpanded,
+            onToggle: () => setState(() => nextOfKin.isExpanded = !nextOfKin.isExpanded),
+            onDelete: () => _removeNextOfKin(index),
           ),
-          const SizedBox(height: 10),
-          _row2(
+          if (nextOfKin.isExpanded) ...[
+            const SizedBox(height: 10),
+            _row2(
+              _Input(
+                controller: nextOfKin.firstNameController,
+                label: 'First name',
+                hint: 'Next of kin first name',
+              ),
+              _Input(
+                controller: nextOfKin.surnameController,
+                label: 'Surname',
+                hint: 'Next of kin surname',
+              ),
+            ),
+            const SizedBox(height: 10),
+            _Input(
+              controller: nextOfKin.phoneController,
+              label: 'Phone Number',
+              hint: 'e.g. 5xxxxxxx',
+              keyboardType: TextInputType.phone,
+            ),
+            const SizedBox(height: 10),
+            _Input(
+              controller: nextOfKin.physicalAddressController,
+              label: 'Physical Address',
+              hint: 'Describe physical address',
+              maxLines: 3,
+            ),
+            const SizedBox(height: 10),
             _dropdown(
-              label: 'Sex',
-              value: _caregiverSex,
-              options: sexOptions,
-              onChanged: (v) => setState(() => _caregiverSex = v ?? ''),
+              label: 'Relationship to Client',
+              value: nextOfKin.relationship,
+              options: _nextOfKinRelationshipOptions(),
+              requiredField: true,
+              onChanged: (v) {
+                setState(() {
+                  nextOfKin.relationship = v ?? '';
+                  if (nextOfKin.relationship != 'OTHER') {
+                    nextOfKin.relationshipOtherController.clear();
+                  }
+                });
+              },
             ),
-            _Input(
-              controller: _caregiverRelationshipController,
-              label: 'Relationship with client',
-              hint: 'e.g. Aunt, Grandmother',
-            ),
-          ),
-          const SizedBox(height: 10),
-          _row2(
-            _dateInput(
-              controller: _caregiverDobController,
-              label: 'Date of Birth',
-              hint: 'Pick date',
-            ),
-            _Input(
-              controller: _caregiverOccupationController,
-              label: 'Occupation',
-              hint: 'Enter occupation',
-            ),
-          ),
-          const SizedBox(height: 10),
-          _Input(
-            controller: _caregiverPhoneController,
-            label: 'Phone Number',
-            hint: 'e.g. 5xxxxxxx',
-            keyboardType: TextInputType.phone,
-          ),
+            if (isOther) ...[
+              const SizedBox(height: 10),
+              _Input(
+                controller: nextOfKin.relationshipOtherController,
+                label: 'Specify other relationship',
+                hint: 'Enter relationship',
+                validator: (v) {
+                  if (isOther && (v == null || v.trim().isEmpty)) {
+                    return 'Please specify relationship';
+                  }
+                  return null;
+                },
+              ),
+            ],
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _caregiverSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Caregivers',
+            style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 10),
+        ...List.generate(
+          _caregivers.length,
+              (index) => _caregiverCard(index, _caregivers[index]),
+        ),
+        OutlinedButton.icon(
+          onPressed: _addCaregiver,
+          icon: const Icon(Icons.add),
+          label: const Text('Add caregiver'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: widget.color,
+            side: BorderSide(color: widget.color),
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
     );
   }
 
@@ -3360,6 +3616,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     );
   }
 
+
   Widget _householdMemberCard(int index, _HouseholdMemberEntry member) {
     final relationshipOptions = _relationshipOptionsForMemberSex(member.sex);
     final safeRelationship = relationshipOptions
@@ -3370,6 +3627,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     if (safeRelationship != member.relationshipToClient) {
       member.relationshipToClient = '';
     }
+
+    final summary = '${member.firstNameController.text.trim()} ${member.surnameController.text.trim()}'.trim();
 
     return Container(
       width: double.infinity,
@@ -3383,135 +3642,126 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Household Member ${index + 1}',
-                  style: const TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w800,
+          _collapsibleCardHeader(
+            title: 'Household Member ${index + 1}',
+            summary: summary,
+            isExpanded: member.isExpanded,
+            onToggle: () => setState(() => member.isExpanded = !member.isExpanded),
+            onDelete: () => _removeOtherHouseholdMember(index),
+          ),
+          if (member.isExpanded) ...[
+            const SizedBox(height: 10),
+            _row2(
+              _Input(
+                controller: member.firstNameController,
+                label: 'First name',
+                hint: 'Enter first name',
+              ),
+              _Input(
+                controller: member.surnameController,
+                label: 'Surname',
+                hint: 'Enter surname',
+              ),
+            ),
+            const SizedBox(height: 10),
+            _row2(
+              GestureDetector(
+                onTap: () => _pickDobForHouseholdMember(member),
+                child: AbsorbPointer(
+                  child: _Input(
+                    controller: member.dobController,
+                    label: 'Date of Birth',
+                    hint: 'Pick date',
+                    suffixIcon: const Icon(Icons.date_range),
                   ),
                 ),
               ),
-              IconButton(
-                onPressed: () => _removeOtherHouseholdMember(index),
-                icon: const Icon(Icons.delete_outline),
-                color: Colors.redAccent,
+              _Input(
+                controller: member.ageController,
+                label: 'Age',
+                hint: 'Auto-calculated',
+                readOnly: true,
+              ),
+            ),
+            const SizedBox(height: 10),
+            _row2(
+              _dropdown(
+                label: 'Sex',
+                value: member.sex,
+                options: sexOptions,
+                onChanged: (v) {
+                  setState(() {
+                    member.sex = v ?? '';
+                    member.relationshipToClient = '';
+                  });
+                },
+              ),
+              _dropdown(
+                label: 'Relationship to client',
+                value: safeRelationship,
+                options: relationshipOptions,
+                onChanged: (v) {
+                  setState(() {
+                    member.relationshipToClient = v ?? '';
+                    if (member.relationshipToClient != 'OTHER') {
+                      member.relationshipOtherController.clear();
+                    }
+                  });
+                },
+              ),
+            ),
+            if (member.relationshipToClient == 'OTHER') ...[
+              const SizedBox(height: 10),
+              _Input(
+                controller: member.relationshipOtherController,
+                label: 'Specify other relationship',
+                hint: 'Enter relationship to client',
+                validator: (v) {
+                  if (member.relationshipToClient == 'OTHER' &&
+                      (v == null || v.trim().isEmpty)) {
+                    return 'Please specify relationship';
+                  }
+                  return null;
+                },
               ),
             ],
-          ),
-          const SizedBox(height: 10),
-          _row2(
-            _Input(
-              controller: member.firstNameController,
-              label: 'First name',
-              hint: 'Enter first name',
-            ),
-            _Input(
-              controller: member.surnameController,
-              label: 'Surname',
-              hint: 'Enter surname',
-            ),
-          ),
-          const SizedBox(height: 10),
-          _row2(
-            GestureDetector(
-              onTap: () => _pickDobForHouseholdMember(member),
-              child: AbsorbPointer(
-                child: _Input(
-                  controller: member.dobController,
-                  label: 'Date of Birth',
-                  hint: 'Pick date',
-                  suffixIcon: const Icon(Icons.date_range),
-                ),
+            const SizedBox(height: 10),
+            _row2(
+              _Input(
+                controller: member.occupationController,
+                label: 'Occupation',
+                hint: 'Enter occupation',
+              ),
+              _Input(
+                controller: member.contactsController,
+                label: 'Contacts',
+                hint: 'Phone / contact details',
+                keyboardType: TextInputType.phone,
               ),
             ),
-            _Input(
-              controller: member.ageController,
-              label: 'Age',
-              hint: 'Auto-calculated',
-              readOnly: true,
-            ),
-          ),
-          const SizedBox(height: 10),
-          _row2(
+            const SizedBox(height: 10),
             _dropdown(
-              label: 'Sex',
-              value: member.sex,
-              options: sexOptions,
+              label: 'Any Disability?',
+              value: member.hasDisability,
+              options: yesNoOptions,
               onChanged: (v) {
                 setState(() {
-                  member.sex = v ?? '';
-                  member.relationshipToClient = '';
-                });
-              },
-            ),
-            _dropdown(
-              label: 'Relationship to client',
-              value: safeRelationship,
-              options: relationshipOptions,
-              onChanged: (v) {
-                setState(() {
-                  member.relationshipToClient = v ?? '';
-                  if (member.relationshipToClient != 'OTHER') {
-                    member.relationshipOtherController.clear();
+                  member.hasDisability = v ?? '';
+                  if (member.hasDisability != 'YES') {
+                    member.disabilitySpecifyController.clear();
                   }
                 });
               },
             ),
-          ),
-          if (member.relationshipToClient == 'OTHER') ...[
-            const SizedBox(height: 10),
-            _Input(
-              controller: member.relationshipOtherController,
-              label: 'Specify other relationship',
-              hint: 'Enter relationship to client',
-              validator: (v) {
-                if (member.relationshipToClient == 'OTHER' &&
-                    (v == null || v.trim().isEmpty)) {
-                  return 'Please specify relationship';
-                }
-                return null;
-              },
-            ),
-          ],
-          const SizedBox(height: 10),
-          _row2(
-            _Input(
-              controller: member.occupationController,
-              label: 'Occupation',
-              hint: 'Enter occupation',
-            ),
-            _Input(
-              controller: member.contactsController,
-              label: 'Contacts',
-              hint: 'Phone / contact details',
-              keyboardType: TextInputType.phone,
-            ),
-          ),
-          const SizedBox(height: 10),
-          _dropdown(
-            label: 'Any Disability?',
-            value: member.hasDisability,
-            options: yesNoOptions,
-            onChanged: (v) {
-              setState(() {
-                member.hasDisability = v ?? '';
-                if (member.hasDisability != 'YES') {
-                  member.disabilitySpecifyController.clear();
-                }
-              });
-            },
-          ),
-          if (member.hasDisability == 'YES') ...[
-            const SizedBox(height: 10),
-            _Input(
-              controller: member.disabilitySpecifyController,
-              label: 'Specify disability',
-              hint: 'Describe disability',
-              maxLines: 3,
-            ),
+            if (member.hasDisability == 'YES') ...[
+              const SizedBox(height: 10),
+              _Input(
+                controller: member.disabilitySpecifyController,
+                label: 'Specify disability',
+                hint: 'Describe disability',
+                maxLines: 3,
+              ),
+            ],
           ],
         ],
       ),
@@ -3751,9 +4001,12 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                             onChanged: (v) {
                               setState(() {
                                 _isDisabled = v ?? '';
-                                if (!_showGuardianOption &&
-                                    _nextOfKinRelationship == 'GUARDIAN') {
-                                  _nextOfKinRelationship = '';
+                                if (!_showGuardianOption) {
+                                  for (final nextOfKin in _nextOfKins) {
+                                    if (nextOfKin.relationship == 'GUARDIAN') {
+                                      nextOfKin.relationship = '';
+                                    }
+                                  }
                                 }
                                 if (!_isDisabledYes) {
                                   _personalAssistantNameController.clear();
@@ -4033,60 +4286,23 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                             color: primary,
                             title: 'Details of Next of Kin or Significant Other',
                             subtitle:
-                            'Capture the main contact person linked to the client.',
+                            'Capture the main contact person(s) linked to the client.',
                             icon: Icons.contact_phone_outlined,
                           ),
                           const SizedBox(height: 12),
-                          _row2(
-                            _Input(
-                              controller: _nextOfKinFirstNameController,
-                              label: 'First name',
-                              hint: 'Next of kin first name',
+                          ...List.generate(
+                            _nextOfKins.length,
+                                (index) => _nextOfKinCard(index, _nextOfKins[index]),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: _addNextOfKin,
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add next of kin'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: widget.color,
+                              side: BorderSide(color: widget.color),
                             ),
-                            _Input(
-                              controller: _nextOfKinSurnameController,
-                              label: 'Surname',
-                              hint: 'Next of kin surname',
-                            ),
                           ),
-                          const SizedBox(height: 10),
-                          _Input(
-                            controller: _nextOfKinPhoneController,
-                            label: 'Phone Number',
-                            hint: 'e.g. 5xxxxxxx',
-                            keyboardType: TextInputType.phone,
-                          ),
-                          const SizedBox(height: 10),
-                          _Input(
-                            controller: _nextOfKinPhysicalAddressController,
-                            label: 'Physical Address',
-                            hint: 'Describe physical address',
-                            maxLines: 3,
-                          ),
-                          const SizedBox(height: 10),
-                          _dropdown(
-                            label: 'Relationship to Client',
-                            value: _nextOfKinRelationship,
-                            options: _nextOfKinRelationshipOptions(),
-                            requiredField: true,
-                            onChanged: (v) {
-                              setState(() {
-                                _nextOfKinRelationship = v ?? '';
-                                if (_nextOfKinRelationship != 'OTHER') {
-                                  _nextOfKinRelationshipOtherController.clear();
-                                }
-                              });
-                            },
-                          ),
-                          if (_nextOfKinRelationshipIsOther) ...[
-                            const SizedBox(height: 10),
-                            _Input(
-                              controller:
-                              _nextOfKinRelationshipOtherController,
-                              label: 'Specify other relationship',
-                              hint: 'Enter relationship',
-                            ),
-                          ],
                         ],
                       ),
                     ),
