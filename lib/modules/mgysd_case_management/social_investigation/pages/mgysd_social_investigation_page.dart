@@ -627,13 +627,55 @@ class _MgysdSocialInvestigationPageState
     'OTHER': 'Other',
   };
 
-  // Country code for informant contact number (Section B)
-  static const List<String> _countryCodeOptions = ['+266', '+27', 'OTHER'];
-  static const Map<String, String> _countryCodeLabels = {
-    '+266': '+266 (Lesotho)',
-    '+27': '+27 (South Africa)',
-    'OTHER': 'Other',
-  };
+  // Country data for informant contact number (Section B)
+  static const List<Map<String, dynamic>> _countries = [
+    {'name': 'Lesotho',              'code': '+266', 'flag': '🇱🇸', 'digits': 8,  'validPrefixes': ['5','6','2']},
+    {'name': 'South Africa',         'code': '+27',  'flag': '🇿🇦', 'digits': 9,  'validPrefixes': []},
+    {'name': 'Zimbabwe',             'code': '+263', 'flag': '🇿🇼', 'digits': 9,  'validPrefixes': ['7','8']},
+    {'name': 'Mozambique',           'code': '+258', 'flag': '🇲🇿', 'digits': 9,  'validPrefixes': ['8']},
+    {'name': 'Botswana',             'code': '+267', 'flag': '🇧🇼', 'digits': 8,  'validPrefixes': ['7','3']},
+    {'name': 'Namibia',              'code': '+264', 'flag': '🇳🇦', 'digits': 9,  'validPrefixes': ['8','6']},
+    {'name': 'Eswatini',             'code': '+268', 'flag': '🇸🇿', 'digits': 8,  'validPrefixes': ['7','2']},
+    {'name': 'Zambia',               'code': '+260', 'flag': '🇿🇲', 'digits': 9,  'validPrefixes': ['9','7']},
+    {'name': 'Malawi',               'code': '+265', 'flag': '🇲🇼', 'digits': 9,  'validPrefixes': ['8','9']},
+    {'name': 'Tanzania',             'code': '+255', 'flag': '🇹🇿', 'digits': 9,  'validPrefixes': ['7','6']},
+    {'name': 'Kenya',                'code': '+254', 'flag': '🇰🇪', 'digits': 9,  'validPrefixes': ['7','1']},
+    {'name': 'Uganda',               'code': '+256', 'flag': '🇺🇬', 'digits': 9,  'validPrefixes': ['7','3']},
+    {'name': 'Ethiopia',             'code': '+251', 'flag': '🇪🇹', 'digits': 9,  'validPrefixes': ['9','1']},
+    {'name': 'Ghana',                'code': '+233', 'flag': '🇬🇭', 'digits': 9,  'validPrefixes': ['2','5']},
+    {'name': 'Nigeria',              'code': '+234', 'flag': '🇳🇬', 'digits': 10, 'validPrefixes': ['7','8','9']},
+    {'name': 'Egypt',                'code': '+20',  'flag': '🇪🇬', 'digits': 10, 'validPrefixes': ['1']},
+    {'name': 'Angola',               'code': '+244', 'flag': '🇦🇴', 'digits': 9,  'validPrefixes': ['9']},
+    {'name': 'DR Congo',             'code': '+243', 'flag': '🇨🇩', 'digits': 9,  'validPrefixes': ['8','9']},
+    {'name': 'Rwanda',               'code': '+250', 'flag': '🇷🇼', 'digits': 9,  'validPrefixes': ['7']},
+    {'name': 'Madagascar',           'code': '+261', 'flag': '🇲🇬', 'digits': 9,  'validPrefixes': ['3']},
+    {'name': 'United Kingdom',       'code': '+44',  'flag': '🇬🇧', 'digits': 10, 'validPrefixes': []},
+    {'name': 'United States',        'code': '+1',   'flag': '🇺🇸', 'digits': 10, 'validPrefixes': []},
+    {'name': 'Canada',               'code': '+1',   'flag': '🇨🇦', 'digits': 10, 'validPrefixes': []},
+    {'name': 'Australia',            'code': '+61',  'flag': '🇦🇺', 'digits': 9,  'validPrefixes': ['4']},
+    {'name': 'India',                'code': '+91',  'flag': '🇮🇳', 'digits': 10, 'validPrefixes': ['6','7','8','9']},
+    {'name': 'China',                'code': '+86',  'flag': '🇨🇳', 'digits': 11, 'validPrefixes': ['1']},
+    {'name': 'Germany',              'code': '+49',  'flag': '🇩🇪', 'digits': 10, 'validPrefixes': []},
+    {'name': 'France',               'code': '+33',  'flag': '🇫🇷', 'digits': 9,  'validPrefixes': ['6','7']},
+    {'name': 'Portugal',             'code': '+351', 'flag': '🇵🇹', 'digits': 9,  'validPrefixes': ['9']},
+    {'name': 'Netherlands',          'code': '+31',  'flag': '🇳🇱', 'digits': 9,  'validPrefixes': ['6']},
+    {'name': 'Sweden',               'code': '+46',  'flag': '🇸🇪', 'digits': 9,  'validPrefixes': ['7']},
+    {'name': 'Norway',               'code': '+47',  'flag': '🇳🇴', 'digits': 8,  'validPrefixes': []},
+    {'name': 'Denmark',              'code': '+45',  'flag': '🇩🇰', 'digits': 8,  'validPrefixes': []},
+    {'name': 'Switzerland',          'code': '+41',  'flag': '🇨🇭', 'digits': 9,  'validPrefixes': ['7']},
+    {'name': 'Italy',                'code': '+39',  'flag': '🇮🇹', 'digits': 10, 'validPrefixes': ['3']},
+    {'name': 'Spain',                'code': '+34',  'flag': '🇪🇸', 'digits': 9,  'validPrefixes': ['6','7']},
+    {'name': 'Brazil',               'code': '+55',  'flag': '🇧🇷', 'digits': 11, 'validPrefixes': ['9']},
+    {'name': 'Japan',                'code': '+81',  'flag': '🇯🇵', 'digits': 10, 'validPrefixes': ['7','8','9']},
+    {'name': 'South Korea',          'code': '+82',  'flag': '🇰🇷', 'digits': 10, 'validPrefixes': ['1']},
+    {'name': 'Saudi Arabia',         'code': '+966', 'flag': '🇸🇦', 'digits': 9,  'validPrefixes': ['5']},
+    {'name': 'United Arab Emirates', 'code': '+971', 'flag': '🇦🇪', 'digits': 9,  'validPrefixes': ['5']},
+    {'name': 'Qatar',                'code': '+974', 'flag': '🇶🇦', 'digits': 8,  'validPrefixes': ['3','5','6','7']},
+    {'name': 'New Zealand',          'code': '+64',  'flag': '🇳🇿', 'digits': 9,  'validPrefixes': ['2']},
+    {'name': 'Pakistan',             'code': '+92',  'flag': '🇵🇰', 'digits': 10, 'validPrefixes': ['3']},
+    {'name': 'Bangladesh',           'code': '+880', 'flag': '🇧🇩', 'digits': 10, 'validPrefixes': ['1']},
+    {'name': 'Other',                'code': '',     'flag': '🌍', 'digits': 0,  'validPrefixes': []},
+  ];
 
   // How long the informant has known the client (Section D) — range dropdown
   static const List<String> _howLongKnownOptions = [
@@ -2466,6 +2508,236 @@ class _MgysdSocialInvestigationPageState
     );
   }
 
+  // Auto-capitalizes the first letter of every word as the user types
+  Widget _capitalizedInput(TextEditingController controller, String label,
+      {String? Function(String?)? validator}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextFormField(
+        controller: controller,
+        textCapitalization: TextCapitalization.words,
+        validator: validator,
+        onChanged: (value) {
+          final capitalized = value.split(' ').map((word) {
+            if (word.isEmpty) return word;
+            return word[0].toUpperCase() + word.substring(1);
+          }).join(' ');
+          if (capitalized != value) {
+            controller.value = controller.value.copyWith(
+              text: capitalized,
+              selection: TextSelection.collapsed(offset: capitalized.length),
+            );
+          }
+        },
+        decoration: InputDecoration(
+          labelText: label,
+          filled: true,
+          fillColor: const Color(0xFFF9FBFD),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(13)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
+      ),
+    );
+  }
+
+  // Returns the country map for a given dial code string stored in entry
+  Map<String, dynamic>? _countryForCode(String code) {
+    if (code.isEmpty) return null;
+    try {
+      return _countries.firstWhere((c) => c['code'] == code && c['name'] != 'Other');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Validates a phone number against the selected country's rules
+  String? _validatePhone(String number, String dialCode) {
+    if (number.trim().isEmpty) return null; // optional field
+    final country = _countryForCode(dialCode);
+    if (country == null) return null; // Other / unknown — no rules to apply
+    final digits = number.trim().replaceAll(RegExp(r'\D'), '');
+    final expectedDigits = country['digits'] as int;
+    final validPrefixes = country['validPrefixes'] as List<dynamic>;
+    if (validPrefixes.isNotEmpty && !validPrefixes.any((p) => digits.startsWith(p.toString()))) {
+      final prefixList = validPrefixes.map((p) => p.toString()).join(', ');
+      return '${country['name']} numbers must start with $prefixList';
+    }
+    if (expectedDigits > 0 && digits.length != expectedDigits) {
+      return '${country['name']} numbers must be $expectedDigits digits';
+    }
+    return null;
+  }
+
+  // Searchable country picker bottom sheet
+  Future<void> _showCountryPicker(_ExternalInformantEntry entry) async {
+    final TextEditingController searchController = TextEditingController();
+    List<Map<String, dynamic>> filtered = List.from(_countries);
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(builder: (ctx, setSheetState) {
+          void onSearch(String query) {
+            final q = query.trim().toLowerCase();
+            setSheetState(() {
+              filtered = _countries.where((c) {
+                final name = (c['name'] as String).toLowerCase();
+                final code = (c['code'] as String).toLowerCase();
+                return name.contains(q) || code.contains(q);
+              }).toList();
+            });
+          }
+
+          return DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.65,
+            maxChildSize: 0.92,
+            minChildSize: 0.4,
+            builder: (_, scrollController) {
+              return Padding(
+                padding: EdgeInsets.only(
+                  left: 16, right: 16, top: 16,
+                  bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text('Select Country',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: searchController,
+                      autofocus: true,
+                      onChanged: onSearch,
+                      decoration: InputDecoration(
+                        hintText: 'Search by country or code (e.g. Lesotho or +266)',
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        filled: true,
+                        fillColor: const Color(0xFFF3F4F6),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: ListView.builder(
+                        controller: scrollController,
+                        itemCount: filtered.length,
+                        itemBuilder: (_, i) {
+                          final c = filtered[i];
+                          final isSelected = entry.contactCountryCode == c['code']
+                              && c['name'] != 'Other';
+                          final isOtherSelected = c['name'] == 'Other'
+                              && entry.contactCountryCode == '';
+                          return ListTile(
+                            dense: true,
+                            selected: isSelected || isOtherSelected,
+                            selectedTileColor: widget.color.withOpacity(0.07),
+                            leading: Text(c['flag'] as String,
+                                style: const TextStyle(fontSize: 22)),
+                            title: Text(c['name'] as String,
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                            trailing: Text(
+                              c['name'] == 'Other' ? '' : c['code'] as String,
+                              style: const TextStyle(fontSize: 13, color: Colors.blueGrey),
+                            ),
+                            onTap: () {
+                              setState(() {
+                                entry.contactCountryCode =
+                                c['name'] == 'Other' ? '' : c['code'] as String;
+                              });
+                              Navigator.pop(ctx);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        });
+      },
+    );
+    searchController.dispose();
+  }
+
+  // Phone input with searchable country picker and inline validation
+  Widget _phoneInput({required _ExternalInformantEntry entry}) {
+    final country = _countryForCode(entry.contactCountryCode);
+    final isOther = entry.contactCountryCode.isEmpty;
+    final flagAndCode = isOther
+        ? '🌍  Other'
+        : '${country?['flag'] ?? '🌍'}  ${entry.contactCountryCode}';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Country picker button
+          GestureDetector(
+            onTap: () => _showCountryPicker(entry),
+            child: Container(
+              height: 50,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FBFD),
+                borderRadius: BorderRadius.circular(13),
+                border: Border.all(color: Colors.blueGrey.withOpacity(0.35)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(flagAndCode, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.arrow_drop_down, size: 18, color: Colors.blueGrey),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Number input with validation
+          Expanded(
+            child: TextFormField(
+              controller: entry.contactNumberController,
+              keyboardType: TextInputType.phone,
+              validator: (v) => _validatePhone(v ?? '', entry.contactCountryCode),
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              decoration: InputDecoration(
+                labelText: country != null
+                    ? 'Phone Number (${country['digits']} digits)'
+                    : 'Phone Number',
+                filled: true,
+                fillColor: const Color(0xFFF9FBFD),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(13)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _externalInformantCard(int index, _ExternalInformantEntry entry) {
     final cardLabel = entry.fullName.isNotEmpty
         ? entry.fullName
@@ -2591,9 +2863,9 @@ class _MgysdSocialInvestigationPageState
                   // ── Section B: Informant Details ──────────────────────
                   _subHeading('Section B: Informant Details'),
                   _two(
-                    _input(entry.firstNameController, 'First Name',
+                    _capitalizedInput(entry.firstNameController, 'First Name',
                         validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null),
-                    _input(entry.surnameController, 'Surname',
+                    _capitalizedInput(entry.surnameController, 'Surname',
                         validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null),
                   ),
                   _two(
@@ -2629,27 +2901,7 @@ class _MgysdSocialInvestigationPageState
                     child: Text('Contact Details',
                         style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.blueGrey)),
                   ),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 130,
-                        child: _dropdown(
-                          label: 'Code',
-                          value: entry.contactCountryCode,
-                          options: _countryCodeOptions,
-                          labels: _countryCodeLabels,
-                          onChanged: (v) => setState(() => entry.contactCountryCode = v),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _input(entry.contactNumberController, 'Phone Number', keyboardType: TextInputType.phone),
-                      ),
-                    ],
-                  ),
-                  if (entry.contactCountryCode == 'OTHER')
-                    _input(entry.contactCountryCodeOtherController, 'Please specify country code', keyboardType: TextInputType.phone),
+                  _phoneInput(entry: entry),
                   _input(entry.physicalAddressController, 'Physical Address', maxLines: 2),
 
                   // ── Section C: Purpose of Interview ───────────────────
