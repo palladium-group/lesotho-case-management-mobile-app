@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:lncmis_mobile_app/app_state/current_user_state/current_user_state.dart';
 import 'package:lncmis_mobile_app/core/utils/app_util.dart';
 import 'package:lncmis_mobile_app/core/utils/form_util.dart';
@@ -44,137 +43,6 @@ class MgysdOption {
   });
 }
 
-
-
-class MgysdTitleCaseTextFormatter extends TextInputFormatter {
-  const MgysdTitleCaseTextFormatter();
-
-  @override
-  TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue,
-      TextEditingValue newValue,
-      ) {
-    final formatted = _toTitleCase(newValue.text);
-    if (formatted == newValue.text) return newValue;
-
-    final selectionEnd = newValue.selection.end;
-    final safeOffset = selectionEnd < 0
-        ? formatted.length
-        : selectionEnd.clamp(0, formatted.length).toInt();
-
-    return TextEditingValue(
-      text: formatted,
-      selection: TextSelection.collapsed(offset: safeOffset),
-      composing: TextRange.empty,
-    );
-  }
-
-  static String _toTitleCase(String value) {
-    final buffer = StringBuffer();
-    var capitaliseNext = true;
-
-    for (final rune in value.runes) {
-      final char = String.fromCharCode(rune);
-      final isLetter = RegExp(r'[A-Za-zÀ-ÖØ-öø-ÿ]').hasMatch(char);
-
-      if (isLetter) {
-        buffer.write(capitaliseNext ? char.toUpperCase() : char.toLowerCase());
-        capitaliseNext = false;
-      } else {
-        buffer.write(char);
-        capitaliseNext = char.trim().isEmpty || char == '-' || char == "'" || char == '’';
-      }
-    }
-
-    return buffer.toString();
-  }
-}
-
-class MgysdCountryCodeOption {
-  final String code;
-  final String label;
-  final String dialCode;
-  final int minNationalDigits;
-  final int maxNationalDigits;
-  final List<String> allowedNationalPrefixes;
-  final String prefixHint;
-  final bool useNanpRules;
-
-  const MgysdCountryCodeOption({
-    required this.code,
-    required this.label,
-    required this.dialCode,
-    this.minNationalDigits = 7,
-    this.maxNationalDigits = 12,
-    this.allowedNationalPrefixes = const [],
-    this.prefixHint = '',
-    this.useNanpRules = false,
-  });
-}
-
-class MgysdPhoneNumberInputFormatter extends TextInputFormatter {
-  final MgysdCountryCodeOption country;
-
-  const MgysdPhoneNumberInputFormatter(this.country);
-
-  @override
-  TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue,
-      TextEditingValue newValue,
-      ) {
-    final formatted = country.code == 'INTL'
-        ? _formatInternationalNumber(newValue.text)
-        : _formatNationalNumber(newValue.text);
-
-    return TextEditingValue(
-      text: formatted,
-      selection: TextSelection.collapsed(offset: formatted.length),
-      composing: TextRange.empty,
-    );
-  }
-
-  String _formatInternationalNumber(String value) {
-    final trimmed = value.trim();
-    final hasLeadingPlus = trimmed.startsWith('+');
-    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
-    final limitedDigits = digits.length > country.maxNationalDigits
-        ? digits.substring(0, country.maxNationalDigits)
-        : digits;
-
-    if (limitedDigits.isEmpty) {
-      return hasLeadingPlus ? '+' : '';
-    }
-
-    return hasLeadingPlus ? '+$limitedDigits' : limitedDigits;
-  }
-
-  String _formatNationalNumber(String value) {
-    final dialDigits = country.dialCode.replaceAll('+', '');
-    var digits = value.replaceAll(RegExp(r'[^0-9]'), '');
-
-    // If the user pastes a full number such as +26658881234 or 26658881234,
-    // keep only the national part because the country code is already selected.
-    if (digits.startsWith(dialDigits) && digits.length > dialDigits.length) {
-      digits = digits.substring(dialDigits.length);
-    }
-
-    // Remove a leading trunk 0 so countries like South Africa/UK can be typed
-    // as 082... or 071... while still storing only the national digits after +code.
-    if (digits.startsWith('0')) {
-      final withoutLeadingZeros = digits.replaceFirst(RegExp(r'^0+'), '');
-      if (withoutLeadingZeros.isNotEmpty) {
-        digits = withoutLeadingZeros;
-      }
-    }
-
-    if (digits.length > country.maxNationalDigits) {
-      digits = digits.substring(0, country.maxNationalDigits);
-    }
-
-    return digits;
-  }
-}
-
 class MgysdFormFieldDef {
   final String id;
   final String label;
@@ -202,14 +70,10 @@ class MgysdClientEntry {
   final TextEditingController alternatePhoneController;
   final TextEditingController districtController;
   final TextEditingController communityCouncilController;
-  final TextEditingController physicalAddressController;
-  final TextEditingController relationshipOtherController;
+  final TextEditingController contactOtherController;
 
   String sex;
-  String contactNumberType;
-  String phoneCountryCode;
-  String alternatePhoneCountryCode;
-  String relationshipToClient;
+  String contactMethod;
   String districtOrgUnit;
   String communityCouncilOrgUnit;
 
@@ -222,13 +86,9 @@ class MgysdClientEntry {
     String alternatePhone = '',
     String district = '',
     String communityCouncil = '',
-    String physicalAddress = '',
-    String relationshipOther = '',
+    String contactOther = '',
     this.sex = '',
-    this.contactNumberType = '',
-    this.phoneCountryCode = 'LS',
-    this.alternatePhoneCountryCode = 'LS',
-    this.relationshipToClient = '',
+    this.contactMethod = '',
     this.districtOrgUnit = '',
     this.communityCouncilOrgUnit = '',
   })  : firstNameController = TextEditingController(text: firstName),
@@ -238,8 +98,7 @@ class MgysdClientEntry {
         alternatePhoneController = TextEditingController(text: alternatePhone),
         districtController = TextEditingController(text: district),
         communityCouncilController = TextEditingController(text: communityCouncil),
-        physicalAddressController = TextEditingController(text: physicalAddress),
-        relationshipOtherController = TextEditingController(text: relationshipOther);
+        contactOtherController = TextEditingController(text: contactOther);
 
   void dispose() {
     firstNameController.dispose();
@@ -249,8 +108,7 @@ class MgysdClientEntry {
     alternatePhoneController.dispose();
     districtController.dispose();
     communityCouncilController.dispose();
-    physicalAddressController.dispose();
-    relationshipOtherController.dispose();
+    contactOtherController.dispose();
   }
 
   Map<String, dynamic> toJson() {
@@ -259,28 +117,22 @@ class MgysdClientEntry {
       'lastName': lastNameController.text.trim(),
       'age': ageController.text.trim(),
       'sex': sex,
-      'contactNumberType': contactNumberType,
-      'phoneCountryCode': phoneCountryCode,
-      'alternatePhoneCountryCode': alternatePhoneCountryCode,
       'phone': phoneController.text.trim(),
       'alternatePhone': alternatePhoneController.text.trim(),
       'district': districtController.text.trim(),
       'districtOrgUnit': districtOrgUnit,
       'communityCouncil': communityCouncilController.text.trim(),
       'communityCouncilOrgUnit': communityCouncilOrgUnit,
-      'relationshipToClient': relationshipToClient,
-      'relationshipToClientOther': relationshipOtherController.text.trim(),
-      'physicalAddress': physicalAddressController.text.trim(),
-      // Kept for backward compatibility with any existing readers that expect this key.
-      'howToContactClient': physicalAddressController.text.trim(),
+      'howToContactClient': contactMethod,
+      'contactOtherSpecify': contactOtherController.text.trim(),
     };
   }
 }
+
 class MgysdPersonInvolvedEntry {
   final String localId;
   final TextEditingController firstNameController;
   final TextEditingController lastNameController;
-  final TextEditingController roleOtherController;
 
   String roleOrRelationship;
 
@@ -288,16 +140,13 @@ class MgysdPersonInvolvedEntry {
     required this.localId,
     String firstName = '',
     String lastName = '',
-    String roleOther = '',
     this.roleOrRelationship = '',
   })  : firstNameController = TextEditingController(text: firstName),
-        lastNameController = TextEditingController(text: lastName),
-        roleOtherController = TextEditingController(text: roleOther);
+        lastNameController = TextEditingController(text: lastName);
 
   void dispose() {
     firstNameController.dispose();
     lastNameController.dispose();
-    roleOtherController.dispose();
   }
 
   Map<String, dynamic> toJson() {
@@ -309,7 +158,6 @@ class MgysdPersonInvolvedEntry {
       'lastName': lastName,
       'name': [firstName, lastName].where((part) => part.isNotEmpty).join(' '),
       'roleOrRelationship': roleOrRelationship,
-      'roleOrRelationshipOther': roleOtherController.text.trim(),
     };
   }
 }
@@ -345,6 +193,7 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
   static const String deReporterDob = MgysdDhis2Uids.deReporterDob;
   static const String deReporterAge = MgysdDhis2Uids.deReporterAge;
   static const String deReporterSex = MgysdDhis2Uids.deReporterSex;
+  static const String deReporterOccupation = MgysdDhis2Uids.deReporterOccupation;
 
   static const String deClientsJson = MgysdDhis2Uids.deClientsJson;
   static const String dePeopleInvolvedJson = MgysdDhis2Uids.dePeopleInvolvedJson;
@@ -361,12 +210,7 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
 
   final Set<String> _selectedConcernReasons = {};
   final TextEditingController _concernOtherController = TextEditingController();
-
-  final Map<String, String> _phoneCountryCodes = {
-    deReporterPhone: 'LS',
-    deReporterAltPhone: 'LS',
-  };
-
+  final TextEditingController _occupationOtherController = TextEditingController();
 
   List<MgysdFormFieldDef> get aboutReporterFields => const [
     MgysdFormFieldDef(
@@ -407,6 +251,19 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       ],
     ),
     MgysdFormFieldDef(
+      id: deReporterOccupation,
+      label: 'Occupation',
+      type: MgysdFieldType.option,
+      options: [
+        MgysdOption(code: 'Teacher', label: 'Teacher'),
+        MgysdOption(code: 'Police', label: 'Police'),
+        MgysdOption(code: 'Chief', label: 'Chief'),
+        MgysdOption(code: 'Neighbor', label: 'Neighbor'),
+        MgysdOption(code: 'Nurse', label: 'Nurse'),
+        MgysdOption(code: 'Other', label: 'Other'),
+      ],
+    ),
+    MgysdFormFieldDef(
       id: deReporterVillage,
       label: 'Reporter Village',
       type: MgysdFieldType.textShort,
@@ -439,6 +296,26 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       id: deReporterAltPhone,
       label: 'Alternate phone',
       type: MgysdFieldType.phone,
+    ),
+    MgysdFormFieldDef(
+      id: deReporterRelationship,
+      label: 'Relationship to client',
+      type: MgysdFieldType.option,
+      requiredField: true,
+      options: [
+        MgysdOption(code: 'Parent', label: 'Parent'),
+        MgysdOption(code: 'Relative', label: 'Relative'),
+        MgysdOption(code: 'Neighbour', label: 'Neighbour'),
+        MgysdOption(code: 'Teacher', label: 'Teacher'),
+        MgysdOption(code: 'Priest', label: 'Priest'),
+        MgysdOption(code: 'Other', label: 'Other'),
+      ],
+    ),
+    MgysdFormFieldDef(
+      id: deReporterRelationshipOther,
+      label: 'Relationship (other)',
+      type: MgysdFieldType.textShort,
+      maxLen: 80,
     ),
   ];
 
@@ -498,140 +375,9 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     MgysdOption(code: 'Female', label: 'Female'),
   ];
 
-
-  static const List<MgysdCountryCodeOption> _phoneCountryOptions = [
-    MgysdCountryCodeOption(
-      code: 'LS',
-      label: 'Lesotho (+266)',
-      dialCode: '+266',
-      minNationalDigits: 8,
-      maxNationalDigits: 8,
-      allowedNationalPrefixes: ['5', '6'],
-      prefixHint: 'Lesotho mobile numbers must start with 5 or 6',
-    ),
-    MgysdCountryCodeOption(
-      code: 'ZA',
-      label: 'South Africa (+27)',
-      dialCode: '+27',
-      minNationalDigits: 9,
-      maxNationalDigits: 9,
-      allowedNationalPrefixes: [
-        '60',
-        '61',
-        '62',
-        '63',
-        '64',
-        '65',
-        '66',
-        '67',
-        '68',
-        '71',
-        '72',
-        '73',
-        '74',
-        '76',
-        '78',
-        '79',
-        '81',
-        '82',
-        '83',
-        '84',
-      ],
-      prefixHint: 'South African mobile numbers usually start with 6, 7 or 8 ranges such as 60, 71 or 82',
-    ),
-    MgysdCountryCodeOption(
-      code: 'BW',
-      label: 'Botswana (+267)',
-      dialCode: '+267',
-      minNationalDigits: 8,
-      maxNationalDigits: 8,
-      allowedNationalPrefixes: ['71', '72', '73', '74', '75', '76'],
-      prefixHint: 'Botswana mobile numbers must start with 71, 72, 73, 74, 75 or 76',
-    ),
-    MgysdCountryCodeOption(
-      code: 'SZ',
-      label: 'Eswatini (+268)',
-      dialCode: '+268',
-      minNationalDigits: 8,
-      maxNationalDigits: 8,
-      allowedNationalPrefixes: ['75', '76', '77', '78', '79'],
-      prefixHint: 'Eswatini mobile numbers must start with 75, 76, 77, 78 or 79',
-    ),
-    MgysdCountryCodeOption(
-      code: 'ZW',
-      label: 'Zimbabwe (+263)',
-      dialCode: '+263',
-      minNationalDigits: 9,
-      maxNationalDigits: 9,
-      allowedNationalPrefixes: ['71', '73', '77', '78'],
-      prefixHint: 'Zimbabwe mobile numbers must start with 71, 73, 77 or 78',
-    ),
-    MgysdCountryCodeOption(
-      code: 'MZ',
-      label: 'Mozambique (+258)',
-      dialCode: '+258',
-      minNationalDigits: 8,
-      maxNationalDigits: 9,
-      allowedNationalPrefixes: ['82', '83', '84', '85', '86', '87'],
-      prefixHint: 'Mozambique mobile numbers must start with 82, 83, 84, 85, 86 or 87',
-    ),
-    MgysdCountryCodeOption(
-      code: 'MW',
-      label: 'Malawi (+265)',
-      dialCode: '+265',
-      minNationalDigits: 7,
-      maxNationalDigits: 9,
-      allowedNationalPrefixes: ['1', '3', '7', '8', '9'],
-      prefixHint: 'Malawi numbers must start with an allocated range such as 1, 3, 7, 8 or 9',
-    ),
-    MgysdCountryCodeOption(
-      code: 'NA',
-      label: 'Namibia (+264)',
-      dialCode: '+264',
-      minNationalDigits: 9,
-      maxNationalDigits: 9,
-      allowedNationalPrefixes: ['81', '82', '83', '84', '85'],
-      prefixHint: 'Namibia mobile/electronic communications numbers must start with 81, 82, 83, 84 or 85',
-    ),
-    MgysdCountryCodeOption(
-      code: 'US',
-      label: 'USA/Canada (+1)',
-      dialCode: '+1',
-      minNationalDigits: 10,
-      maxNationalDigits: 10,
-      useNanpRules: true,
-      prefixHint: 'USA/Canada numbers must follow NANP format: area code and exchange code start with 2-9',
-    ),
-    MgysdCountryCodeOption(
-      code: 'GB',
-      label: 'United Kingdom (+44)',
-      dialCode: '+44',
-      minNationalDigits: 10,
-      maxNationalDigits: 10,
-      allowedNationalPrefixes: ['7'],
-      prefixHint: 'UK mobile numbers must start with 7 after the +44 country code',
-    ),
-    MgysdCountryCodeOption(
-      code: 'INTL',
-      label: 'Other country (use + code)',
-      dialCode: '+',
-      minNationalDigits: 8,
-      maxNationalDigits: 15,
-    ),
-  ];
-
-  static const List<MgysdOption> _clientContactNumberTypeOptions = [
-    MgysdOption(code: 'Client phone', label: 'Client phone'),
-    MgysdOption(code: 'Alternative number', label: 'Alternative'),
-    MgysdOption(code: 'Both', label: 'Both'),
-  ];
-
-  static const List<MgysdOption> _reporterRelationshipOptions = [
-    MgysdOption(code: 'Parent', label: 'Parent'),
-    MgysdOption(code: 'Relative', label: 'Relative'),
-    MgysdOption(code: 'Neighbour', label: 'Neighbour'),
-    MgysdOption(code: 'Teacher', label: 'Teacher'),
-    MgysdOption(code: 'Priest', label: 'Priest'),
+  static const List<MgysdOption> _contactMethodOptions = [
+    MgysdOption(code: 'School', label: 'School'),
+    MgysdOption(code: 'Home', label: 'Home'),
     MgysdOption(code: 'Other', label: 'Other'),
   ];
 
@@ -642,7 +388,6 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     MgysdOption(code: 'Siblings', label: 'Siblings'),
     MgysdOption(code: 'Son', label: 'Son'),
     MgysdOption(code: 'Daughter', label: 'Daughter'),
-    MgysdOption(code: 'Other', label: 'Other'),
   ];
 
   @override
@@ -671,6 +416,7 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     }
 
     _addClient();
+    _addPersonInvolved();
     _loadLocationTree();
   }
 
@@ -683,11 +429,15 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       person.dispose();
     }
     _concernOtherController.dispose();
+    _occupationOtherController.dispose();
     super.dispose();
   }
 
-  bool get _reporterIsAnonymous =>
-      (_values[deReporterAnonymous] ?? 'false') == 'true';
+  bool get _relationshipIsOther =>
+      (_values[deReporterRelationship] ?? '') == 'Other';
+
+  bool get _occupationIsOther =>
+      (_values[deReporterOccupation] ?? '') == 'Other';
 
   Color get _softBg => const Color(0xFFF6F7FB);
 
@@ -795,221 +545,13 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     return null;
   }
 
-  static const List<TextInputFormatter> _titleCaseInputFormatters = [
-    MgysdTitleCaseTextFormatter(),
-  ];
-
-  static final List<TextInputFormatter> _nameInputFormatters = [
-    FilteringTextInputFormatter.allow(RegExp(r"[A-Za-zÀ-ÖØ-öø-ÿ\s'’\-]")),
-    const MgysdTitleCaseTextFormatter(),
-  ];
-
-  bool _isNameFieldId(String id) {
-    return id == deReporterFirstName ||
-        id == deReporterLastName ||
-        id == deChiefFirstName ||
-        id == deChiefLastName;
-  }
-
-  String? _nameValidator(String? v, {required bool requiredField}) {
-    final requiredError = _requiredValidator(v, requiredField: requiredField);
-    if (requiredError != null) return requiredError;
-
-    final value = (v ?? '').trim();
-    if (value.isEmpty) return null;
-
-    final validName = RegExp(r"^[A-Za-zÀ-ÖØ-öø-ÿ]+(?:[\s'’\-][A-Za-zÀ-ÖØ-öø-ÿ]+)*$");
-    if (!validName.hasMatch(value)) {
-      return 'Use letters only';
-    }
-
-    return null;
-  }
-
-  MgysdCountryCodeOption _phoneCountryByCode(String code) {
-    for (final option in _phoneCountryOptions) {
-      if (option.code == code) return option;
-    }
-    return _phoneCountryOptions.first;
-  }
-
-  String _digitsOnly(String value) {
-    return value.replaceAll(RegExp(r'[^0-9]'), '');
-  }
-
-  bool _hasInvalidPhoneCharacters(String value) {
-    return RegExp(r'[^0-9+\s\-\(\)]').hasMatch(value);
-  }
-
-  bool _hasValidNationalLength(
-      String nationalDigits,
-      MgysdCountryCodeOption country,
-      ) {
-    return nationalDigits.length >= country.minNationalDigits &&
-        nationalDigits.length <= country.maxNationalDigits;
-  }
-
-  bool _hasValidNetworkPrefix(
-      String nationalDigits,
-      MgysdCountryCodeOption country,
-      ) {
-    if (country.code == 'INTL') return true;
-
-    if (country.useNanpRules) {
-      return RegExp(r'^[2-9][0-9]{2}[2-9][0-9]{6}$')
-          .hasMatch(nationalDigits);
-    }
-
-    if (country.allowedNationalPrefixes.isEmpty) return true;
-
-    return country.allowedNationalPrefixes.any(nationalDigits.startsWith);
-  }
-
-  String _phoneLengthMessage(MgysdCountryCodeOption country) {
-    if (country.minNationalDigits == country.maxNationalDigits) {
-      return '${country.label} numbers must have ${country.maxNationalDigits} digits after ${country.dialCode}';
-    }
-
-    return '${country.label} numbers must have ${country.minNationalDigits} to ${country.maxNationalDigits} digits after ${country.dialCode}';
-  }
-
-  void _validateNationalPhoneDigits(
-      String nationalDigits,
-      MgysdCountryCodeOption country,
-      ) {
-    if (!_hasValidNationalLength(nationalDigits, country)) {
-      throw FormatException(_phoneLengthMessage(country));
-    }
-
-    if (!_hasValidNetworkPrefix(nationalDigits, country)) {
-      throw FormatException(
-        country.prefixHint.isNotEmpty
-            ? country.prefixHint
-            : 'Phone number prefix does not match selected country',
-      );
-    }
-  }
-
-  String _normalisePhoneByCountryCode(
-      String value,
-      String countryCode,
-      ) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return '';
-
-    final country = _phoneCountryByCode(countryCode);
-    final compact = trimmed.replaceAll(RegExp(r'[\s\-\(\)]'), '');
-    final digits = _digitsOnly(compact);
-
-    if (digits.isEmpty) {
-      throw const FormatException('Phone number must contain digits');
-    }
-
-    if (country.code == 'INTL') {
-      if (!compact.startsWith('+')) {
-        throw const FormatException('International numbers must start with +');
-      }
-      if (digits.length < 8 || digits.length > 15) {
-        throw const FormatException('International numbers must have 8 to 15 digits');
-      }
-      return '+$digits';
-    }
-
-    final dialDigits = country.dialCode.replaceAll('+', '');
-
-    if (compact.startsWith('+')) {
-      if (!digits.startsWith(dialDigits)) {
-        throw const FormatException('Phone number country code does not match selected country');
-      }
-      final nationalDigits = digits.substring(dialDigits.length);
-      _validateNationalPhoneDigits(nationalDigits, country);
-      return '+$digits';
-    }
-
-    // Accept a value typed with the dial code but without the plus sign, e.g. 26658881234.
-    if (digits.startsWith(dialDigits)) {
-      final nationalDigits = digits.substring(dialDigits.length);
-      _validateNationalPhoneDigits(nationalDigits, country);
-      return '+$digits';
-    }
-
-    // Treat the value as a local number for the selected country.
-    final localDigits = digits.replaceFirst(RegExp(r'^0+'), '');
-    _validateNationalPhoneDigits(localDigits, country);
-
-    return '${country.dialCode}$localDigits';
-  }
-
-  String _normalisedPhoneNumber(String value, String countryCode) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return '';
-
-    try {
-      return _normalisePhoneByCountryCode(trimmed, countryCode);
-    } catch (_) {
-      return trimmed;
-    }
-  }
-
-  String? _phoneValidator(
-      String? v, {
-        required bool requiredField,
-        required String countryCode,
-      }) {
+  String? _phoneValidator(String? v, {required bool requiredField}) {
     final value = (v ?? '').trim();
     if (!requiredField && value.isEmpty) return null;
     if (value.isEmpty) return 'Required';
-
-    if (_hasInvalidPhoneCharacters(value)) {
-      return 'Use numbers only';
-    }
-
-    final country = _phoneCountryByCode(countryCode);
-
-    try {
-      _normalisePhoneByCountryCode(value, countryCode);
-      return null;
-    } on FormatException catch (e) {
-      if (country.code == 'INTL') {
-        return e.message.isNotEmpty
-            ? e.message
-            : 'Start with + country code, e.g. +266...';
-      }
-      return e.message.isNotEmpty
-          ? e.message
-          : 'Enter a valid ${country.label} phone number';
-    } catch (_) {
-      if (country.code == 'INTL') {
-        return 'Start with + country code, e.g. +266...';
-      }
-      return 'Enter a valid ${country.label} phone number';
-    }
-  }
-
-  String? _clientPhoneValidator({
-    required MgysdClientEntry client,
-    required String? value,
-  }) {
-    final selectedType = client.contactNumberType.trim();
-    final isRequired = selectedType == 'Client phone' || selectedType == 'Both';
-    return _phoneValidator(
-      value,
-      requiredField: isRequired,
-      countryCode: client.phoneCountryCode,
-    );
-  }
-
-  String? _clientAlternativePhoneValidator({
-    required MgysdClientEntry client,
-    required String? value,
-  }) {
-    final selectedType = client.contactNumberType.trim();
-    final isRequired = selectedType == 'Alternative number' || selectedType == 'Both';
-    return _phoneValidator(
-      value,
-      requiredField: isRequired,
-      countryCode: client.alternatePhoneCountryCode,
-    );
+    final digits = value.replaceAll(RegExp(r'[^0-9+]'), '');
+    if (digits.length < 8) return 'Enter a valid phone number';
+    return null;
   }
 
   String? _dateValidator(
@@ -1030,15 +572,6 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       final age = _calculateAge(parsed);
       if (age == null || age < 6) {
         return 'Reporter must be at least 6 years old';
-      }
-    }
-
-    if (fieldId == deWhenHappened) {
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final selectedDate = DateTime(parsed.year, parsed.month, parsed.day);
-      if (selectedDate.isAfter(today)) {
-        return 'Date incident happened cannot be in the future';
       }
     }
 
@@ -1076,15 +609,12 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     FocusScope.of(context).unfocus();
 
     final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final latestReporterDob = DateTime(today.year - 6, today.month, today.day);
+    final latestReporterDob = DateTime(now.year - 6, now.month, now.day);
     final latestAllowedDate = fieldId == deReporterDob
         ? latestReporterDob
-        : fieldId == deWhenHappened
-        ? today
-        : today.add(const Duration(days: 365));
+        : now.add(const Duration(days: 365));
 
-    DateTime initial = fieldId == deReporterDob ? latestReporterDob : today;
+    DateTime initial = fieldId == deReporterDob ? latestReporterDob : now;
     final existing = (_values[fieldId] ?? '').trim();
     final parsed = _parseDate(existing);
     if (parsed != null) initial = parsed;
@@ -1097,8 +627,6 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       lastDate: latestAllowedDate,
       helpText: fieldId == deReporterDob
           ? 'Select reporter date of birth (6 years or older)'
-          : fieldId == deWhenHappened
-          ? 'Select incident date'
           : 'Select date',
     );
 
@@ -1155,108 +683,78 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     });
   }
 
-  bool _shouldShowReporterField(MgysdFormFieldDef f) {
-    if (f.id == deReporterAnonymous) return true;
-    return !_reporterIsAnonymous;
-  }
-
-  Widget _countryCodeDropdown({
-    required String value,
-    required void Function(String?) onChanged,
-  }) {
-    final safeValue = _phoneCountryOptions.any((country) => country.code == value)
-        ? value
-        : _phoneCountryOptions.first.code;
-
-    return DropdownButtonFormField<String>(
-      value: safeValue,
-      isExpanded: true,
-      decoration: _decoration('Country code'),
-      items: _phoneCountryOptions
-          .map(
-            (country) => DropdownMenuItem<String>(
-          value: country.code,
-          child: Text(
-            country.label,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      )
-          .toList(),
-      onChanged: onChanged,
-    );
-  }
-
-  Widget _phoneInputField({
-    required String label,
-    required String countryCode,
-    required void Function(String?) onCountryChanged,
-    required bool requiredField,
-    required String? Function(String?) validator,
-    TextEditingController? controller,
-    String? initialValue,
-    void Function(String)? onChanged,
-  }) {
-    final country = _phoneCountryByCode(countryCode);
-    final phoneHint = country.code == 'INTL'
-        ? 'Start with + country code'
-        : country.minNationalDigits == country.maxNationalDigits
-        ? 'Enter ${country.maxNationalDigits} digits only'
-        : 'Enter ${country.minNationalDigits}-${country.maxNationalDigits} digits only';
-
-    final phoneField = TextFormField(
-      key: ValueKey('${label}_$countryCode'),
-      controller: controller,
-      initialValue: controller == null ? initialValue : null,
-      decoration: _decoration(
-        label,
-        icon: Icons.phone,
-        hint: phoneHint,
-        requiredField: requiredField,
-      ),
-      keyboardType: country.code == 'INTL'
-          ? TextInputType.phone
-          : TextInputType.number,
-      inputFormatters: [
-        MgysdPhoneNumberInputFormatter(country),
-      ],
-      onChanged: onChanged,
-      validator: validator,
-    );
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final twoCols = constraints.maxWidth >= 420;
-        final countryDropdown = _countryCodeDropdown(
-          value: countryCode,
-          onChanged: onCountryChanged,
-        );
-
-        if (twoCols) {
-          return Row(
-            children: [
-              SizedBox(width: 210, child: countryDropdown),
-              const SizedBox(width: 10),
-              Expanded(child: phoneField),
-            ],
-          );
-        }
-
-        return Column(
-          children: [
-            countryDropdown,
-            const SizedBox(height: 8),
-            phoneField,
-          ],
-        );
-      },
-    );
+  bool _shouldShowRelationshipOther(MgysdFormFieldDef f) {
+    if (f.id != deReporterRelationshipOther) return true;
+    return _relationshipIsOther;
   }
 
   Widget _buildField(MgysdFormFieldDef f) {
     switch (f.type) {
       case MgysdFieldType.option:
-      // Special-case multi-select for Concern reason
+      // Special-case occupation so that selecting Other requires a specification.
+        if (f.id == deReporterOccupation) {
+          final rawValue = (_values[f.id] ?? '').trim();
+          final safeValue = f.options.any((o) => o.code == rawValue) ? rawValue : null;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DropdownButtonFormField<String>(
+                value: safeValue,
+                isExpanded: true,
+                items: f.options
+                    .map(
+                      (o) => DropdownMenuItem<String>(
+                    value: o.code,
+                    child: Text(o.label, overflow: TextOverflow.ellipsis),
+                  ),
+                )
+                    .toList(),
+                onChanged: (v) => setState(() {
+                  _values[f.id] = v ?? '';
+                  if ((v ?? '') != 'Other') {
+                    _occupationOtherController.clear();
+                  }
+                }),
+                validator: (v) => _requiredValidator(
+                  v,
+                  requiredField: f.requiredField,
+                ),
+                decoration: _decoration(
+                  f.label,
+                  requiredField: f.requiredField,
+                ),
+              ),
+              if (_occupationIsOther) ...[
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _occupationOtherController,
+                  decoration: _decoration(
+                    'Specify occupation',
+                    requiredField: true,
+                  ),
+                  maxLength: 80,
+                  buildCounter: (
+                      context, {
+                        required currentLength,
+                        required isFocused,
+                        maxLength,
+                      }) {
+                    return null;
+                  },
+                  validator: (v) {
+                    if (_occupationIsOther && (v ?? '').trim().isEmpty) {
+                      return 'Required';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ],
+          );
+        }
+
+        // Special-case multi-select for Concern reason
         if (f.id == deConcernReason) {
           final selected = _selectedConcernReasons;
 
@@ -1362,10 +860,8 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
                                         padding: const EdgeInsets.only(left: 16.0, bottom: 8.0),
                                         child: TextFormField(
                                           controller: _concernOtherController,
-                                          inputFormatters: _titleCaseInputFormatters,
-                                          textCapitalization: TextCapitalization.sentences,
                                           decoration: InputDecoration(
-                                            labelText: 'Specify',
+                                            labelText: 'Please describe',
                                             border: OutlineInputBorder(
                                               borderRadius: BorderRadius.circular(12),
                                             ),
@@ -1427,10 +923,8 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
                                   padding: const EdgeInsets.only(left: 16.0, bottom: 8.0),
                                   child: TextFormField(
                                     controller: _concernOtherController,
-                                    inputFormatters: _titleCaseInputFormatters,
-                                    textCapitalization: TextCapitalization.sentences,
                                     decoration: InputDecoration(
-                                      labelText: 'Specify',
+                                      labelText: 'Please describe',
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(12),
                                       ),
@@ -1486,6 +980,9 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
               .toList(),
           onChanged: (v) => setState(() {
             _values[f.id] = v ?? '';
+            if (f.id == deReporterRelationship && (v ?? '') != 'Other') {
+              _values[deReporterRelationshipOther] = '';
+            }
           }),
           validator: (v) => _requiredValidator(v, requiredField: f.requiredField),
           decoration: _decoration(f.label, requiredField: f.requiredField),
@@ -1520,14 +1017,6 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
                 activeColor: widget.color,
                 onChanged: (val) => setState(() {
                   _values[f.id] = val ? 'true' : 'false';
-
-                  if (f.id == deReporterAnonymous && val) {
-                    for (final reporterField in aboutReporterFields) {
-                      if (reporterField.id != deReporterAnonymous) {
-                        _values[reporterField.id] = '';
-                      }
-                    }
-                  }
                 }),
               ),
             ],
@@ -1560,21 +1049,12 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
         );
 
       case MgysdFieldType.phone:
-        final countryCode = _phoneCountryCodes[f.id] ?? 'LS';
-        return _phoneInputField(
-          label: f.label,
-          countryCode: countryCode,
-          requiredField: f.requiredField,
+        return TextFormField(
           initialValue: (_values[f.id] ?? '').trim(),
+          decoration: _decoration(f.label, icon: Icons.phone, requiredField: f.requiredField),
+          keyboardType: TextInputType.phone,
           onChanged: (v) => _values[f.id] = v.trim(),
-          onCountryChanged: (v) => setState(() {
-            _phoneCountryCodes[f.id] = v ?? 'LS';
-          }),
-          validator: (v) => _phoneValidator(
-            v,
-            requiredField: f.requiredField,
-            countryCode: _phoneCountryCodes[f.id] ?? 'LS',
-          ),
+          validator: (v) => _phoneValidator(v, requiredField: f.requiredField),
         );
 
       case MgysdFieldType.integer:
@@ -1594,23 +1074,16 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
           initialValue: (_values[f.id] ?? '').trim(),
           decoration: _decoration(f.label, requiredField: f.requiredField),
           maxLines: 4,
-          inputFormatters: _titleCaseInputFormatters,
-          textCapitalization: TextCapitalization.sentences,
           onChanged: (v) => _values[f.id] = v.trim(),
           validator: (v) =>
               _requiredValidator(v, requiredField: f.requiredField),
         );
 
       case MgysdFieldType.textShort:
-        final isNameField = _isNameFieldId(f.id);
         return TextFormField(
           initialValue: (_values[f.id] ?? '').trim(),
           decoration: _decoration(f.label, requiredField: f.requiredField),
           maxLength: f.maxLen,
-          inputFormatters: isNameField
-              ? _nameInputFormatters
-              : _titleCaseInputFormatters,
-          textCapitalization: TextCapitalization.words,
           buildCounter: (
               context, {
                 required currentLength,
@@ -1620,9 +1093,8 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
             return null;
           },
           onChanged: (v) => _values[f.id] = v.trim(),
-          validator: (v) => isNameField
-              ? _nameValidator(v, requiredField: f.requiredField)
-              : _requiredValidator(v, requiredField: f.requiredField),
+          validator: (v) =>
+              _requiredValidator(v, requiredField: f.requiredField),
         );
     }
   }
@@ -1642,7 +1114,7 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     required double availableWidth,
   }) {
     final twoCols = _twoCols(availableWidth);
-    final visible = fields.where(_shouldShowReporterField).toList();
+    final visible = fields.where(_shouldShowRelationshipOther).toList();
 
     MgysdFormFieldDef? byId(String id) {
       for (final f in visible) {
@@ -1680,12 +1152,6 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       addField(anonymous);
     }
 
-    // When anonymous is selected, keep the toggle visible but hide the rest of
-    // the About Reporter fields.
-    if (_reporterIsAnonymous) {
-      return widgets;
-    }
-
     if (twoCols) {
       final rfn = byId(deReporterFirstName);
       final rln = byId(deReporterLastName);
@@ -1694,6 +1160,10 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       final dob = byId(deReporterDob);
       final age = byId(deReporterAge);
       if (dob != null && age != null) addRow(dob, age);
+
+      final sex = byId(deReporterSex);
+      final occupation = byId(deReporterOccupation);
+      if (sex != null && occupation != null) addRow(sex, occupation);
 
       final p1 = byId(deReporterPhone);
       final p2 = byId(deReporterAltPhone);
@@ -1894,103 +1364,19 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     );
   }
 
-  Widget _clientContactNumberTypeRadios(MgysdClientEntry client) {
-    void updateSelection(String? value, FormFieldState<String> state) {
-      setState(() {
-        client.contactNumberType = value ?? '';
-
-        if (client.contactNumberType == 'Client phone') {
-          client.alternatePhoneController.clear();
-        } else if (client.contactNumberType == 'Alternative number') {
-          client.phoneController.clear();
-        }
-      });
-      state.didChange(value ?? '');
-    }
-
-    return FormField<String>(
-      initialValue: client.contactNumberType,
-      validator: (value) {
-        if ((value ?? '').trim().isEmpty) return 'Required';
-        return null;
-      },
-      builder: (state) {
-        final currentValue = client.contactNumberType.trim().isNotEmpty
-            ? client.contactNumberType
-            : state.value;
-
-        Widget optionTile(MgysdOption option) {
-          return RadioListTile<String>(
-            value: option.code,
-            groupValue: currentValue,
-            onChanged: (value) => updateSelection(value, state),
-            dense: true,
-            activeColor: widget.color,
-            contentPadding: EdgeInsets.zero,
-            title: Text(option.label),
-          );
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: _requiredLabel(
-                'Contact number to provide',
-                requiredField: true,
-              ),
-            ),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final twoCols = constraints.maxWidth >= 520;
-                if (twoCols) {
-                  return Row(
-                    children: _clientContactNumberTypeOptions
-                        .map((option) => Expanded(child: optionTile(option)))
-                        .toList(),
-                  );
-                }
-
-                return Column(
-                  children: _clientContactNumberTypeOptions.map(optionTile).toList(),
-                );
-              },
-            ),
-            if (state.hasError)
-              Padding(
-                padding: const EdgeInsets.only(top: 4, left: 12),
-                child: Text(
-                  state.errorText ?? '',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.error,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-
   Widget _clientCard(int index, MgysdClientEntry client, double availableWidth) {
     final twoCols = _twoCols(availableWidth);
 
     Widget firstName = TextFormField(
       controller: client.firstNameController,
       decoration: _decoration('Client First name', requiredField: true),
-      inputFormatters: _nameInputFormatters,
-      textCapitalization: TextCapitalization.words,
-      validator: (v) => _nameValidator(v, requiredField: true),
+      validator: (v) => _requiredValidator(v, requiredField: true),
     );
 
     Widget lastName = TextFormField(
       controller: client.lastNameController,
       decoration: _decoration('Client Last name', requiredField: true),
-      inputFormatters: _nameInputFormatters,
-      textCapitalization: TextCapitalization.words,
-      validator: (v) => _nameValidator(v, requiredField: true),
+      validator: (v) => _requiredValidator(v, requiredField: true),
     );
 
     Widget age = TextFormField(
@@ -2010,77 +1396,46 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       }),
     );
 
-    Widget contactNumberType = _clientContactNumberTypeRadios(client);
-
-    Widget phone = _phoneInputField(
-      label: 'Client phone',
-      controller: client.phoneController,
-      countryCode: client.phoneCountryCode,
-      requiredField: true,
-      onCountryChanged: (v) => setState(() {
-        client.phoneCountryCode = v ?? 'LS';
-      }),
-      validator: (v) => _clientPhoneValidator(client: client, value: v),
-    );
-
-    Widget alternatePhone = _phoneInputField(
-      label: 'Alternative number',
-      controller: client.alternatePhoneController,
-      countryCode: client.alternatePhoneCountryCode,
-      requiredField: true,
-      onCountryChanged: (v) => setState(() {
-        client.alternatePhoneCountryCode = v ?? 'LS';
-      }),
-      validator: (v) => _clientAlternativePhoneValidator(client: client, value: v),
-    );
-
     Widget district = _clientDistrictDropdown(client);
 
     Widget communityCouncil = _clientCommunityCouncilDropdown(client);
 
-    Widget relationshipToClient = _dropdownFromOptions(
-      label: 'Relationship to client',
-      value: client.relationshipToClient,
-      options: _reporterRelationshipOptions,
+    Widget phone = TextFormField(
+      controller: client.phoneController,
+      decoration: _decoration('Client phone', icon: Icons.phone, requiredField: true),
+      keyboardType: TextInputType.phone,
+      validator: (v) => _phoneValidator(v, requiredField: true),
+    );
+
+    Widget alternatePhone = TextFormField(
+      controller: client.alternatePhoneController,
+      decoration: _decoration('Alternative number', icon: Icons.phone),
+      keyboardType: TextInputType.phone,
+      validator: (v) => _phoneValidator(v, requiredField: false),
+    );
+
+    Widget contactMethod = _dropdownFromOptions(
+      label: 'How to contact client',
+      value: client.contactMethod,
+      options: _contactMethodOptions,
       requiredField: true,
       onChanged: (v) => setState(() {
-        client.relationshipToClient = v ?? '';
-        if (client.relationshipToClient != 'Other') {
-          client.relationshipOtherController.clear();
+        client.contactMethod = v ?? '';
+        if (client.contactMethod != 'OTHER') {
+          client.contactOtherController.text = '';
         }
       }),
     );
 
-    Widget relationshipOther = TextFormField(
-      controller: client.relationshipOtherController,
-      decoration: _decoration('Specify relationship to client', requiredField: true),
-      inputFormatters: _titleCaseInputFormatters,
-      textCapitalization: TextCapitalization.words,
-      maxLength: 80,
-      buildCounter: (
-          context, {
-            required currentLength,
-            required isFocused,
-            maxLength,
-          }) {
-        return null;
-      },
+    Widget contactOther = TextFormField(
+      controller: client.contactOtherController,
+      decoration: _decoration('Specify other contact method'),
       validator: (v) {
-        if (client.relationshipToClient == 'Other' &&
-            (v ?? '').trim().isEmpty) {
+        if (client.contactMethod == 'OTHER' && (v ?? '').trim().isEmpty) {
           return 'Required';
         }
         return null;
       },
-    );
-
-    Widget physicalAddress = TextFormField(
-      controller: client.physicalAddressController,
-      decoration: _decoration('Client Physical Address', requiredField: true),
-      maxLines: 4,
-      inputFormatters: _titleCaseInputFormatters,
-      textCapitalization: TextCapitalization.sentences,
-      validator: (v) => _requiredValidator(v, requiredField: true),
     );
 
     final fields = <Widget>[
@@ -2100,43 +1455,21 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
         ),
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
-          child: contactNumberType,
+          child: _row2(phone, alternatePhone),
         ),
-        if (client.contactNumberType == 'Client phone')
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: phone,
-          ),
-        if (client.contactNumberType == 'Alternative number')
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: alternatePhone,
-          ),
-        if (client.contactNumberType == 'Both')
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _row2(phone, alternatePhone),
-          ),
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: _row2(district, communityCouncil),
         ),
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
-          child: relationshipToClient,
+          child: contactMethod,
         ),
       ] else ...[
         Padding(padding: const EdgeInsets.only(bottom: 10), child: age),
         Padding(padding: const EdgeInsets.only(bottom: 10), child: sex),
-        Padding(padding: const EdgeInsets.only(bottom: 10), child: contactNumberType),
-        if (client.contactNumberType == 'Client phone')
-          Padding(padding: const EdgeInsets.only(bottom: 10), child: phone),
-        if (client.contactNumberType == 'Alternative number')
-          Padding(padding: const EdgeInsets.only(bottom: 10), child: alternatePhone),
-        if (client.contactNumberType == 'Both') ...[
-          Padding(padding: const EdgeInsets.only(bottom: 10), child: phone),
-          Padding(padding: const EdgeInsets.only(bottom: 10), child: alternatePhone),
-        ],
+        Padding(padding: const EdgeInsets.only(bottom: 10), child: phone),
+        Padding(padding: const EdgeInsets.only(bottom: 10), child: alternatePhone),
         Padding(padding: const EdgeInsets.only(bottom: 10), child: district),
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
@@ -2144,18 +1477,14 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
         ),
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
-          child: relationshipToClient,
+          child: contactMethod,
         ),
       ],
-      if (client.relationshipToClient == 'Other')
+      if (client.contactMethod == 'OTHER')
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
-          child: relationshipOther,
+          child: contactOther,
         ),
-      Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: physicalAddress,
-      ),
     ];
 
     return Container(
@@ -2185,23 +1514,20 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       ),
     );
   }
+
   Widget _personInvolvedCard(int index, MgysdPersonInvolvedEntry person, double availableWidth) {
     final twoCols = _twoCols(availableWidth);
 
     Widget firstNameField = TextFormField(
       controller: person.firstNameController,
       decoration: _decoration('First name', requiredField: true),
-      inputFormatters: _nameInputFormatters,
-      textCapitalization: TextCapitalization.words,
-      validator: (v) => _nameValidator(v, requiredField: true),
+      validator: (v) => _requiredValidator(v, requiredField: true),
     );
 
     Widget lastNameField = TextFormField(
       controller: person.lastNameController,
       decoration: _decoration('Last name', requiredField: true),
-      inputFormatters: _nameInputFormatters,
-      textCapitalization: TextCapitalization.words,
-      validator: (v) => _nameValidator(v, requiredField: true),
+      validator: (v) => _requiredValidator(v, requiredField: true),
     );
 
     Widget roleRelationshipField = _dropdownFromOptions(
@@ -2211,33 +1537,7 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       requiredField: true,
       onChanged: (v) => setState(() {
         person.roleOrRelationship = v ?? '';
-        if (person.roleOrRelationship != 'Other') {
-          person.roleOtherController.clear();
-        }
       }),
-    );
-
-    Widget roleRelationshipOtherField = TextFormField(
-      controller: person.roleOtherController,
-      decoration: _decoration('Specify role / relationship', requiredField: true),
-      inputFormatters: _titleCaseInputFormatters,
-      textCapitalization: TextCapitalization.words,
-      maxLength: 80,
-      buildCounter: (
-          context, {
-            required currentLength,
-            required isFocused,
-            maxLength,
-          }) {
-        return null;
-      },
-      validator: (v) {
-        if (person.roleOrRelationship == 'Other' &&
-            (v ?? '').trim().isEmpty) {
-          return 'Required';
-        }
-        return null;
-      },
     );
 
     return Container(
@@ -2279,15 +1579,11 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
             const SizedBox(height: 8),
             roleRelationshipField,
           ],
-          if (person.roleOrRelationship == 'Other') ...[
-            const SizedBox(height: 10),
-            roleRelationshipOtherField,
-          ],
           const SizedBox(height: 8),
           Row(
             children: [
               const Spacer(),
-              if (_peopleInvolved.isNotEmpty)
+              if (_peopleInvolved.length > 1)
                 TextButton.icon(
                   onPressed: () => _removePersonInvolved(index),
                   icon: const Icon(Icons.delete, color: Colors.red),
@@ -2337,37 +1633,6 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     );
   }
 
-  Map<String, dynamic> _clientToJson(MgysdClientEntry client) {
-    final rawPhone = client.phoneController.text.trim();
-    final rawAlternatePhone = client.alternatePhoneController.text.trim();
-
-    return {
-      'firstName': client.firstNameController.text.trim(),
-      'lastName': client.lastNameController.text.trim(),
-      'age': client.ageController.text.trim(),
-      'sex': client.sex,
-      'contactNumberType': client.contactNumberType,
-      'phoneCountryCode': client.phoneCountryCode,
-      'alternatePhoneCountryCode': client.alternatePhoneCountryCode,
-      'phone': _normalisedPhoneNumber(rawPhone, client.phoneCountryCode),
-      'phoneRaw': rawPhone,
-      'alternatePhone': _normalisedPhoneNumber(
-        rawAlternatePhone,
-        client.alternatePhoneCountryCode,
-      ),
-      'alternatePhoneRaw': rawAlternatePhone,
-      'district': client.districtController.text.trim(),
-      'districtOrgUnit': client.districtOrgUnit,
-      'communityCouncil': client.communityCouncilController.text.trim(),
-      'communityCouncilOrgUnit': client.communityCouncilOrgUnit,
-      'relationshipToClient': client.relationshipToClient,
-      'relationshipToClientOther': client.relationshipOtherController.text.trim(),
-      'physicalAddress': client.physicalAddressController.text.trim(),
-      // Kept for backward compatibility with any existing readers that expect this key.
-      'howToContactClient': client.physicalAddressController.text.trim(),
-    };
-  }
-
   Future<void> _onSave() async {
     final currentUserState = Provider.of<CurrentUserState>(
       context,
@@ -2409,28 +1674,18 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       _values[deConcernReason] = _selectedConcernReasons.join(',');
       _values[deConcernReasonOther] = _concernOtherController.text.trim();
 
-      final clientsJson = _clients.map(_clientToJson).toList();
+      final clientsJson = _clients.map((c) => c.toJson()).toList();
       final peopleJson = _peopleInvolved.map((p) => p.toJson()).toList();
 
       final reporterMap = <String, String>{};
       for (final f in aboutReporterFields) {
         reporterMap[f.id] = _values[f.id] ?? '';
       }
-
-      reporterMap[deReporterPhone] = _normalisedPhoneNumber(
-        reporterMap[deReporterPhone] ?? '',
-        _phoneCountryCodes[deReporterPhone] ?? 'LS',
-      );
-      reporterMap[deReporterAltPhone] = _normalisedPhoneNumber(
-        reporterMap[deReporterAltPhone] ?? '',
-        _phoneCountryCodes[deReporterAltPhone] ?? 'LS',
-      );
-      if (clientsJson.isNotEmpty) {
-        final firstClient = clientsJson.first;
-        reporterMap[deReporterRelationship] =
-            (firstClient['relationshipToClient'] ?? '').toString();
-        reporterMap[deReporterRelationshipOther] =
-            (firstClient['relationshipToClientOther'] ?? '').toString();
+      if (_occupationIsOther) {
+        final specifiedOccupation = _occupationOtherController.text.trim();
+        reporterMap[deReporterOccupation] = specifiedOccupation.isNotEmpty
+            ? 'Other: $specifiedOccupation'
+            : 'Other';
       }
 
       final concernsMap = <String, String>{
@@ -2443,10 +1698,6 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
 
       final payload = {
         'reporter': reporterMap,
-        'reporterPhoneCountries': {
-          deReporterPhone: _phoneCountryCodes[deReporterPhone] ?? 'LS',
-          deReporterAltPhone: _phoneCountryCodes[deReporterAltPhone] ?? 'LS',
-        },
         'concerns': concernsMap,
         'peopleInvolved': peopleJson,
         'clients': clientsJson,
@@ -2580,10 +1831,7 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     if (!currentUserState.canMgysdReportCase) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text(
-            'Report a Case',
-            style: TextStyle(color: Colors.white),
-          ),
+          title: const Text('Report a Case'),
           backgroundColor: widget.color,
         ),
         body: SafeArea(
@@ -2642,10 +1890,7 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Report a Case',
-          style: TextStyle(color: Colors.white),
-        ),
+        title: const Text('Report a Case'),
         backgroundColor: widget.color,
       ),
       body: SafeArea(
@@ -2670,8 +1915,8 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
                     ),
                     const SizedBox(height: 16),
                     _sectionCard(
-                      title: 'Client',
-                      subtitle: 'Person affected',
+                      title: 'Clients',
+                      subtitle: 'People affected',
                       icon: Icons.group,
                       children: [
                         ..._clients.asMap().entries.map((e) {
@@ -2679,6 +1924,15 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
                           final client = e.value;
                           return _clientCard(idx, client, contentMax);
                         }).toList(),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: _addClient,
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add another client'),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -2707,15 +1961,6 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
                           final person = e.value;
                           return _personInvolvedCard(idx, person, contentMax);
                         }).toList(),
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: TextButton.icon(
-                            onPressed: _addPersonInvolved,
-                            icon: const Icon(Icons.add),
-                            label: const Text('Add a person'),
-                          ),
-                        ),
                       ],
                     ),
                     const SizedBox(height: 20),

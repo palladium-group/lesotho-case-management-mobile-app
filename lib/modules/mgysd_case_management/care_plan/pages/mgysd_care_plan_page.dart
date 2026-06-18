@@ -24,6 +24,11 @@ class MgysdCarePlanPage extends StatefulWidget {
   final String? householdTei;
   final String? householdName;
   final String? clientName;
+
+  /// New workflow link:
+  /// One Care Plan belongs to one Social Investigation record.
+  /// If this is not passed yet, we fall back to the case root id so old flows
+  /// keep working while we update the rest of the app step by step.
   final String? socialInvestigationId;
   final String? socialInvestigationDate;
   final bool viewOnly;
@@ -126,6 +131,7 @@ class _CareGoal {
   }
 }
 
+
 class _DisagreementEntry {
   final TextEditingController fullNamesController = TextEditingController();
   final TextEditingController signatureController = TextEditingController();
@@ -196,12 +202,6 @@ class _PlanParticipantEntry {
         role.trim().isNotEmpty;
   }
 
-  bool get isComplete {
-    return firstNameController.text.trim().isNotEmpty &&
-        lastNameController.text.trim().isNotEmpty &&
-        role.trim().isNotEmpty;
-  }
-
   void dispose() {
     firstNameController.dispose();
     lastNameController.dispose();
@@ -221,7 +221,10 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
   final TextEditingController _agreedPlanActionController =
   TextEditingController();
 
-  final List<_PlanParticipantEntry> _planParticipants = [];
+  final List<_PlanParticipantEntry> _planParticipants = [
+    _PlanParticipantEntry(),
+  ];
+
   final List<_DisagreementEntry> _disagreementEntries = [
     _DisagreementEntry(),
   ];
@@ -233,10 +236,12 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
   List<_CareGoal> _longGoals = [];
 
   static const String goalGroupClient = 'CLIENT';
+  static const String goalGroupParentGuardian = 'PARENT_GUARDIAN';
   static const String goalGroupSocialWorker = 'SOCIAL_WORKER';
 
   static const List<String> goalGroups = [
     goalGroupClient,
+    goalGroupParentGuardian,
     goalGroupSocialWorker,
   ];
 
@@ -344,7 +349,9 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     if (await _columnExists(db, table, column)) return;
     try {
       await db.execute(sql);
-    } catch (_) {}
+    } catch (_) {
+      // Column may already exist from another migration.
+    }
   }
 
   Future<void> _ensureTables(Database db) async {
@@ -441,48 +448,28 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     );
 
     final goalColumns = <String, String>{
-      'carePlanId':
-      "ALTER TABLE $tableCarePlanGoals ADD COLUMN carePlanId TEXT DEFAULT ''",
-      'socialInvestigationId':
-      "ALTER TABLE $tableCarePlanGoals ADD COLUMN socialInvestigationId TEXT DEFAULT ''",
-      'caseId':
-      "ALTER TABLE $tableCarePlanGoals ADD COLUMN caseId TEXT DEFAULT ''",
-      'householdTei':
-      "ALTER TABLE $tableCarePlanGoals ADD COLUMN householdTei TEXT DEFAULT ''",
-      'goalGroup':
-      "ALTER TABLE $tableCarePlanGoals ADD COLUMN goalGroup TEXT DEFAULT 'SOCIAL_WORKER'",
-      'term':
-      "ALTER TABLE $tableCarePlanGoals ADD COLUMN term TEXT DEFAULT ''",
-      'subjectId':
-      "ALTER TABLE $tableCarePlanGoals ADD COLUMN subjectId TEXT DEFAULT ''",
-      'subjectTei':
-      "ALTER TABLE $tableCarePlanGoals ADD COLUMN subjectTei TEXT DEFAULT ''",
-      'subjectName':
-      "ALTER TABLE $tableCarePlanGoals ADD COLUMN subjectName TEXT DEFAULT ''",
-      'subjectRole':
-      "ALTER TABLE $tableCarePlanGoals ADD COLUMN subjectRole TEXT DEFAULT ''",
-      'goal':
-      "ALTER TABLE $tableCarePlanGoals ADD COLUMN goal TEXT DEFAULT ''",
-      'goalStatus':
-      "ALTER TABLE $tableCarePlanGoals ADD COLUMN goalStatus TEXT DEFAULT 'open'",
-      'createdAt':
-      "ALTER TABLE $tableCarePlanGoals ADD COLUMN createdAt TEXT DEFAULT ''",
-      'updatedAt':
-      "ALTER TABLE $tableCarePlanGoals ADD COLUMN updatedAt TEXT DEFAULT ''",
-      'syncStatus':
-      "ALTER TABLE $tableCarePlanGoals ADD COLUMN syncStatus TEXT DEFAULT 'not-synced'",
-      'ownerType':
-      "ALTER TABLE $tableCarePlanGoals ADD COLUMN ownerType TEXT DEFAULT 'SOCIAL_WORKER'",
-      'goalCategory':
-      "ALTER TABLE $tableCarePlanGoals ADD COLUMN goalCategory TEXT DEFAULT ''",
-      'targetType':
-      "ALTER TABLE $tableCarePlanGoals ADD COLUMN targetType TEXT DEFAULT ''",
-      'targetTei':
-      "ALTER TABLE $tableCarePlanGoals ADD COLUMN targetTei TEXT DEFAULT ''",
-      'targetName':
-      "ALTER TABLE $tableCarePlanGoals ADD COLUMN targetName TEXT DEFAULT ''",
-      'goalDescription':
-      "ALTER TABLE $tableCarePlanGoals ADD COLUMN goalDescription TEXT DEFAULT ''",
+      'carePlanId': "ALTER TABLE $tableCarePlanGoals ADD COLUMN carePlanId TEXT DEFAULT ''",
+      'socialInvestigationId': "ALTER TABLE $tableCarePlanGoals ADD COLUMN socialInvestigationId TEXT DEFAULT ''",
+      'caseId': "ALTER TABLE $tableCarePlanGoals ADD COLUMN caseId TEXT DEFAULT ''",
+      'householdTei': "ALTER TABLE $tableCarePlanGoals ADD COLUMN householdTei TEXT DEFAULT ''",
+      'goalGroup': "ALTER TABLE $tableCarePlanGoals ADD COLUMN goalGroup TEXT DEFAULT 'SOCIAL_WORKER'",
+      'term': "ALTER TABLE $tableCarePlanGoals ADD COLUMN term TEXT DEFAULT ''",
+      'subjectId': "ALTER TABLE $tableCarePlanGoals ADD COLUMN subjectId TEXT DEFAULT ''",
+      'subjectTei': "ALTER TABLE $tableCarePlanGoals ADD COLUMN subjectTei TEXT DEFAULT ''",
+      'subjectName': "ALTER TABLE $tableCarePlanGoals ADD COLUMN subjectName TEXT DEFAULT ''",
+      'subjectRole': "ALTER TABLE $tableCarePlanGoals ADD COLUMN subjectRole TEXT DEFAULT ''",
+      'goal': "ALTER TABLE $tableCarePlanGoals ADD COLUMN goal TEXT DEFAULT ''",
+      'goalStatus': "ALTER TABLE $tableCarePlanGoals ADD COLUMN goalStatus TEXT DEFAULT 'open'",
+      'createdAt': "ALTER TABLE $tableCarePlanGoals ADD COLUMN createdAt TEXT DEFAULT ''",
+      'updatedAt': "ALTER TABLE $tableCarePlanGoals ADD COLUMN updatedAt TEXT DEFAULT ''",
+      'syncStatus': "ALTER TABLE $tableCarePlanGoals ADD COLUMN syncStatus TEXT DEFAULT 'not-synced'",
+      // Compatibility with previous service-provision reader.
+      'ownerType': "ALTER TABLE $tableCarePlanGoals ADD COLUMN ownerType TEXT DEFAULT 'SOCIAL_WORKER'",
+      'goalCategory': "ALTER TABLE $tableCarePlanGoals ADD COLUMN goalCategory TEXT DEFAULT ''",
+      'targetType': "ALTER TABLE $tableCarePlanGoals ADD COLUMN targetType TEXT DEFAULT ''",
+      'targetTei': "ALTER TABLE $tableCarePlanGoals ADD COLUMN targetTei TEXT DEFAULT ''",
+      'targetName': "ALTER TABLE $tableCarePlanGoals ADD COLUMN targetName TEXT DEFAULT ''",
+      'goalDescription': "ALTER TABLE $tableCarePlanGoals ADD COLUMN goalDescription TEXT DEFAULT ''",
     };
 
     for (final entry in goalColumns.entries) {
@@ -527,7 +514,6 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       if (enrollmentRows.isNotEmpty) {
         final tei =
         (enrollmentRows.first['trackedEntityInstance'] ?? '').toString();
-
         if (tei.trim().isNotEmpty) {
           final helperRows = await db.query(
             'mgysd_household_member',
@@ -690,11 +676,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       orderBy: 'createdAt ASC',
     );
 
-    final allGoals = goalRows
-        .map(_CareGoal.fromRow)
-        .where((goal) => goal.goalGroup != 'PARENT_GUARDIAN')
-        .toList();
-
+    final allGoals = goalRows.map(_CareGoal.fromRow).toList();
     _allGoals = allGoals;
     _shortGoals = allGoals.where((g) => g.term == 'SHORT_TERM').toList();
     _mediumGoals = allGoals.where((g) => g.term == 'MEDIUM_TERM').toList();
@@ -712,11 +694,9 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
 
       setState(() {
         _subjects = subjects;
-
         if (_subjects.isNotEmpty) {
           _initialiseSelectedSubjects();
         }
-
         _loading = false;
       });
     } catch (e) {
@@ -730,7 +710,6 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     for (final subject in _subjects) {
       if (subject.id == id) return subject;
     }
-
     return _subjects.isEmpty ? null : _subjects.first;
   }
 
@@ -835,7 +814,6 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
 
     try {
       final db = await _db();
-
       await db.delete(
         tableCarePlanGoals,
         where: 'id = ?',
@@ -852,21 +830,6 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       setState(() => _saving = false);
       _showSnack('Failed to delete goal: $e');
     }
-  }
-
-  bool _validatePlanParticipants() {
-    for (int i = 0; i < _planParticipants.length; i++) {
-      final entry = _planParticipants[i];
-
-      if (!entry.isComplete) {
-        _showSnack(
-          'Please complete First name, Last name, and Role for Person ${i + 1}.',
-        );
-        return false;
-      }
-    }
-
-    return true;
   }
 
   Future<void> _saveCarePlanShell({
@@ -889,14 +852,12 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
 
       if (existing.isNotEmpty) {
         final row = existing.first;
-        final existingLifecycle =
-        (row['carePlanStatus'] ?? '').toString().trim();
+        final existingLifecycle = (row['carePlanStatus'] ?? '').toString().trim();
         final existingCreatedAt = (row['createdAt'] ?? '').toString().trim();
 
         if (existingLifecycle.isNotEmpty) {
           lifecycleStatus = existingLifecycle;
         }
-
         if (existingCreatedAt.isNotEmpty) {
           createdAt = existingCreatedAt;
         }
@@ -922,6 +883,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       'personsInvolvedInMakingPlan': _planParticipantsPayload(),
       'disagreementDetails': _disagreementDetailsPayload(),
       'clientGoals': _payloadForGoalGroup(goalGroupClient),
+      'parentGuardianGoals': _payloadForGoalGroup(goalGroupParentGuardian),
       'socialWorkerGoals': _payloadForGoalGroup(goalGroupSocialWorker),
       'updatedAt': nowIso,
     };
@@ -950,10 +912,6 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
   }
 
   Future<void> _saveDraft() async {
-    if (_viewOnly) return;
-
-    if (!_validatePlanParticipants()) return;
-
     setState(() => _saving = true);
 
     try {
@@ -966,7 +924,6 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
         _status = 'DRAFT';
         _saving = false;
       });
-
       _showSnack('Care plan draft saved.');
     } catch (e) {
       if (!mounted) return;
@@ -983,8 +940,6 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       return;
     }
 
-    if (!_validatePlanParticipants()) return;
-
     setState(() => _saving = true);
 
     try {
@@ -999,7 +954,6 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       });
 
       _showSnack('Care plan marked complete.');
-
       Navigator.pop(context, {
         'caseId': _caseRootId,
         'carePlanId': _carePlanId,
@@ -1061,11 +1015,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
 
   TextEditingController _controllerForGoal(String goalGroup, String term) {
     final key = _goalKey(goalGroup, term);
-
-    return _goalControllers.putIfAbsent(
-      key,
-          () => TextEditingController(),
-    );
+    return _goalControllers.putIfAbsent(key, () => TextEditingController());
   }
 
   String _selectedSubjectForGoal(String goalGroup, String term) {
@@ -1077,11 +1027,9 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     }
 
     final fallback = _defaultSubjectIdForGoalGroup(goalGroup);
-
     if (fallback.isNotEmpty) {
       _selectedSubjectIds[key] = fallback;
     }
-
     return fallback;
   }
 
@@ -1098,12 +1046,8 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
   void _initialiseSelectedSubjects() {
     for (final goalGroup in goalGroups) {
       final fallback = _defaultSubjectIdForGoalGroup(goalGroup);
-
       for (final term in goalTerms) {
-        _selectedSubjectIds.putIfAbsent(
-          _goalKey(goalGroup, term),
-              () => fallback,
-        );
+        _selectedSubjectIds.putIfAbsent(_goalKey(goalGroup, term), () => fallback);
       }
     }
   }
@@ -1120,9 +1064,22 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       for (final subject in _subjects) {
         if (roleContains(subject, ['CLIENT'])) return subject.id;
       }
-
       for (final subject in _subjects) {
         if (!subject.isHousehold) return subject.id;
+      }
+    }
+
+    if (goalGroup == goalGroupParentGuardian) {
+      for (final subject in _subjects) {
+        if (roleContains(subject, [
+          'PARENT',
+          'GUARDIAN',
+          'MOTHER',
+          'FATHER',
+          'CAREGIVER',
+        ])) {
+          return subject.id;
+        }
       }
     }
 
@@ -1142,6 +1099,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
           .toList(),
     };
   }
+
 
   List<Map<String, dynamic>> _planParticipantsPayload() {
     return _planParticipants
@@ -1188,7 +1146,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
   }
 
   void _removePlanParticipant(int index) {
-    if (_viewOnly) return;
+    if (_planParticipants.length <= 1) return;
 
     setState(() {
       final removed = _planParticipants.removeAt(index);
@@ -1272,7 +1230,6 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
 
   Widget _statusChip() {
     final color = _statusColor();
-
     final label = _status.toUpperCase() == 'COMPLETED'
         ? 'Completed'
         : _status.toUpperCase() == 'DRAFT'
@@ -1341,10 +1298,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
             children: [
               Text(
                 title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
-                ),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
               ),
               const SizedBox(height: 3),
               Text(
@@ -1367,7 +1321,6 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     required String term,
   }) {
     final selected = _selectedSubjectForGoal(goalGroup, term);
-
     final safeValue = _subjects.any((subject) => subject.id == selected)
         ? selected
         : (_subjects.isEmpty ? null : _subjects.first.id);
@@ -1446,10 +1399,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
               label: const Text('Add goal'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: widget.color,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 11,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(999),
                 ),
@@ -1540,6 +1490,8 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     switch (goalGroup) {
       case goalGroupClient:
         return 'Client’s goals';
+      case goalGroupParentGuardian:
+        return 'Parent/Guardian goals (if appropriate)';
       case goalGroupSocialWorker:
         return 'Social worker goals';
       default:
@@ -1551,6 +1503,8 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     switch (goalGroup) {
       case goalGroupClient:
         return 'Goals agreed with or directly related to the client.';
+      case goalGroupParentGuardian:
+        return 'Goals for the parent, caregiver, or guardian where relevant.';
       case goalGroupSocialWorker:
         return 'Goals and actions planned by the social worker.';
       default:
@@ -1562,6 +1516,8 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     switch (goalGroup) {
       case goalGroupClient:
         return Icons.person_outline;
+      case goalGroupParentGuardian:
+        return Icons.groups_2_outlined;
       case goalGroupSocialWorker:
         return Icons.badge_outlined;
       default:
@@ -1605,9 +1561,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
               ),
             )
           else
-            Column(
-              children: goals.map(_goalTile).toList(),
-            ),
+            Column(children: goals.map(_goalTile).toList()),
         ],
       ),
     );
@@ -1624,22 +1578,14 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
             icon: _goalGroupIcon(goalGroup),
           ),
           const SizedBox(height: 14),
-          _goalTermSection(
-            goalGroup: goalGroup,
-            term: 'SHORT_TERM',
-          ),
-          _goalTermSection(
-            goalGroup: goalGroup,
-            term: 'MEDIUM_TERM',
-          ),
-          _goalTermSection(
-            goalGroup: goalGroup,
-            term: 'LONG_TERM',
-          ),
+          _goalTermSection(goalGroup: goalGroup, term: 'SHORT_TERM'),
+          _goalTermSection(goalGroup: goalGroup, term: 'MEDIUM_TERM'),
+          _goalTermSection(goalGroup: goalGroup, term: 'LONG_TERM'),
         ],
       ),
     );
   }
+
 
   Widget _agreedPlanActionSection() {
     return _card(
@@ -1688,161 +1634,112 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
             icon: Icons.people_alt_outlined,
           ),
           const SizedBox(height: 14),
-          if (_planParticipants.isNotEmpty)
-            ..._planParticipants.asMap().entries.map((entryMap) {
-              final index = entryMap.key;
-              final entry = entryMap.value;
-              final safeRole =
-              roleOptions.contains(entry.role) ? entry.role : null;
+          ..._planParticipants.asMap().entries.map((entryMap) {
+            final index = entryMap.key;
+            final entry = entryMap.value;
+            final safeRole =
+            roleOptions.contains(entry.role) ? entry.role : null;
 
-              return Container(
-                margin: const EdgeInsets.only(bottom: 14),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFBFCFE),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Colors.blueGrey.withOpacity(0.10),
-                  ),
+            return Container(
+              margin: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFBFCFE),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Colors.blueGrey.withOpacity(0.10),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Person ${index + 1}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Person ${index + 1}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: entry.firstNameController,
+                          decoration: InputDecoration(
+                            labelText: 'First name',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            filled: true,
+                            fillColor: Colors.white,
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: entry.firstNameController,
-                            readOnly: _viewOnly,
-                            decoration: InputDecoration(
-                              label: RichText(
-                                text: const TextSpan(
-                                  text: 'First name ',
-                                  style: TextStyle(
-                                    color: Colors.black87,
-                                    fontSize: 16,
-                                  ),
-                                  children: [
-                                    TextSpan(
-                                      text: '*',
-                                      style: TextStyle(color: Colors.red),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              filled: true,
-                              fillColor: Colors.white,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextFormField(
+                          controller: entry.lastNameController,
+                          decoration: InputDecoration(
+                            labelText: 'Last name',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextFormField(
-                            controller: entry.lastNameController,
-                            readOnly: _viewOnly,
-                            decoration: InputDecoration(
-                              label: RichText(
-                                text: const TextSpan(
-                                  text: 'Last name ',
-                                  style: TextStyle(
-                                    color: Colors.black87,
-                                    fontSize: 16,
-                                  ),
-                                  children: [
-                                    TextSpan(
-                                      text: '*',
-                                      style: TextStyle(color: Colors.red),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              filled: true,
-                              fillColor: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
-                      value: safeRole,
-                      isExpanded: true,
-                      items: roleOptions.map((role) {
-                        return DropdownMenuItem<String>(
-                          value: role,
-                          child: Text(role),
-                        );
-                      }).toList(),
-                      onChanged: _viewOnly
-                          ? null
-                          : (value) {
-                        setState(() {
-                          entry.role = value ?? '';
-                        });
-                      },
-                      decoration: InputDecoration(
-                        label: RichText(
-                          text: const TextSpan(
-                            text: 'Relationship to client ',
-                            style: TextStyle(
-                              color: Colors.black87,
-                              fontSize: 16,
-                            ),
-                            children: [
-                              TextSpan(
-                                text: '*',
-                                style: TextStyle(color: Colors.red),
-                              ),
-                            ],
-                          ),
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
-                      ),
-                    ),
-                    if (!_viewOnly) ...[
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton.icon(
-                          onPressed: () => _removePlanParticipant(index),
-                          icon: const Icon(Icons.delete_outline),
-                          label: const Text('Remove'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.redAccent,
+                            filled: true,
+                            fillColor: Colors.white,
                           ),
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: safeRole,
+                    isExpanded: true,
+                    items: roleOptions.map((role) {
+                      return DropdownMenuItem<String>(
+                        value: role,
+                        child: Text(role),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        entry.role = value ?? '';
+                      });
+                    },
+                    decoration: InputDecoration(
+                      labelText: 'Relationship to Client',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                  ),
+                  if (_planParticipants.length > 1) ...[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: () => _removePlanParticipant(index),
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('Remove'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.redAccent,
+                        ),
+                      ),
+                    ],
                   ],
-                ),
-              );
-            }).toList(),
-          if (!_viewOnly)
-            TextButton.icon(
-              onPressed: _addPlanParticipant,
-              icon: const Icon(Icons.add),
-              label: const Text('Add person'),
-              style: TextButton.styleFrom(
-                foregroundColor: widget.color,
+                ],
               ),
+            );
+          }).toList(),
+          TextButton.icon(
+            onPressed: _addPlanParticipant,
+            icon: const Icon(Icons.add),
+            label: const Text('Add another person'),
+            style: TextButton.styleFrom(
+              foregroundColor: widget.color,
             ),
         ],
       ),
@@ -1954,14 +1851,12 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
               ),
             );
           }).toList(),
-          if (!_viewOnly)
-            TextButton.icon(
-              onPressed: _addDisagreementEntry,
-              icon: const Icon(Icons.add),
-              label: const Text('Add person'),
-              style: TextButton.styleFrom(
-                foregroundColor: widget.color,
-              ),
+          TextButton.icon(
+            onPressed: _addDisagreementEntry,
+            icon: const Icon(Icons.add),
+            label: const Text('Add another person'),
+            style: TextButton.styleFrom(
+              foregroundColor: widget.color,
             ),
         ],
       ),
@@ -2238,6 +2133,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
                 _emptySubjects()
               else ...[
                 _goalGroupSection(goalGroupClient),
+                _goalGroupSection(goalGroupParentGuardian),
                 _goalGroupSection(goalGroupSocialWorker),
                 _agreedPlanActionSection(),
                 _personsInvolvedInPlanSection(),
