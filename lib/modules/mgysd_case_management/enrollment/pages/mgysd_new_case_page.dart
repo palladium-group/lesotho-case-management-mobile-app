@@ -3519,74 +3519,76 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               icon: Icons.family_restroom_outlined,
             ),
             const SizedBox(height: 12),
-            _parentSection(
-              title: 'Father',
-              aliveValue: _fatherAlive,
-              onAliveChanged: (value) {
-                setState(() {
-                  _fatherAlive = value;
-                  if (_fatherAlive != 'YES') {
-                    _fatherFirstNameController.clear();
-                    _fatherSurnameController.clear();
-                    _fatherDobController.clear();
-                    _fatherOccupationController.clear();
-                    _fatherLivingWithChild = '';
-                    _fatherWhyNotLivingController.clear();
-                    _fatherPhoneController.clear();
-                  }
-                });
-              },
-              firstNameController: _fatherFirstNameController,
-              surnameController: _fatherSurnameController,
-              dobController: _fatherDobController,
-              occupationController: _fatherOccupationController,
-              livingWithChildValue: _fatherLivingWithChild,
-              onLivingWithChildChanged: (value) {
-                setState(() {
-                  _fatherLivingWithChild = value;
-                  if (_fatherLivingWithChild == 'YES') {
-                    _fatherWhyNotLivingController.clear();
-                    _fatherPhoneController.clear();
-                  }
-                });
-              },
-              whyNotLivingController: _fatherWhyNotLivingController,
-              phoneController: _fatherPhoneController,
-            ),
-            _parentSection(
-              title: 'Mother',
-              aliveValue: _motherAlive,
-              onAliveChanged: (value) {
-                setState(() {
-                  _motherAlive = value;
-                  if (_motherAlive != 'YES') {
-                    _motherFirstNameController.clear();
-                    _motherSurnameController.clear();
-                    _motherDobController.clear();
-                    _motherOccupationController.clear();
-                    _motherLivingWithChild = '';
-                    _motherWhyNotLivingController.clear();
-                    _motherPhoneController.clear();
-                  }
-                });
-              },
-              firstNameController: _motherFirstNameController,
-              surnameController: _motherSurnameController,
-              dobController: _motherDobController,
-              occupationController: _motherOccupationController,
-              livingWithChildValue: _motherLivingWithChild,
-              onLivingWithChildChanged: (value) {
-                setState(() {
-                  _motherLivingWithChild = value;
-                  if (_motherLivingWithChild == 'YES') {
-                    _motherWhyNotLivingController.clear();
-                    _motherPhoneController.clear();
-                  }
-                });
-              },
-              whyNotLivingController: _motherWhyNotLivingController,
-              phoneController: _motherPhoneController,
-            ),
+            if (_isChild) ...[
+              _parentSection(
+                title: 'Father',
+                aliveValue: _fatherAlive,
+                onAliveChanged: (value) {
+                  setState(() {
+                    _fatherAlive = value;
+                    if (_fatherAlive != 'YES') {
+                      _fatherFirstNameController.clear();
+                      _fatherSurnameController.clear();
+                      _fatherDobController.clear();
+                      _fatherOccupationController.clear();
+                      _fatherLivingWithChild = '';
+                      _fatherWhyNotLivingController.clear();
+                      _fatherPhoneController.clear();
+                    }
+                  });
+                },
+                firstNameController: _fatherFirstNameController,
+                surnameController: _fatherSurnameController,
+                dobController: _fatherDobController,
+                occupationController: _fatherOccupationController,
+                livingWithChildValue: _fatherLivingWithChild,
+                onLivingWithChildChanged: (value) {
+                  setState(() {
+                    _fatherLivingWithChild = value;
+                    if (_fatherLivingWithChild == 'YES') {
+                      _fatherWhyNotLivingController.clear();
+                      _fatherPhoneController.clear();
+                    }
+                  });
+                },
+                whyNotLivingController: _fatherWhyNotLivingController,
+                phoneController: _fatherPhoneController,
+              ),
+              _parentSection(
+                title: 'Mother',
+                aliveValue: _motherAlive,
+                onAliveChanged: (value) {
+                  setState(() {
+                    _motherAlive = value;
+                    if (_motherAlive != 'YES') {
+                      _motherFirstNameController.clear();
+                      _motherSurnameController.clear();
+                      _motherDobController.clear();
+                      _motherOccupationController.clear();
+                      _motherLivingWithChild = '';
+                      _motherWhyNotLivingController.clear();
+                      _motherPhoneController.clear();
+                    }
+                  });
+                },
+                firstNameController: _motherFirstNameController,
+                surnameController: _motherSurnameController,
+                dobController: _motherDobController,
+                occupationController: _motherOccupationController,
+                livingWithChildValue: _motherLivingWithChild,
+                onLivingWithChildChanged: (value) {
+                  setState(() {
+                    _motherLivingWithChild = value;
+                    if (_motherLivingWithChild == 'YES') {
+                      _motherWhyNotLivingController.clear();
+                      _motherPhoneController.clear();
+                    }
+                  });
+                },
+                whyNotLivingController: _motherWhyNotLivingController,
+                phoneController: _motherPhoneController,
+              ),
+            ],
             _caregiverSection(),
             _personalAssistantSection(),
           ],
