@@ -300,7 +300,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   String _homeLanguage = '';
   String _isClientInSchool = '';
   String _grade = '';
+  String _schoolLevel = '';
   String _schoolAttendanceStatus = '';
+  String _notInSchoolStatus = '';
+  String _highestLevelAchieved = '';
   String _isAdultEmployed = '';
 
   String _fatherAlive = '';
@@ -580,6 +583,47 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _Opt('9', 'Grade 9'),
     _Opt('10', 'Grade 10'),
     _Opt('11', 'Grade 11'),
+  ];
+
+  static const List<_Opt> schoolLevelOptions = [
+    _Opt('PRE_SCHOOL', 'Pre-School'),
+    _Opt('PRIMARY', 'Primary'),
+    _Opt('SECONDARY', 'Secondary'),
+    _Opt('HIGH_SCHOOL', 'High School'),
+    _Opt('TERTIARY', 'Tertiary'),
+  ];
+
+  static const List<_Opt> primaryGradeOptions = [
+    _Opt('1', 'Grade 1'),
+    _Opt('2', 'Grade 2'),
+    _Opt('3', 'Grade 3'),
+    _Opt('4', 'Grade 4'),
+    _Opt('5', 'Grade 5'),
+    _Opt('6', 'Grade 6'),
+    _Opt('7', 'Grade 7'),
+  ];
+
+  static const List<_Opt> secondaryGradeOptions = [
+    _Opt('8', 'Grade 8'),
+    _Opt('9', 'Grade 9'),
+    _Opt('10', 'Grade 10'),
+  ];
+
+  static const List<_Opt> highSchoolGradeOptions = [
+    _Opt('11', 'Grade 11'),
+    _Opt('12', 'Grade 12'),
+  ];
+
+  static const List<_Opt> notInSchoolStatusOptions = [
+    _Opt('NEVER_ATTENDED', 'Never attended school'),
+    _Opt('NO_LONGER_IN_SCHOOL', 'No longer in school'),
+  ];
+
+  static const List<_Opt> highestLevelAchievedOptions = [
+    _Opt('PRIMARY', 'Primary'),
+    _Opt('SECONDARY', 'Secondary'),
+    _Opt('HIGH_SCHOOL', 'High School'),
+    _Opt('TERTIARY', 'Tertiary'),
   ];
 
   static const List<_Opt> inSchoolAttendanceOptions = [
@@ -4100,9 +4144,12 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                               setState(() {
                                 _isClientInSchool = v ?? '';
                                 _schoolAttendanceStatus = '';
+                                _notInSchoolStatus = '';
+                                _highestLevelAchieved = '';
                                 if (_isClientInSchool != 'YES') {
                                   _schoolNameController.clear();
                                   _grade = '';
+                                  _schoolLevel = '';
                                 }
                               });
                             },
@@ -4117,13 +4164,50 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                             if (!_isAdultOrElderly) ...[
                               const SizedBox(height: 10),
                               _dropdown(
-                                label: 'Grade',
-                                value: _grade,
-                                options: gradeOptions,
+                                label: 'Level of school',
+                                value: _schoolLevel,
+                                options: schoolLevelOptions,
                                 requiredField: true,
-                                onChanged: (v) =>
-                                    setState(() => _grade = v ?? ''),
+                                onChanged: (v) {
+                                  setState(() {
+                                    _schoolLevel = v ?? '';
+                                    _grade = '';
+                                  });
+                                },
                               ),
+                              if (_schoolLevel == 'PRIMARY') ...[
+                                const SizedBox(height: 10),
+                                _dropdown(
+                                  label: 'Grade',
+                                  value: _grade,
+                                  options: primaryGradeOptions,
+                                  requiredField: true,
+                                  onChanged: (v) =>
+                                      setState(() => _grade = v ?? ''),
+                                ),
+                              ],
+                              if (_schoolLevel == 'SECONDARY') ...[
+                                const SizedBox(height: 10),
+                                _dropdown(
+                                  label: 'Grade',
+                                  value: _grade,
+                                  options: secondaryGradeOptions,
+                                  requiredField: true,
+                                  onChanged: (v) =>
+                                      setState(() => _grade = v ?? ''),
+                                ),
+                              ],
+                              if (_schoolLevel == 'HIGH_SCHOOL') ...[
+                                const SizedBox(height: 10),
+                                _dropdown(
+                                  label: 'Grade',
+                                  value: _grade,
+                                  options: highSchoolGradeOptions,
+                                  requiredField: true,
+                                  onChanged: (v) =>
+                                      setState(() => _grade = v ?? ''),
+                                ),
+                              ],
                             ],
                             const SizedBox(height: 10),
                             _dropdown(
@@ -4142,9 +4226,26 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                               value: _schoolAttendanceStatus,
                               options: notInSchoolAttendanceOptions,
                               requiredField: true,
-                              onChanged: (v) => setState(
-                                      () => _schoolAttendanceStatus = v ?? ''),
+                              onChanged: (v) {
+                                setState(() {
+                                  _schoolAttendanceStatus = v ?? '';
+                                  if (_schoolAttendanceStatus != 'NO_LONGER_IN_SCHOOL') {
+                                    _highestLevelAchieved = '';
+                                  }
+                                });
+                              },
                             ),
+                            if (_schoolAttendanceStatus == 'NO_LONGER_IN_SCHOOL') ...[
+                              const SizedBox(height: 10),
+                              _dropdown(
+                                label: 'Highest level achieved',
+                                value: _highestLevelAchieved,
+                                options: highestLevelAchievedOptions,
+                                requiredField: true,
+                                onChanged: (v) => setState(
+                                        () => _highestLevelAchieved = v ?? ''),
+                              ),
+                            ],
                           ],
                         ],
                       ),
