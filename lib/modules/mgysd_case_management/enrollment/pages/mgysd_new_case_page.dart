@@ -360,6 +360,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   final _employabilityBarrierOtherController = TextEditingController();
   final Set<String> _skillsDevelopmentAreas = {};
   final _skillsDevelopmentOtherController = TextEditingController();
+  final _riskEmergencyActionOtherController = TextEditingController();
+  final _riskServicesAccessedOtherController = TextEditingController();
 
   final Set<String> _selectedReasonOptions = {};
   final List<_DynamicTextItem> _contactedPhoneNumbers = [];
@@ -676,7 +678,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _Opt('REMOVED_FROM_HOME', 'Removed from home'),
     _Opt('PSYCHOSOCIAL_FIRST_RESPONSE', 'Counselling / psychosocial first response'),
     _Opt('SUPERVISOR_INFORMED', 'Supervisor informed'),
-    _Opt('NO_IMMEDIATE_ACTION', 'No immediate action'),
+    _Opt('OTHER', 'Other'),
   ];
 
   static const List<_Opt> riskServicesAccessedOptions = [
@@ -687,6 +689,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _Opt('TRANSPORT_ASSISTANCE', 'Transport assistance'),
     _Opt('FOOD_ASSISTANCE', 'Food assistance'),
     _Opt('LEGAL_SUPPORT', 'Legal support'),
+    _Opt('OTHER', 'Other'),
   ];
 
   static const List<_Opt> riskNextStepOptions = [
@@ -987,6 +990,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _rehabilitationServiceOtherController.dispose();
     _employabilityBarrierOtherController.dispose();
     _skillsDevelopmentOtherController.dispose();
+    _riskEmergencyActionOtherController.dispose();
+    _riskServicesAccessedOtherController.dispose();
 
     for (final item in _contactedPhoneNumbers) {
       item.dispose();
@@ -2511,7 +2516,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required String title,
     required List<_Opt> options,
     required Set<String> selectedValues,
+    TextEditingController? otherController,
   }) {
+    final showOther = otherController != null && selectedValues.contains('OTHER');
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -2541,6 +2549,20 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             ))
                 .toList(),
           ),
+          if (showOther) ...[
+            const SizedBox(height: 10),
+            _Input(
+              controller: otherController,
+              label: 'Specify other',
+              hint: 'Enter details',
+              validator: (v) {
+                if (showOther && (v == null || v.trim().isEmpty)) {
+                  return 'Please specify';
+                }
+                return null;
+              },
+            ),
+          ],
         ],
       ),
     );
@@ -2775,6 +2797,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                   if (_riskHasActionTaken != 'NO') {
                     _riskNoActionReason = '';
                   }
+                  if (_riskHasActionTaken != 'YES') {
+                    _riskEmergencyActionsTaken.clear();
+                    _riskServicesAccessed.clear();
+                  }
                 });
               },
             ),
@@ -2787,18 +2813,22 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 onChanged: (v) => setState(() => _riskNoActionReason = v ?? ''),
               ),
             ],
-            const SizedBox(height: 12),
-            _riskMultiSelect(
-              title: 'Emergency actions taken',
-              options: riskEmergencyActionOptions,
-              selectedValues: _riskEmergencyActionsTaken,
-            ),
-            const SizedBox(height: 12),
-            _riskMultiSelect(
-              title: 'Services accessed',
-              options: riskServicesAccessedOptions,
-              selectedValues: _riskServicesAccessed,
-            ),
+            if (_riskHasActionTaken == 'YES') ...[
+              const SizedBox(height: 12),
+              _riskMultiSelect(
+                title: 'Emergency actions taken',
+                options: riskEmergencyActionOptions,
+                selectedValues: _riskEmergencyActionsTaken,
+                otherController: _riskEmergencyActionOtherController,
+              ),
+              const SizedBox(height: 12),
+              _riskMultiSelect(
+                title: 'Services accessed',
+                options: riskServicesAccessedOptions,
+                selectedValues: _riskServicesAccessed,
+                otherController: _riskServicesAccessedOtherController,
+              ),
+            ],
             const SizedBox(height: 14),
             _riskDomainItem(
               title: 'Family background',
