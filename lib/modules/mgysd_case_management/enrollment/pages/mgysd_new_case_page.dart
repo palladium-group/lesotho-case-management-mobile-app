@@ -829,6 +829,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         _Opt('ABUSE_SEXUAL', 'Sexual abuse'),
         _Opt('ABUSE_RAPE', 'Rape'),
         _Opt('ABUSE_INCEST', 'Incest'),
+        _Opt('DOMESTIC_VIOLENCE', 'Domestic violence'),
+        _Opt('HUMAN_TRAFFICKING', 'Human trafficking / Trafficking in Persons'),
       ],
     ),
     _ReasonGroup(
@@ -838,7 +840,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         _Opt('CARE_NEGLECT', 'Neglect'),
         _Opt('CARE_ABANDONMENT', 'Abandonment'),
         _Opt('CARE_ORPHANS', 'Orphans'),
-        _Opt('CARE_BABY_ABANDONMENT', 'Baby abandonment'),
       ],
     ),
     _ReasonGroup(
@@ -877,8 +878,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _Opt('ABDUCTION_KIDNAPPING', 'Child abduction / kidnapping'),
     _Opt('CHILD_MAINTENANCE', 'Child maintenance'),
     _Opt('CHILD_WITNESS_SUPPORT', 'Child witness support services'),
-    _Opt('DOMESTIC_VIOLENCE', 'Domestic violence'),
-    _Opt('HUMAN_TRAFFICKING', 'Human trafficking / Trafficking in Persons'),
     _Opt('INTERNATIONAL_SOCIAL_SERVICES', 'International social services'),
     _Opt('TEENAGE_PREGNANCY_YOUNG_MOTHERS',
         'Teenage pregnancy / young mothers'),
