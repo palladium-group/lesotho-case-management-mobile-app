@@ -503,17 +503,640 @@ class _CaseConferenceEntry {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Form 3a: Court Report
+// ─────────────────────────────────────────────────────────────────────────────
+class _CourtReportEntry {
+  final String id;
+
+  // Header — auto-filled from Part 1. Report date defaults to today but
+  // remains editable (date picker, not locked).
+  final TextEditingController reportDateController;
+  final TextEditingController courtFileNumberController;
+
+  // Section 1: Identifying details of client(s)
+  // Each row: firstName, surname, gender, dob, age (computed, years only), idNumber, isMajorClient
+  final List<Map<String, dynamic>> clientSubjects;
+
+  final TextEditingController residentialAddressController;
+  String homeLanguage; // dropdown: Sesotho / English / Other
+  final TextEditingController homeLanguageOtherController;
+  String religiousAffiliation; // dropdown: Christian / Sabbath / Muslim / Other
+  final TextEditingController religiousAffiliationOtherController;
+
+  // Present caregiver — structured fields (adopts the capitalized-name,
+  // country-code dropdown and phone-validation patterns used elsewhere)
+  final TextEditingController presentCaregiverFirstNameController;
+  final TextEditingController presentCaregiverSurnameController;
+  final TextEditingController presentCaregiverAddressController;
+  String presentCaregiverCountryCode;
+  final TextEditingController presentCaregiverContactController;
+
+  // Section 2: Family composition
+  // Biological parents — repeatable rows ("Add parent"), each with its own fields
+  final List<Map<String, dynamic>> biologicalParents;
+  final List<Map<String, dynamic>> siblings;     // name, gender, age, address
+  // Alternate caregiver(s) — optional, repeatable ("Add caregiver")
+  final List<Map<String, dynamic>> alternateCaregivers;
+  final List<Map<String, dynamic>> otherPersons; // name, age, gender, relationship (+ other)
+
+  // Section 3: Sources of information / persons consulted — repeatable ("Add person")
+  final List<Map<String, dynamic>> personsConsulted;
+
+  // Section 4: Family profile — background split into 4 fields
+  final TextEditingController placeOfBirthController;
+  final TextEditingController educationController;
+  final TextEditingController familyHistoryController;
+  final TextEditingController employmentController;
+  // Family structure — dynamic list of household members
+  final List<Map<String, dynamic>> householdMembers;
+  // Family relationships — dynamic list linking member to relationship quality
+  final List<Map<String, dynamic>> familyRelationshipItems;
+  String physicalCondition;        // dropdown
+  final TextEditingController physicalHealthDetailsController; // free text details
+  final TextEditingController psychologicalFactorsController;
+  // Housing — separate structured fields
+  String housingType;
+  final TextEditingController housingSizeController;
+  String housingOwnership;
+  final TextEditingController housingImpressionController;
+  final TextEditingController religiousCulturalAspectsController;
+  final TextEditingController socioCulturalAspectsController;
+  // Financial — income and expenditure separated
+  final TextEditingController incomeController;
+  final TextEditingController expenditureController;
+
+  // Section 5: Client concerned
+  final TextEditingController presentLivingCircumstancesController;
+  final TextEditingController clientPhysicalHealthController;
+  String clientPsychologicalFactors; // dropdown + Other
+  final TextEditingController clientPsychologicalFactorsOtherController;
+  final TextEditingController clientRelationshipsController;
+  // Schooling — gated by whether client attended school
+  String clientAttendedSchool;     // YES / NO
+  final TextEditingController clientSchoolingAbilitiesController;
+  final TextEditingController clientSchoolingProblemsController;
+  final TextEditingController clientSchoolingAchievementsController;
+
+  // Section 6: Special circumstances
+  final TextEditingController abandonedOrphanedController;
+  final TextEditingController specialNeedsController;
+
+  // Section 7: Views of client — separate, optional fields
+  final TextEditingController emotionsController;
+  final TextEditingController feelingsController;
+  final TextEditingController preferencesController;
+  final TextEditingController personalNeedsController;
+  final TextEditingController otherObservationsController;
+
+  // Section 8: Factors resulting in investigation
+  final TextEditingController eventsLeadingToInvestigationController;
+  // Previous interventions — split into separate fields
+  final TextEditingController previousDecisionsInquiriesController;
+  String removedToTemporarySafeCare; // YES/NO
+  String familyPreservationServicesRendered; // YES/NO
+  final TextEditingController familyPreservationDetailsController;
+  String traffickingVictimReturned; // YES/NO
+  final TextEditingController traffickingLocationDetailsController;
+  // Evidence and facts — split, optional
+  final TextEditingController allegationsController;
+  final TextEditingController incidentsController;
+  final TextEditingController claimsAffidavitsController;
+  // Medical evidence — checkbox; details field only shown when checked
+  bool medicalEvidenceAvailable;
+  final TextEditingController medicalEvidenceDetailsController;
+
+  // Section 9: Measures to assist family
+  final Set<String> stepsTakenMeasures;
+  final TextEditingController stepsTakenMeasuresOtherController;
+  final TextEditingController stepsTakenNotesController;
+
+  // Section 10: Private family arrangements
+  final TextEditingController privateFamilyArrangementsController;
+
+  // Section 11: Evaluation — split into separate fields
+  final TextEditingController positiveFactorsController;
+  final TextEditingController negativeFactorsController;
+  final TextEditingController causesController;
+  final TextEditingController resultsController;
+
+  // Section 12: Conclusion
+  final TextEditingController conclusionController;
+
+  // Section 13: Recommendation
+  final TextEditingController recommendationController;
+  final Set<String> recommendedFamilyMeasures;
+  final TextEditingController recommendedFamilyMeasuresOtherController;
+  final Set<String> recommendedClientMeasures;
+  final TextEditingController recommendedClientMeasuresOtherController;
+
+  // Section 14: Written request by magistrate / court order — optional,
+  // repeatable ("Add order"), each row a checkbox group of placement options
+  final List<Map<String, dynamic>> courtOrders;
+
+  static String _todayString() {
+    final d = DateTime.now();
+    return '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  }
+
+  _CourtReportEntry({
+    required this.id,
+    String reportDate = '',
+    String courtFileNumber = '',
+    List<Map<String, dynamic>>? clientSubjects,
+    String residentialAddress = '',
+    this.homeLanguage = '',
+    String homeLanguageOther = '',
+    this.religiousAffiliation = '',
+    String religiousAffiliationOther = '',
+    String presentCaregiverFirstName = '',
+    String presentCaregiverSurname = '',
+    String presentCaregiverAddress = '',
+    this.presentCaregiverCountryCode = '+266',
+    String presentCaregiverContact = '',
+    List<Map<String, dynamic>>? biologicalParents,
+    List<Map<String, dynamic>>? siblings,
+    List<Map<String, dynamic>>? alternateCaregivers,
+    List<Map<String, dynamic>>? otherPersons,
+    List<Map<String, dynamic>>? personsConsulted,
+    String placeOfBirth = '',
+    String education = '',
+    String familyHistory = '',
+    String employment = '',
+    List<Map<String, dynamic>>? householdMembers,
+    List<Map<String, dynamic>>? familyRelationshipItems,
+    this.physicalCondition = '',
+    String physicalHealthDetails = '',
+    String psychologicalFactors = '',
+    this.housingType = '',
+    String housingSize = '',
+    this.housingOwnership = '',
+    String housingImpression = '',
+    String religiousCulturalAspects = '',
+    String socioCulturalAspects = '',
+    String income = '',
+    String expenditure = '',
+    String presentLivingCircumstances = '',
+    String clientPhysicalHealth = '',
+    this.clientPsychologicalFactors = '',
+    String clientPsychologicalFactorsOther = '',
+    String clientRelationships = '',
+    this.clientAttendedSchool = '',
+    String clientSchoolingAbilities = '',
+    String clientSchoolingProblems = '',
+    String clientSchoolingAchievements = '',
+    String abandonedOrphaned = '',
+    String specialNeeds = '',
+    String emotions = '',
+    String feelings = '',
+    String preferences = '',
+    String personalNeeds = '',
+    String otherObservations = '',
+    String eventsLeadingToInvestigation = '',
+    String previousDecisionsInquiries = '',
+    this.removedToTemporarySafeCare = '',
+    this.familyPreservationServicesRendered = '',
+    String familyPreservationDetails = '',
+    this.traffickingVictimReturned = '',
+    String traffickingLocationDetails = '',
+    String allegations = '',
+    String incidents = '',
+    String claimsAffidavits = '',
+    this.medicalEvidenceAvailable = false,
+    String medicalEvidenceDetails = '',
+    Set<String>? stepsTakenMeasures,
+    String stepsTakenMeasuresOther = '',
+    String stepsTakenNotes = '',
+    String privateFamilyArrangements = '',
+    String positiveFactors = '',
+    String negativeFactors = '',
+    String causes = '',
+    String results = '',
+    String conclusion = '',
+    String recommendation = '',
+    Set<String>? recommendedFamilyMeasures,
+    String recommendedFamilyMeasuresOther = '',
+    Set<String>? recommendedClientMeasures,
+    String recommendedClientMeasuresOther = '',
+    List<Map<String, dynamic>>? courtOrders,
+  })  : reportDateController = TextEditingController(text: reportDate.trim().isEmpty ? _todayString() : reportDate),
+        courtFileNumberController = TextEditingController(text: courtFileNumber),
+        clientSubjects = clientSubjects ?? [_newClientSubject()],
+        residentialAddressController = TextEditingController(text: residentialAddress),
+        homeLanguageOtherController = TextEditingController(text: homeLanguageOther),
+        religiousAffiliationOtherController = TextEditingController(text: religiousAffiliationOther),
+        presentCaregiverFirstNameController = TextEditingController(text: presentCaregiverFirstName),
+        presentCaregiverSurnameController = TextEditingController(text: presentCaregiverSurname),
+        presentCaregiverAddressController = TextEditingController(text: presentCaregiverAddress),
+        presentCaregiverContactController = TextEditingController(text: presentCaregiverContact),
+        biologicalParents = biologicalParents ?? [],
+        siblings = siblings ?? [],
+        alternateCaregivers = alternateCaregivers ?? [],
+        otherPersons = otherPersons ?? [],
+        personsConsulted = personsConsulted ?? [],
+        placeOfBirthController = TextEditingController(text: placeOfBirth),
+        educationController = TextEditingController(text: education),
+        familyHistoryController = TextEditingController(text: familyHistory),
+        employmentController = TextEditingController(text: employment),
+        householdMembers = householdMembers ?? [],
+        familyRelationshipItems = familyRelationshipItems ?? [],
+        physicalHealthDetailsController = TextEditingController(text: physicalHealthDetails),
+        psychologicalFactorsController = TextEditingController(text: psychologicalFactors),
+        housingSizeController = TextEditingController(text: housingSize),
+        housingImpressionController = TextEditingController(text: housingImpression),
+        religiousCulturalAspectsController = TextEditingController(text: religiousCulturalAspects),
+        socioCulturalAspectsController = TextEditingController(text: socioCulturalAspects),
+        incomeController = TextEditingController(text: income),
+        expenditureController = TextEditingController(text: expenditure),
+        presentLivingCircumstancesController = TextEditingController(text: presentLivingCircumstances),
+        clientPhysicalHealthController = TextEditingController(text: clientPhysicalHealth),
+        clientPsychologicalFactorsOtherController = TextEditingController(text: clientPsychologicalFactorsOther),
+        clientRelationshipsController = TextEditingController(text: clientRelationships),
+        clientSchoolingAbilitiesController = TextEditingController(text: clientSchoolingAbilities),
+        clientSchoolingProblemsController = TextEditingController(text: clientSchoolingProblems),
+        clientSchoolingAchievementsController = TextEditingController(text: clientSchoolingAchievements),
+        abandonedOrphanedController = TextEditingController(text: abandonedOrphaned),
+        specialNeedsController = TextEditingController(text: specialNeeds),
+        emotionsController = TextEditingController(text: emotions),
+        feelingsController = TextEditingController(text: feelings),
+        preferencesController = TextEditingController(text: preferences),
+        personalNeedsController = TextEditingController(text: personalNeeds),
+        otherObservationsController = TextEditingController(text: otherObservations),
+        eventsLeadingToInvestigationController = TextEditingController(text: eventsLeadingToInvestigation),
+        previousDecisionsInquiriesController = TextEditingController(text: previousDecisionsInquiries),
+        allegationsController = TextEditingController(text: allegations),
+        incidentsController = TextEditingController(text: incidents),
+        claimsAffidavitsController = TextEditingController(text: claimsAffidavits),
+        familyPreservationDetailsController = TextEditingController(text: familyPreservationDetails),
+        traffickingLocationDetailsController = TextEditingController(text: traffickingLocationDetails),
+        medicalEvidenceDetailsController = TextEditingController(text: medicalEvidenceDetails),
+        stepsTakenMeasures = stepsTakenMeasures ?? {},
+        stepsTakenMeasuresOtherController = TextEditingController(text: stepsTakenMeasuresOther),
+        stepsTakenNotesController = TextEditingController(text: stepsTakenNotes),
+        privateFamilyArrangementsController = TextEditingController(text: privateFamilyArrangements),
+        positiveFactorsController = TextEditingController(text: positiveFactors),
+        negativeFactorsController = TextEditingController(text: negativeFactors),
+        causesController = TextEditingController(text: causes),
+        resultsController = TextEditingController(text: results),
+        conclusionController = TextEditingController(text: conclusion),
+        recommendationController = TextEditingController(text: recommendation),
+        recommendedFamilyMeasures = recommendedFamilyMeasures ?? {},
+        recommendedFamilyMeasuresOtherController = TextEditingController(text: recommendedFamilyMeasuresOther),
+        recommendedClientMeasures = recommendedClientMeasures ?? {},
+        recommendedClientMeasuresOtherController = TextEditingController(text: recommendedClientMeasuresOther),
+        courtOrders = courtOrders ?? [];
+
+  static Map<String, dynamic> _newClientSubject() => {
+    'firstName': TextEditingController(),
+    'surname': TextEditingController(),
+    'gender': '',
+    'dob': TextEditingController(),
+    'age': TextEditingController(),
+    'idNumber': TextEditingController(),
+    'isMajorClient': false,
+  };
+
+  static Map<String, dynamic> _newHouseholdMember() => {
+    'firstName': TextEditingController(),
+    'surname': TextEditingController(),
+    'relationship': '',
+    'relationshipOther': TextEditingController(),
+    'age': TextEditingController(),
+  };
+
+  static Map<String, dynamic> _newFamilyRelationshipItem() => {
+    'memberName': TextEditingController(),
+    'relationshipQuality': '',
+    'details': TextEditingController(),
+  };
+
+  static Map<String, dynamic> _newSibling() => {
+    'name': TextEditingController(),
+    'gender': '',
+    'age': TextEditingController(),
+    'address': TextEditingController(),
+  };
+
+  static Map<String, dynamic> _newBiologicalParent() => {
+    'firstName': TextEditingController(),
+    'surname': TextEditingController(),
+    'idNumber': TextEditingController(),
+    'dob': TextEditingController(),
+    'age': TextEditingController(),
+    'address': TextEditingController(),
+    'countryCode': '+266',
+    'contact': TextEditingController(),
+    'qualifications': TextEditingController(),
+    'maritalStatus': '',
+    'maritalStatusOther': TextEditingController(),
+    'employer': TextEditingController(),
+  };
+
+  static Map<String, dynamic> _newAlternateCaregiver() => {
+    'firstName': TextEditingController(),
+    'surname': TextEditingController(),
+    'idNumber': TextEditingController(),
+    'dob': TextEditingController(),
+    'age': TextEditingController(),
+    'address': TextEditingController(),
+  };
+
+  static Map<String, dynamic> _newOtherPerson() => {
+    'firstName': TextEditingController(),
+    'surname': TextEditingController(),
+    'age': TextEditingController(),
+    'gender': '',
+    'relationship': '',
+    'relationshipOther': TextEditingController(),
+  };
+
+  static Map<String, dynamic> _newPersonConsulted() => {
+    'firstName': TextEditingController(),
+    'surname': TextEditingController(),
+    'address': TextEditingController(),
+    'countryCode': '+266',
+    'contact': TextEditingController(),
+    'relationship': '',
+    'relationshipOther': TextEditingController(),
+  };
+
+  static Map<String, dynamic> _newCourtOrderEntry() => {
+    'orders': <String>{},
+    'details': TextEditingController(),
+  };
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'reportDate': reportDateController.text.trim(),
+    'courtFileNumber': courtFileNumberController.text.trim(),
+    'clientSubjects': clientSubjects.map((c) => {
+      'firstName': (c['firstName'] as TextEditingController).text.trim(),
+      'surname': (c['surname'] as TextEditingController).text.trim(),
+      'gender': c['gender'] as String,
+      'dob': (c['dob'] as TextEditingController).text.trim(),
+      'age': (c['age'] as TextEditingController).text.trim(),
+      'idNumber': (c['idNumber'] as TextEditingController).text.trim(),
+      'isMajorClient': c['isMajorClient'] as bool,
+    }).toList(),
+    'residentialAddress': residentialAddressController.text.trim(),
+    'homeLanguage': homeLanguage,
+    'homeLanguageOther': homeLanguageOtherController.text.trim(),
+    'religiousAffiliation': religiousAffiliation,
+    'religiousAffiliationOther': religiousAffiliationOtherController.text.trim(),
+    'presentCaregiverFirstName': presentCaregiverFirstNameController.text.trim(),
+    'presentCaregiverSurname': presentCaregiverSurnameController.text.trim(),
+    'presentCaregiverAddress': presentCaregiverAddressController.text.trim(),
+    'presentCaregiverCountryCode': presentCaregiverCountryCode,
+    'presentCaregiverContact': presentCaregiverContactController.text.trim(),
+    'biologicalParents': biologicalParents.map((p) => {
+      'firstName': (p['firstName'] as TextEditingController).text.trim(),
+      'surname': (p['surname'] as TextEditingController).text.trim(),
+      'idNumber': (p['idNumber'] as TextEditingController).text.trim(),
+      'dob': (p['dob'] as TextEditingController).text.trim(),
+      'age': (p['age'] as TextEditingController).text.trim(),
+      'address': (p['address'] as TextEditingController).text.trim(),
+      'countryCode': p['countryCode'] as String,
+      'contact': (p['contact'] as TextEditingController).text.trim(),
+      'qualifications': (p['qualifications'] as TextEditingController).text.trim(),
+      'maritalStatus': p['maritalStatus'] as String,
+      'maritalStatusOther': (p['maritalStatusOther'] as TextEditingController).text.trim(),
+      'employer': (p['employer'] as TextEditingController).text.trim(),
+    }).toList(),
+    'siblings': siblings.map((s) => {
+      'name': (s['name'] as TextEditingController).text.trim(),
+      'gender': s['gender'] as String,
+      'age': (s['age'] as TextEditingController).text.trim(),
+      'address': (s['address'] as TextEditingController).text.trim(),
+    }).toList(),
+    'alternateCaregivers': alternateCaregivers.map((c) => {
+      'firstName': (c['firstName'] as TextEditingController).text.trim(),
+      'surname': (c['surname'] as TextEditingController).text.trim(),
+      'idNumber': (c['idNumber'] as TextEditingController).text.trim(),
+      'dob': (c['dob'] as TextEditingController).text.trim(),
+      'age': (c['age'] as TextEditingController).text.trim(),
+      'address': (c['address'] as TextEditingController).text.trim(),
+    }).toList(),
+    'otherPersons': otherPersons.map((p) => {
+      'firstName': (p['firstName'] as TextEditingController).text.trim(),
+      'surname': (p['surname'] as TextEditingController).text.trim(),
+      'age': (p['age'] as TextEditingController).text.trim(),
+      'gender': p['gender'] as String,
+      'relationship': p['relationship'] as String,
+      'relationshipOther': (p['relationshipOther'] as TextEditingController).text.trim(),
+    }).toList(),
+    'personsConsulted': personsConsulted.map((p) => {
+      'firstName': (p['firstName'] as TextEditingController).text.trim(),
+      'surname': (p['surname'] as TextEditingController).text.trim(),
+      'address': (p['address'] as TextEditingController).text.trim(),
+      'countryCode': p['countryCode'] as String,
+      'contact': (p['contact'] as TextEditingController).text.trim(),
+      'relationship': p['relationship'] as String,
+      'relationshipOther': (p['relationshipOther'] as TextEditingController).text.trim(),
+    }).toList(),
+    'placeOfBirth': placeOfBirthController.text.trim(),
+    'education': educationController.text.trim(),
+    'familyHistory': familyHistoryController.text.trim(),
+    'employment': employmentController.text.trim(),
+    'householdMembers': householdMembers.map((m) => {
+      'firstName': (m['firstName'] as TextEditingController).text.trim(),
+      'surname': (m['surname'] as TextEditingController).text.trim(),
+      'relationship': m['relationship'] as String,
+      'relationshipOther': (m['relationshipOther'] as TextEditingController).text.trim(),
+      'age': (m['age'] as TextEditingController).text.trim(),
+    }).toList(),
+    'familyRelationshipItems': familyRelationshipItems.map((r) => {
+      'memberName': (r['memberName'] as TextEditingController).text.trim(),
+      'relationshipQuality': r['relationshipQuality'] as String,
+      'details': (r['details'] as TextEditingController).text.trim(),
+    }).toList(),
+    'physicalCondition': physicalCondition,
+    'physicalHealthDetails': physicalHealthDetailsController.text.trim(),
+    'psychologicalFactors': psychologicalFactorsController.text.trim(),
+    'housingType': housingType,
+    'housingSize': housingSizeController.text.trim(),
+    'housingOwnership': housingOwnership,
+    'housingImpression': housingImpressionController.text.trim(),
+    'religiousCulturalAspects': religiousCulturalAspectsController.text.trim(),
+    'socioCulturalAspects': socioCulturalAspectsController.text.trim(),
+    'income': incomeController.text.trim(),
+    'expenditure': expenditureController.text.trim(),
+    'presentLivingCircumstances': presentLivingCircumstancesController.text.trim(),
+    'clientPhysicalHealth': clientPhysicalHealthController.text.trim(),
+    'clientPsychologicalFactors': clientPsychologicalFactors,
+    'clientPsychologicalFactorsOther': clientPsychologicalFactorsOtherController.text.trim(),
+    'clientRelationships': clientRelationshipsController.text.trim(),
+    'clientAttendedSchool': clientAttendedSchool,
+    'clientSchoolingAbilities': clientSchoolingAbilitiesController.text.trim(),
+    'clientSchoolingProblems': clientSchoolingProblemsController.text.trim(),
+    'clientSchoolingAchievements': clientSchoolingAchievementsController.text.trim(),
+    'abandonedOrphaned': abandonedOrphanedController.text.trim(),
+    'specialNeeds': specialNeedsController.text.trim(),
+    'emotions': emotionsController.text.trim(),
+    'feelings': feelingsController.text.trim(),
+    'preferences': preferencesController.text.trim(),
+    'personalNeeds': personalNeedsController.text.trim(),
+    'otherObservations': otherObservationsController.text.trim(),
+    'eventsLeadingToInvestigation': eventsLeadingToInvestigationController.text.trim(),
+    'previousDecisionsInquiries': previousDecisionsInquiriesController.text.trim(),
+    'removedToTemporarySafeCare': removedToTemporarySafeCare,
+    'familyPreservationServicesRendered': familyPreservationServicesRendered,
+    'familyPreservationDetails': familyPreservationDetailsController.text.trim(),
+    'traffickingVictimReturned': traffickingVictimReturned,
+    'traffickingLocationDetails': traffickingLocationDetailsController.text.trim(),
+    'allegations': allegationsController.text.trim(),
+    'incidents': incidentsController.text.trim(),
+    'claimsAffidavits': claimsAffidavitsController.text.trim(),
+    'medicalEvidenceAvailable': medicalEvidenceAvailable,
+    'medicalEvidenceDetails': medicalEvidenceDetailsController.text.trim(),
+    'stepsTakenMeasures': stepsTakenMeasures.toList(),
+    'stepsTakenMeasuresOther': stepsTakenMeasuresOtherController.text.trim(),
+    'stepsTakenNotes': stepsTakenNotesController.text.trim(),
+    'privateFamilyArrangements': privateFamilyArrangementsController.text.trim(),
+    'positiveFactors': positiveFactorsController.text.trim(),
+    'negativeFactors': negativeFactorsController.text.trim(),
+    'causes': causesController.text.trim(),
+    'results': resultsController.text.trim(),
+    'conclusion': conclusionController.text.trim(),
+    'recommendation': recommendationController.text.trim(),
+    'recommendedFamilyMeasures': recommendedFamilyMeasures.toList(),
+    'recommendedFamilyMeasuresOther': recommendedFamilyMeasuresOtherController.text.trim(),
+    'recommendedClientMeasures': recommendedClientMeasures.toList(),
+    'recommendedClientMeasuresOther': recommendedClientMeasuresOtherController.text.trim(),
+    'courtOrders': courtOrders.map((o) => {
+      'orders': (o['orders'] as Set<String>).toList(),
+      'details': (o['details'] as TextEditingController).text.trim(),
+    }).toList(),
+  };
+
+  void dispose() {
+    reportDateController.dispose();
+    courtFileNumberController.dispose();
+    for (final c in clientSubjects) {
+      (c['firstName'] as TextEditingController).dispose();
+      (c['surname'] as TextEditingController).dispose();
+      (c['dob'] as TextEditingController).dispose();
+      (c['age'] as TextEditingController).dispose();
+      (c['idNumber'] as TextEditingController).dispose();
+    }
+    residentialAddressController.dispose();
+    homeLanguageOtherController.dispose();
+    religiousAffiliationOtherController.dispose();
+    presentCaregiverFirstNameController.dispose();
+    presentCaregiverSurnameController.dispose();
+    presentCaregiverAddressController.dispose();
+    presentCaregiverContactController.dispose();
+    for (final p in biologicalParents) {
+      (p['firstName'] as TextEditingController).dispose();
+      (p['surname'] as TextEditingController).dispose();
+      (p['idNumber'] as TextEditingController).dispose();
+      (p['dob'] as TextEditingController).dispose();
+      (p['age'] as TextEditingController).dispose();
+      (p['address'] as TextEditingController).dispose();
+      (p['contact'] as TextEditingController).dispose();
+      (p['qualifications'] as TextEditingController).dispose();
+      (p['maritalStatusOther'] as TextEditingController).dispose();
+      (p['employer'] as TextEditingController).dispose();
+    }
+    for (final s in siblings) {
+      (s['name'] as TextEditingController).dispose();
+      (s['age'] as TextEditingController).dispose();
+      (s['address'] as TextEditingController).dispose();
+    }
+    for (final c in alternateCaregivers) {
+      (c['firstName'] as TextEditingController).dispose();
+      (c['surname'] as TextEditingController).dispose();
+      (c['idNumber'] as TextEditingController).dispose();
+      (c['dob'] as TextEditingController).dispose();
+      (c['age'] as TextEditingController).dispose();
+      (c['address'] as TextEditingController).dispose();
+    }
+    for (final p in otherPersons) {
+      (p['firstName'] as TextEditingController).dispose();
+      (p['surname'] as TextEditingController).dispose();
+      (p['age'] as TextEditingController).dispose();
+      (p['relationshipOther'] as TextEditingController).dispose();
+    }
+    for (final p in personsConsulted) {
+      (p['firstName'] as TextEditingController).dispose();
+      (p['surname'] as TextEditingController).dispose();
+      (p['address'] as TextEditingController).dispose();
+      (p['contact'] as TextEditingController).dispose();
+      (p['relationshipOther'] as TextEditingController).dispose();
+    }
+    placeOfBirthController.dispose();
+    educationController.dispose();
+    familyHistoryController.dispose();
+    employmentController.dispose();
+    for (final m in householdMembers) {
+      (m['firstName'] as TextEditingController).dispose();
+      (m['surname'] as TextEditingController).dispose();
+      (m['relationshipOther'] as TextEditingController).dispose();
+      (m['age'] as TextEditingController).dispose();
+    }
+    for (final r in familyRelationshipItems) {
+      (r['memberName'] as TextEditingController).dispose();
+      (r['details'] as TextEditingController).dispose();
+    }
+    physicalHealthDetailsController.dispose();
+    psychologicalFactorsController.dispose();
+    housingSizeController.dispose();
+    housingImpressionController.dispose();
+    religiousCulturalAspectsController.dispose();
+    socioCulturalAspectsController.dispose();
+    incomeController.dispose();
+    expenditureController.dispose();
+    presentLivingCircumstancesController.dispose();
+    clientPhysicalHealthController.dispose();
+    clientPsychologicalFactorsOtherController.dispose();
+    clientRelationshipsController.dispose();
+    clientSchoolingAbilitiesController.dispose();
+    clientSchoolingProblemsController.dispose();
+    clientSchoolingAchievementsController.dispose();
+    abandonedOrphanedController.dispose();
+    specialNeedsController.dispose();
+    emotionsController.dispose();
+    feelingsController.dispose();
+    preferencesController.dispose();
+    personalNeedsController.dispose();
+    otherObservationsController.dispose();
+    eventsLeadingToInvestigationController.dispose();
+    previousDecisionsInquiriesController.dispose();
+    allegationsController.dispose();
+    incidentsController.dispose();
+    claimsAffidavitsController.dispose();
+    familyPreservationDetailsController.dispose();
+    traffickingLocationDetailsController.dispose();
+    medicalEvidenceDetailsController.dispose();
+    stepsTakenMeasuresOtherController.dispose();
+    stepsTakenNotesController.dispose();
+    privateFamilyArrangementsController.dispose();
+    positiveFactorsController.dispose();
+    negativeFactorsController.dispose();
+    causesController.dispose();
+    resultsController.dispose();
+    conclusionController.dispose();
+    recommendationController.dispose();
+    recommendedFamilyMeasuresOtherController.dispose();
+    recommendedClientMeasuresOtherController.dispose();
+    for (final o in courtOrders) {
+      (o['details'] as TextEditingController).dispose();
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Self-contained phone input with searchable country picker.
 // Owns its own State so the bottom sheet never touches the parent's setState.
 // ─────────────────────────────────────────────────────────────────────────────
 class _PhoneInputField extends StatefulWidget {
-  final _ExternalInformantEntry entry;
+  final TextEditingController controller;
+  final String countryCode;
   final List<Map<String, dynamic>> countries;
   final Color accentColor;
   final void Function(String code) onCountryChanged;
 
   const _PhoneInputField({
-    required this.entry,
+    required this.controller,
+    required this.countryCode,
     required this.countries,
     required this.accentColor,
     required this.onCountryChanged,
@@ -549,7 +1172,7 @@ class _PhoneInputFieldState extends State<_PhoneInputField> {
   }
 
   Map<String, dynamic>? get _selectedCountry {
-    final code = widget.entry.contactCountryCode;
+    final code = widget.countryCode;
     if (code.isEmpty) return null;
     try {
       return widget.countries.firstWhere(
@@ -644,7 +1267,7 @@ class _PhoneInputFieldState extends State<_PhoneInputField> {
                                 ? ''
                                 : c['code'] as String;
                             final currentCode =
-                                widget.entry.contactCountryCode;
+                                widget.countryCode;
                             final isSelected = code.isNotEmpty &&
                                 currentCode == code;
                             final isOtherSelected =
@@ -653,7 +1276,7 @@ class _PhoneInputFieldState extends State<_PhoneInputField> {
                               dense: true,
                               selected: isSelected || isOtherSelected,
                               selectedTileColor:
-                              widget.accentColor.withOpacity(0.07),
+                              widget.accentColor.withValues(alpha: 0.07),
                               leading: Text(c['flag'] as String,
                                   style: const TextStyle(fontSize: 22)),
                               title: Text(c['name'] as String,
@@ -696,7 +1319,7 @@ class _PhoneInputFieldState extends State<_PhoneInputField> {
   @override
   Widget build(BuildContext context) {
     final country = _selectedCountry;
-    final code = widget.entry.contactCountryCode;
+    final code = widget.countryCode;
     final flagAndCode = code.isEmpty
         ? '🌍  Other'
         : '${country?['flag'] ?? '🌍'}  $code';
@@ -715,7 +1338,7 @@ class _PhoneInputFieldState extends State<_PhoneInputField> {
               decoration: BoxDecoration(
                 color: const Color(0xFFF9FBFD),
                 borderRadius: BorderRadius.circular(13),
-                border: Border.all(color: Colors.blueGrey.withOpacity(0.35)),
+                border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.35)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -734,10 +1357,10 @@ class _PhoneInputFieldState extends State<_PhoneInputField> {
           // Phone number field
           Expanded(
             child: TextFormField(
-              controller: widget.entry.contactNumberController,
+              controller: widget.controller,
               keyboardType: TextInputType.phone,
               validator: (v) =>
-                  _validatePhone(v ?? '', widget.entry.contactCountryCode),
+                  _validatePhone(v ?? '', widget.countryCode),
               autovalidateMode: AutovalidateMode.onUserInteraction,
               decoration: InputDecoration(
                 labelText: country != null
@@ -873,6 +1496,55 @@ class _MgysdSocialInvestigationPageState
   // Case Conference (Form 5)
   final List<_CaseConferenceEntry> _caseConferenceEntries = [];
   final Set<int> _collapsedConferences = {};
+
+  // Court Report (Form 3a)
+  final List<_CourtReportEntry> _courtReportEntries = [];
+  final Set<int> _collapsedCourtReports = {};
+
+  static const List<String> _courtOrderOptions = [
+    'FOSTER_CARE_RELATIVES', 'FOSTER_CARE_NON_RELATIVES', 'KINSHIP_CARE',
+    'ADOPTION_RELATIVES', 'ADOPTION_NON_RELATIVES',
+    'GUARDIANSHIP_RELATIVES', 'PERMANENT_FOSTER_CARE', 'RESIDENTIAL_FACILITY',
+  ];
+  static const Map<String, String> _courtOrderLabels = {
+    'FOSTER_CARE_RELATIVES': 'Foster care — relatives',
+    'FOSTER_CARE_NON_RELATIVES': 'Foster care — non-relatives',
+    'KINSHIP_CARE': 'Kinship care (relatives/extended family)',
+    'ADOPTION_RELATIVES': 'Adoption by relatives',
+    'ADOPTION_NON_RELATIVES': 'Adoption by non-relatives',
+    'GUARDIANSHIP_RELATIVES': 'Guardianship of relatives',
+    'PERMANENT_FOSTER_CARE': 'Permanent foster care',
+    'RESIDENTIAL_FACILITY': 'Residential Child Care Facility',
+  };
+  static const List<String> _recommendedFamilyMeasureOptions = [
+    'COUNSELLING', 'MEDIATION', 'PREVENTION_EARLY_INTERVENTION',
+    'FAMILY_RECONSTRUCTION', 'BEHAVIOUR_MODIFICATION',
+    'PROBLEM_SOLVING', 'REFERRAL', 'OTHER',
+  ];
+  static const Map<String, String> _recommendedFamilyMeasureLabels = {
+    'COUNSELLING': 'Counselling',
+    'MEDIATION': 'Mediation',
+    'PREVENTION_EARLY_INTERVENTION': 'Prevention and early intervention services',
+    'FAMILY_RECONSTRUCTION': 'Family reconstruction and rehabilitation',
+    'BEHAVIOUR_MODIFICATION': 'Behaviour modification',
+    'PROBLEM_SOLVING': 'Problem solving',
+    'REFERRAL': 'Referral to another suitably qualified person or organisation',
+    'OTHER': 'Other',
+  };
+  static const List<String> _recommendedClientMeasureOptions = [
+    'THERAPEUTIC', 'EDUCATIONAL', 'CULTURAL', 'LINGUISTIC',
+    'DEVELOPMENTAL', 'SOCIO_ECONOMIC', 'SPIRITUAL', 'OTHER',
+  ];
+  static const Map<String, String> _recommendedClientMeasureLabels = {
+    'THERAPEUTIC': 'Therapeutic needs',
+    'EDUCATIONAL': 'Educational needs',
+    'CULTURAL': 'Cultural needs',
+    'LINGUISTIC': 'Linguistic needs',
+    'DEVELOPMENTAL': 'Developmental needs',
+    'SOCIO_ECONOMIC': 'Socio-economic needs',
+    'SPIRITUAL': 'Spiritual needs',
+    'OTHER': 'Other needs',
+  };
 
   static const List<String> _conferenceTypeOptions = ['SCHEDULED', 'UNPLANNED'];
   static const Map<String, String> _conferenceTypeLabels = {
@@ -1245,6 +1917,105 @@ class _MgysdSocialInvestigationPageState
     'Other': 'Other',
   };
 
+  // Court Report — Home Language is a narrower 3-option dropdown
+  static const List<String> _courtReportHomeLanguageOptions = [
+    'Sesotho',
+    'English',
+    'Other',
+  ];
+  static const Map<String, String> _courtReportHomeLanguageLabels = {
+    'Sesotho': 'Sesotho',
+    'English': 'English',
+    'Other': 'Other',
+  };
+
+  static const List<String> _religiousAffiliationOptions = [
+    'CHRISTIAN', 'SABBATH', 'MUSLIM', 'OTHER',
+  ];
+  static const Map<String, String> _religiousAffiliationLabels = {
+    'CHRISTIAN': 'Christian',
+    'SABBATH': 'Sabbath',
+    'MUSLIM': 'Muslim',
+    'OTHER': 'Other',
+  };
+
+  static const List<String> _maritalStatusOptions = [
+    'SINGLE', 'MARRIED', 'DIVORCED', 'WIDOWED', 'SEPARATED', 'OTHER',
+  ];
+  static const Map<String, String> _maritalStatusLabels = {
+    'SINGLE': 'Single',
+    'MARRIED': 'Married',
+    'DIVORCED': 'Divorced',
+    'WIDOWED': 'Widowed',
+    'SEPARATED': 'Separated',
+    'OTHER': 'Other',
+  };
+
+  static const List<String> _clientPsychologicalFactorOptions = [
+    'NONE_NOTED', 'ANXIETY', 'DEPRESSION', 'TRAUMA_RELATED',
+    'BEHAVIOURAL_DIFFICULTIES', 'MENTAL_DISABILITY', 'OTHER',
+  ];
+  static const Map<String, String> _clientPsychologicalFactorLabels = {
+    'NONE_NOTED': 'None noted',
+    'ANXIETY': 'Anxiety',
+    'DEPRESSION': 'Depression',
+    'TRAUMA_RELATED': 'Trauma-related',
+    'BEHAVIOURAL_DIFFICULTIES': 'Behavioural difficulties',
+    'MENTAL_DISABILITY': 'Mental disability',
+    'OTHER': 'Other',
+  };
+
+  static const List<String> _physicalConditionOptions = [
+    'HEALTHY', 'MILD_ILLNESS', 'CHRONIC_ILLNESS', 'PHYSICAL_DISABILITY',
+    'SUBSTANCE_ABUSE', 'MALNOURISHED', 'OTHER',
+  ];
+  static const Map<String, String> _physicalConditionLabels = {
+    'HEALTHY': 'Healthy / no concerns',
+    'MILD_ILLNESS': 'Mild / temporary illness',
+    'CHRONIC_ILLNESS': 'Chronic illness',
+    'PHYSICAL_DISABILITY': 'Physical disability',
+    'SUBSTANCE_ABUSE': 'Substance abuse',
+    'MALNOURISHED': 'Malnourished / poor nutrition',
+    'OTHER': 'Other',
+  };
+  static const List<String> _housingTypeOptions = [
+    'FORMAL_HOUSE', 'INFORMAL_SHACK', 'FLAT_APARTMENT', 'TRADITIONAL_HUT',
+    'HOSTEL', 'NO_FIXED_ABODE', 'OTHER',
+  ];
+  static const Map<String, String> _housingTypeLabels = {
+    'FORMAL_HOUSE': 'Formal house',
+    'INFORMAL_SHACK': 'Informal / shack',
+    'FLAT_APARTMENT': 'Flat / apartment',
+    'TRADITIONAL_HUT': 'Traditional hut',
+    'HOSTEL': 'Hostel',
+    'NO_FIXED_ABODE': 'No fixed abode',
+    'OTHER': 'Other',
+  };
+  static const List<String> _housingOwnershipOptions = [
+    'OWNED', 'RENTED', 'GOVERNMENT_SUBSIDISED', 'BORROWED', 'INFORMAL', 'OTHER',
+  ];
+  static const Map<String, String> _housingOwnershipLabels = {
+    'OWNED': 'Owned',
+    'RENTED': 'Rented',
+    'GOVERNMENT_SUBSIDISED': 'Government-subsidised',
+    'BORROWED': 'Borrowed / allocated',
+    'INFORMAL': 'Informal / no tenure',
+    'OTHER': 'Other',
+  };
+
+  static const List<String> _relationshipQualityOptions = [
+    'POSITIVE', 'STRAINED', 'CONFLICTUAL', 'DISTANT', 'ABUSIVE', 'NO_CONTACT', 'OTHER',
+  ];
+  static const Map<String, String> _relationshipQualityLabels = {
+    'POSITIVE': 'Positive / supportive',
+    'STRAINED': 'Strained',
+    'CONFLICTUAL': 'Conflictual',
+    'DISTANT': 'Distant / minimal contact',
+    'ABUSIVE': 'Abusive',
+    'NO_CONTACT': 'No contact',
+    'OTHER': 'Other',
+  };
+
   static const List<String> _clientCategoryOptions = [
     'CHILD',
     'ADULT_ELDERLY_PERSON',
@@ -1497,6 +2268,7 @@ class _MgysdSocialInvestigationPageState
     _socialInclusionChallengesController.dispose();
     for (final entry in _externalInformantEntries) { entry.dispose(); }
     for (final entry in _caseConferenceEntries) { entry.dispose(); }
+    for (final entry in _courtReportEntries) { entry.dispose(); }
     super.dispose();
   }
 
@@ -1587,13 +2359,43 @@ class _MgysdSocialInvestigationPageState
     return age < 0 ? 0 : age;
   }
 
+  // DOB picker — future dates blocked; lastDate is today
+  Future<void> _pickDob(TextEditingController controller) async {
+    final today = DateTime.now();
+    final todayMidnight = DateTime(today.year, today.month, today.day);
+    final existing = DateTime.tryParse(controller.text.trim());
+    final initial = (existing != null && !existing.isAfter(todayMidnight))
+        ? existing
+        : todayMidnight;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(1900),
+      lastDate: todayMidnight,
+    );
+    if (picked != null) setState(() => controller.text = _formatDate(picked));
+  }
+
   Future<void> _pickDobAndCalculateAge(_PersonSummary member) async {
     final dobController = member.controllers['dob'];
     final ageController = member.controllers['age'];
     if (dobController == null || ageController == null) return;
-    await _pickDate(dobController);
+    await _pickDob(dobController);
     final age = _calculateAgeFromDob(dobController.text);
     setState(() => ageController.text = age == 0 ? '' : age.toString());
+  }
+
+  // Generic DOB picker that calculates age (in whole years only, e.g.
+  // "22 years") for any pair of controllers — used by the Court Report's
+  // structured client/parent/caregiver rows.
+  Future<void> _pickDobAndSetAgeYears(TextEditingController dobController, TextEditingController ageController) async {
+    await _pickDob(dobController);
+    if (dobController.text.trim().isEmpty) {
+      setState(() => ageController.text = '');
+      return;
+    }
+    final age = _calculateAgeFromDob(dobController.text);
+    setState(() => ageController.text = '$age years');
   }
 
   String _normaliseOptionValue(String value, List<String> options) {
@@ -2191,6 +2993,305 @@ class _MgysdSocialInvestigationPageState
         nextConferencePurpose: _text(item['nextConferencePurpose']),
       ));
     }
+
+    final courtReports = (part4['courtReports'] ?? []) as List<dynamic>;
+    for (final entry in _courtReportEntries) { entry.dispose(); }
+    _courtReportEntries.clear();
+    for (final raw in courtReports) {
+      final item = (raw ?? {}) as Map<String, dynamic>;
+
+      // Section 1 — client subjects (firstName/surname split; legacy single
+      // "name" field is best-effort split on the first space)
+      final subjects = ((item['clientSubjects'] ?? []) as List<dynamic>).map((s) {
+        final m = (s ?? {}) as Map<String, dynamic>;
+        String firstName = _text(m['firstName']);
+        String surname = _text(m['surname']);
+        if (firstName.isEmpty && surname.isEmpty) {
+          final legacyName = _text(m['name']);
+          if (legacyName.isNotEmpty) {
+            final parts = legacyName.split(' ');
+            firstName = parts.first;
+            surname = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+          }
+        }
+        final dobText = _text(m['dob']);
+        final ageText = _text(m['age']).isNotEmpty
+            ? _text(m['age'])
+            : (dobText.isNotEmpty ? '${_calculateAgeFromDob(dobText)} years' : '');
+        return <String, dynamic>{
+          'firstName': TextEditingController(text: firstName),
+          'surname': TextEditingController(text: surname),
+          'gender': _text(m['gender']),
+          'dob': TextEditingController(text: dobText),
+          'age': TextEditingController(text: ageText),
+          'idNumber': TextEditingController(text: _text(m['idNumber'])),
+          'isMajorClient': (m['isMajorClient'] as bool?) ?? false,
+        };
+      }).toList();
+
+      final biologicalParentsRaw = ((item['biologicalParents'] is List) ? item['biologicalParents'] as List<dynamic> : []).map((s) {
+        final m = (s ?? {}) as Map<String, dynamic>;
+        return <String, dynamic>{
+          'firstName': TextEditingController(text: _text(m['firstName'])),
+          'surname': TextEditingController(text: _text(m['surname'])),
+          'idNumber': TextEditingController(text: _text(m['idNumber'])),
+          'dob': TextEditingController(text: _text(m['dob'])),
+          'age': TextEditingController(text: _text(m['age'])),
+          'address': TextEditingController(text: _text(m['address'])),
+          'countryCode': _text(m['countryCode']).isNotEmpty ? _text(m['countryCode']) : '+266',
+          'contact': TextEditingController(text: _text(m['contact'])),
+          'qualifications': TextEditingController(text: _text(m['qualifications'])),
+          'maritalStatus': _text(m['maritalStatus']),
+          'maritalStatusOther': TextEditingController(text: _text(m['maritalStatusOther'])),
+          'employer': TextEditingController(text: _text(m['employer'])),
+        };
+      }).toList();
+      // Legacy single free-text "biologicalParents" string — preserve it in
+      // a new row's Qualifications field rather than silently dropping it.
+      if (biologicalParentsRaw.isEmpty && item['biologicalParents'] is String && _text(item['biologicalParents']).isNotEmpty) {
+        final legacy = _CourtReportEntry._newBiologicalParent();
+        (legacy['qualifications'] as TextEditingController).text = _text(item['biologicalParents']);
+        biologicalParentsRaw.add(legacy);
+      }
+
+      final siblingsRaw = ((item['siblings'] ?? []) as List<dynamic>).map((s) {
+        final m = (s ?? {}) as Map<String, dynamic>;
+        return <String, dynamic>{
+          'name': TextEditingController(text: _text(m['name'])),
+          'gender': _text(m['gender']),
+          'age': TextEditingController(text: _text(m['age'])),
+          'address': TextEditingController(text: _text(m['address'])),
+        };
+      }).toList();
+
+      final alternateCaregiversRaw = ((item['alternateCaregivers'] is List) ? item['alternateCaregivers'] as List<dynamic> : []).map((s) {
+        final m = (s ?? {}) as Map<String, dynamic>;
+        return <String, dynamic>{
+          'firstName': TextEditingController(text: _text(m['firstName'])),
+          'surname': TextEditingController(text: _text(m['surname'])),
+          'idNumber': TextEditingController(text: _text(m['idNumber'])),
+          'dob': TextEditingController(text: _text(m['dob'])),
+          'age': TextEditingController(text: _text(m['age'])),
+          'address': TextEditingController(text: _text(m['address'])),
+        };
+      }).toList();
+      // Legacy single free-text "alternateCaregiver" string
+      if (alternateCaregiversRaw.isEmpty && item['alternateCaregiver'] is String && _text(item['alternateCaregiver']).isNotEmpty) {
+        final legacy = _CourtReportEntry._newAlternateCaregiver();
+        (legacy['address'] as TextEditingController).text = _text(item['alternateCaregiver']);
+        alternateCaregiversRaw.add(legacy);
+      }
+
+      final othersRaw = ((item['otherPersons'] ?? []) as List<dynamic>).map((p) {
+        final m = (p ?? {}) as Map<String, dynamic>;
+        String relationship = _text(m['relationship']);
+        String relationshipOther = _text(m['relationshipOther']);
+        if (relationship.isNotEmpty && !_familyRelationshipOptions.contains(relationship)) {
+          final resolved = _resolveOptionWithOther(relationship, _familyRelationshipOptions);
+          relationship = resolved[0];
+          if (relationshipOther.isEmpty) relationshipOther = resolved[1];
+        }
+        // Support legacy 'name' field migration to firstName+surname
+        final legacyName = _text(m['name']);
+        final parts = legacyName.split(' ');
+        return <String, dynamic>{
+          'firstName': TextEditingController(text: _text(m['firstName']).isNotEmpty ? _text(m['firstName']) : (parts.isNotEmpty ? parts.first : '')),
+          'surname': TextEditingController(text: _text(m['surname']).isNotEmpty ? _text(m['surname']) : (parts.length > 1 ? parts.sublist(1).join(' ') : '')),
+          'age': TextEditingController(text: _text(m['age'])),
+          'gender': _text(m['gender']),
+          'relationship': relationship,
+          'relationshipOther': TextEditingController(text: relationshipOther),
+        };
+      }).toList();
+
+      final personsConsultedRaw = ((item['personsConsulted'] is List) ? item['personsConsulted'] as List<dynamic> : []).map((p) {
+        final m = (p ?? {}) as Map<String, dynamic>;
+        // Support legacy 'name' field migration
+        final legacyName = _text(m['name']);
+        final parts = legacyName.split(' ');
+        return <String, dynamic>{
+          'firstName': TextEditingController(text: _text(m['firstName']).isNotEmpty ? _text(m['firstName']) : (parts.isNotEmpty ? parts.first : '')),
+          'surname': TextEditingController(text: _text(m['surname']).isNotEmpty ? _text(m['surname']) : (parts.length > 1 ? parts.sublist(1).join(' ') : '')),
+          'address': TextEditingController(text: _text(m['address'])),
+          'countryCode': _text(m['countryCode']).isNotEmpty ? _text(m['countryCode']) : '+266',
+          'contact': TextEditingController(text: _text(m['contact'])),
+          'relationship': _text(m['relationship']),
+          'relationshipOther': TextEditingController(text: _text(m['relationshipOther'])),
+        };
+      }).toList();
+      // Legacy single free-text "sourcesOfInformation" string
+      if (personsConsultedRaw.isEmpty && _text(item['sourcesOfInformation']).isNotEmpty) {
+        final legacy = _CourtReportEntry._newPersonConsulted();
+        (legacy['address'] as TextEditingController).text = _text(item['sourcesOfInformation']);
+        personsConsultedRaw.add(legacy);
+      }
+
+      final courtOrdersRaw = ((item['courtOrders'] is List) ? item['courtOrders'] as List<dynamic> : []).map((o) {
+        final m = (o ?? {}) as Map<String, dynamic>;
+        return <String, dynamic>{
+          'orders': Set<String>.from((m['orders'] ?? []) as List<dynamic>),
+          'details': TextEditingController(text: _text(m['details'])),
+        };
+      }).toList();
+      // Legacy single-select "courtOrder" + "courtOrderDetails"
+      if (courtOrdersRaw.isEmpty && (item['courtOrder'] is String) && (_text(item['courtOrder']).isNotEmpty || _text(item['courtOrderDetails']).isNotEmpty)) {
+        final legacyOrder = _text(item['courtOrder']);
+        courtOrdersRaw.add(<String, dynamic>{
+          'orders': legacyOrder.isNotEmpty ? <String>{legacyOrder} : <String>{},
+          'details': TextEditingController(text: _text(item['courtOrderDetails'])),
+        });
+      }
+
+      // Dropdown + Other migrations — keep the value if it already matches a
+      // current option (new schema), otherwise resolve free legacy text.
+      String homeLanguageValue = _text(item['homeLanguage']);
+      String homeLanguageOtherValue = _text(item['homeLanguageOther']);
+      if (homeLanguageValue.isNotEmpty && !_courtReportHomeLanguageOptions.contains(homeLanguageValue)) {
+        final resolved = _resolveOptionWithOther(homeLanguageValue, _courtReportHomeLanguageOptions);
+        homeLanguageValue = resolved[0];
+        if (homeLanguageOtherValue.isEmpty) homeLanguageOtherValue = resolved[1];
+      }
+
+      String religiousAffiliationValue = _text(item['religiousAffiliation']);
+      String religiousAffiliationOtherValue = _text(item['religiousAffiliationOther']);
+      if (religiousAffiliationValue.isNotEmpty && !_religiousAffiliationOptions.contains(religiousAffiliationValue)) {
+        final resolved = _resolveOptionWithOther(religiousAffiliationValue, _religiousAffiliationOptions);
+        religiousAffiliationValue = resolved[0];
+        if (religiousAffiliationOtherValue.isEmpty) religiousAffiliationOtherValue = resolved[1];
+      }
+
+      String clientPsychFactorsValue = _text(item['clientPsychologicalFactors']);
+      String clientPsychFactorsOtherValue = _text(item['clientPsychologicalFactorsOther']);
+      if (clientPsychFactorsValue.isNotEmpty && !_clientPsychologicalFactorOptions.contains(clientPsychFactorsValue)) {
+        final resolved = _resolveOptionWithOther(clientPsychFactorsValue, _clientPsychologicalFactorOptions);
+        clientPsychFactorsValue = resolved[0];
+        if (clientPsychFactorsOtherValue.isEmpty) clientPsychFactorsOtherValue = resolved[1];
+      }
+
+      // Present caregiver — legacy single free-text field is preserved in
+      // Address if the new structured fields are not present.
+      String presentCaregiverAddressValue = _text(item['presentCaregiverAddress']);
+      if (presentCaregiverAddressValue.isEmpty && _text(item['presentCaregiver']).isNotEmpty) {
+        presentCaregiverAddressValue = _text(item['presentCaregiver']);
+      }
+
+      // Medical evidence — legacy single free-text field becomes the
+      // "available" checkbox (checked) + its details.
+      bool medicalEvidenceAvailableValue = (item['medicalEvidenceAvailable'] as bool?) ?? false;
+      String medicalEvidenceDetailsValue = _text(item['medicalEvidenceDetails']);
+      if (!medicalEvidenceAvailableValue && medicalEvidenceDetailsValue.isEmpty && _text(item['medicalEvidence']).isNotEmpty) {
+        medicalEvidenceAvailableValue = true;
+        medicalEvidenceDetailsValue = _text(item['medicalEvidence']);
+      }
+
+      _courtReportEntries.add(_CourtReportEntry(
+        id: _text(item['id']).isEmpty ? AppUtil.getUid() : _text(item['id']),
+        reportDate: _text(item['reportDate']),
+        courtFileNumber: _text(item['courtFileNumber']),
+        clientSubjects: subjects.isEmpty ? null : subjects,
+        residentialAddress: _text(item['residentialAddress']),
+        homeLanguage: homeLanguageValue,
+        homeLanguageOther: homeLanguageOtherValue,
+        religiousAffiliation: religiousAffiliationValue,
+        religiousAffiliationOther: religiousAffiliationOtherValue,
+        presentCaregiverFirstName: _text(item['presentCaregiverFirstName']),
+        presentCaregiverSurname: _text(item['presentCaregiverSurname']),
+        presentCaregiverAddress: presentCaregiverAddressValue,
+        presentCaregiverCountryCode: _text(item['presentCaregiverCountryCode']),
+        presentCaregiverContact: _text(item['presentCaregiverContact']),
+        biologicalParents: biologicalParentsRaw.isEmpty ? null : biologicalParentsRaw,
+        siblings: siblingsRaw.isEmpty ? null : siblingsRaw,
+        alternateCaregivers: alternateCaregiversRaw.isEmpty ? null : alternateCaregiversRaw,
+        otherPersons: othersRaw.isEmpty ? null : othersRaw,
+        personsConsulted: personsConsultedRaw.isEmpty ? null : personsConsultedRaw,
+        placeOfBirth: _text(item['placeOfBirth']),
+        education: _text(item['education']),
+        familyHistory: _text(item['familyHistory']).isNotEmpty ? _text(item['familyHistory']) : _text(item['familyBackground']),
+        employment: _text(item['employment']),
+        householdMembers: ((item['householdMembers'] ?? []) as List<dynamic>).map((m) {
+          final mm = (m ?? {}) as Map<String, dynamic>;
+          return <String, dynamic>{
+            'firstName': TextEditingController(text: _text(mm['firstName'])),
+            'surname': TextEditingController(text: _text(mm['surname'])),
+            'relationship': _text(mm['relationship']),
+            'relationshipOther': TextEditingController(text: _text(mm['relationshipOther'])),
+            'age': TextEditingController(text: _text(mm['age'])),
+          };
+        }).toList(),
+        familyRelationshipItems: ((item['familyRelationshipItems'] ?? []) as List<dynamic>).map((r) {
+          final rr = (r ?? {}) as Map<String, dynamic>;
+          return <String, dynamic>{
+            'memberName': TextEditingController(text: _text(rr['memberName'])),
+            'relationshipQuality': _text(rr['relationshipQuality']),
+            'details': TextEditingController(text: _text(rr['details'])),
+          };
+        }).toList(),
+        physicalCondition: _text(item['physicalCondition']),
+        physicalHealthDetails: _text(item['physicalHealthDetails']).isNotEmpty ? _text(item['physicalHealthDetails']) : _text(item['physicalFactorsHealth']),
+        psychologicalFactors: _text(item['psychologicalFactors']),
+        housingType: _text(item['housingType']),
+        housingSize: _text(item['housingSize']),
+        housingOwnership: _text(item['housingOwnership']),
+        housingImpression: _text(item['housingImpression']).isNotEmpty ? _text(item['housingImpression']) : _text(item['housingEnvironment']),
+        religiousCulturalAspects: _text(item['religiousCulturalAspects']),
+        socioCulturalAspects: _text(item['socioCulturalAspects']),
+        income: _text(item['income']),
+        expenditure: _text(item['expenditure']).isNotEmpty ? _text(item['expenditure']) : _text(item['financialAspects']),
+        presentLivingCircumstances: _text(item['presentLivingCircumstances']),
+        clientPhysicalHealth: _text(item['clientPhysicalHealth']),
+        clientPsychologicalFactors: clientPsychFactorsValue,
+        clientPsychologicalFactorsOther: clientPsychFactorsOtherValue,
+        clientRelationships: _text(item['clientRelationships']),
+        clientAttendedSchool: _text(item['clientAttendedSchool']),
+        clientSchoolingAbilities: _text(item['clientSchoolingAbilities']),
+        clientSchoolingProblems: _text(item['clientSchoolingProblems']),
+        clientSchoolingAchievements: _text(item['clientSchoolingAchievements']).isNotEmpty ? _text(item['clientSchoolingAchievements']) : _text(item['clientSchooling']),
+        abandonedOrphaned: _text(item['abandonedOrphaned']),
+        specialNeeds: _text(item['specialNeeds']),
+        emotions: _text(item['emotions']),
+        feelings: _text(item['feelings']),
+        preferences: _text(item['preferences']),
+        personalNeeds: _text(item['personalNeeds']),
+        otherObservations: _text(item['otherObservations']).isNotEmpty
+            ? _text(item['otherObservations'])
+            : _text(item['viewsOfClient']),
+        eventsLeadingToInvestigation: _text(item['eventsLeadingToInvestigation']),
+        previousDecisionsInquiries: _text(item['previousDecisionsInquiries']).isNotEmpty
+            ? _text(item['previousDecisionsInquiries'])
+            : _text(item['previousInterventions']),
+        removedToTemporarySafeCare: _text(item['removedToTemporarySafeCare']),
+        familyPreservationServicesRendered: _text(item['familyPreservationServicesRendered']),
+        familyPreservationDetails: _text(item['familyPreservationDetails']),
+        traffickingVictimReturned: _text(item['traffickingVictimReturned']),
+        traffickingLocationDetails: _text(item['traffickingLocationDetails']),
+        allegations: _text(item['allegations']).isNotEmpty
+            ? _text(item['allegations'])
+            : _text(item['evidenceAndFacts']),
+        incidents: _text(item['incidents']),
+        claimsAffidavits: _text(item['claimsAffidavits']),
+        medicalEvidenceAvailable: medicalEvidenceAvailableValue,
+        medicalEvidenceDetails: medicalEvidenceDetailsValue,
+        stepsTakenMeasures: Set<String>.from(item['stepsTakenMeasures'] ?? []),
+        stepsTakenMeasuresOther: _text(item['stepsTakenMeasuresOther']),
+        stepsTakenNotes: _text(item['stepsTakenNotes']).isNotEmpty
+            ? _text(item['stepsTakenNotes'])
+            : _text(item['stepsTaken']),
+        privateFamilyArrangements: _text(item['privateFamilyArrangements']),
+        positiveFactors: _text(item['positiveFactors']).isNotEmpty
+            ? _text(item['positiveFactors'])
+            : _text(item['evaluation']),
+        negativeFactors: _text(item['negativeFactors']),
+        causes: _text(item['causes']),
+        results: _text(item['results']),
+        conclusion: _text(item['conclusion']),
+        recommendation: _text(item['recommendation']),
+        recommendedFamilyMeasures: Set<String>.from(item['recommendedFamilyMeasures'] ?? []),
+        recommendedFamilyMeasuresOther: _text(item['recommendedFamilyMeasuresOther']),
+        recommendedClientMeasures: Set<String>.from(item['recommendedClientMeasures'] ?? []),
+        recommendedClientMeasuresOther: _text(item['recommendedClientMeasuresOther']),
+        courtOrders: courtOrdersRaw.isEmpty ? null : courtOrdersRaw,
+      ));
+    }
   }
 
   /// Resolves a legacy free-text value onto a known option list. Returns a
@@ -2282,6 +3383,7 @@ class _MgysdSocialInvestigationPageState
       'part4': {
         'externalInformants': _externalInformantEntries.map((e) => e.toJson()).toList(),
         'caseConferences': _caseConferenceEntries.map((e) => e.toJson()).toList(),
+        'courtReports': _courtReportEntries.map((e) => e.toJson()).toList(),
       },
     };
   }
@@ -2632,6 +3734,28 @@ class _MgysdSocialInvestigationPageState
     });
   }
 
+  void _addCourtReportEntry() {
+    setState(() {
+      for (int i = 0; i < _courtReportEntries.length; i++) {
+        _collapsedCourtReports.add(i);
+      }
+      _courtReportEntries.add(_CourtReportEntry(id: AppUtil.getUid()));
+    });
+  }
+
+  void _removeCourtReportEntry(int index) {
+    setState(() {
+      final item = _courtReportEntries.removeAt(index);
+      item.dispose();
+      final updated = <int>{};
+      for (final i in _collapsedCourtReports) {
+        if (i < index) updated.add(i);
+        if (i > index) updated.add(i - 1);
+      }
+      _collapsedCourtReports..clear()..addAll(updated);
+    });
+  }
+
   void _showSnack(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
@@ -2646,8 +3770,8 @@ class _MgysdSocialInvestigationPageState
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.blueGrey.withOpacity(0.08)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.035), blurRadius: 16, offset: const Offset(0, 6))],
+        border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.08)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.035), blurRadius: 16, offset: const Offset(0, 6))],
       ),
       child: child,
     );
@@ -2659,7 +3783,7 @@ class _MgysdSocialInvestigationPageState
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(width: 38, height: 38, decoration: BoxDecoration(color: widget.color.withOpacity(0.12), borderRadius: BorderRadius.circular(14)), child: Icon(Icons.assignment_outlined, color: widget.color)),
+          Container(width: 38, height: 38, decoration: BoxDecoration(color: widget.color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(14)), child: Icon(Icons.assignment_outlined, color: widget.color)),
           const SizedBox(width: 10),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(title, style: const TextStyle(fontSize: 15.8, fontWeight: FontWeight.w900)),
@@ -2671,16 +3795,17 @@ class _MgysdSocialInvestigationPageState
     );
   }
 
-  Widget _input(TextEditingController controller, String label, {int maxLines = 1, TextInputType keyboardType = TextInputType.text, bool readOnly = false, VoidCallback? onTap, String? Function(String?)? validator}) {
+  Widget _input(TextEditingController controller, String label, {int maxLines = 1, TextInputType keyboardType = TextInputType.text, bool readOnly = false, VoidCallback? onTap, String? Function(String?)? validator, TextInputAction? textInputAction}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: TextFormField(
         controller: controller,
         maxLines: maxLines,
-        keyboardType: keyboardType,
+        keyboardType: (maxLines > 1) ? TextInputType.multiline : keyboardType,
         readOnly: readOnly,
         onTap: onTap,
         validator: validator,
+        textInputAction: textInputAction ?? (maxLines > 1 ? TextInputAction.newline : TextInputAction.next),
         decoration: InputDecoration(labelText: label, filled: true, fillColor: const Color(0xFFF9FBFD), border: OutlineInputBorder(borderRadius: BorderRadius.circular(13)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
       ),
     );
@@ -2806,13 +3931,13 @@ class _MgysdSocialInvestigationPageState
     String label = 'Not started';
     if (_savedStatus == 'DRAFT') { color = Colors.orange; label = 'Draft'; }
     else if (_savedStatus == 'COMPLETED') { color = Colors.green; label = 'Completed'; }
-    return Container(padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6), decoration: BoxDecoration(color: color.withOpacity(0.11), borderRadius: BorderRadius.circular(999)), child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w800)));
+    return Container(padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6), decoration: BoxDecoration(color: color.withValues(alpha: 0.11), borderRadius: BorderRadius.circular(999)), child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w800)));
   }
 
   Widget _header() {
     final clientName = (widget.clientName ?? widget.mgysdCase.fullName).trim();
     return _surface(child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      CircleAvatar(radius: 24, backgroundColor: widget.color.withOpacity(0.12), child: Icon(Icons.fact_check_outlined, color: widget.color)),
+      CircleAvatar(radius: 24, backgroundColor: widget.color.withValues(alpha: 0.12), child: Icon(Icons.fact_check_outlined, color: widget.color)),
       const SizedBox(width: 12),
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(clientName.isEmpty ? widget.mgysdCase.caseNo : clientName, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
@@ -2832,7 +3957,7 @@ class _MgysdSocialInvestigationPageState
         _input(_socialWorkerSurnameController, 'Surname of Social Worker Allocated to case', readOnly: true, validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null),
       ),
       _input(_socialWorkerPhoneController, 'Phone Number of Social Worker Allocated to case', keyboardType: TextInputType.phone, readOnly: true),
-      _two(_input(_supervisorFirstNameController, "Name of Social Worker's Supervisor"), _input(_supervisorSurnameController, "Surname of Social Worker's Supervisor")),
+      _two(_capitalizedInput(_supervisorFirstNameController, "Name of Social Worker's Supervisor"), _capitalizedInput(_supervisorSurnameController, "Surname of Social Worker's Supervisor")),
       _input(_supervisorPhoneController, "Phone Number of Social Worker's Supervisor", keyboardType: TextInputType.phone),
       const SizedBox(height: 10),
       _householdSummaryCard(),
@@ -2848,16 +3973,16 @@ class _MgysdSocialInvestigationPageState
       margin: const EdgeInsets.only(bottom: 11),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: widget.color.withOpacity(0.045),
+        color: widget.color.withValues(alpha: 0.045),
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: widget.color.withOpacity(0.16)),
+        border: Border.all(color: widget.color.withValues(alpha: 0.16)),
       ),
       child: ExpansionTile(
         initiallyExpanded: true,
         tilePadding: EdgeInsets.zero,
         childrenPadding: const EdgeInsets.only(top: 10),
         leading: CircleAvatar(
-          backgroundColor: widget.color.withOpacity(0.12),
+          backgroundColor: widget.color.withValues(alpha: 0.12),
           child: Icon(Icons.home_work_outlined, color: widget.color),
         ),
         title: const Text(
@@ -2892,7 +4017,7 @@ class _MgysdSocialInvestigationPageState
     return Container(
       margin: const EdgeInsets.only(bottom: 11),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: member.isPrimaryClient ? widget.color.withOpacity(0.045) : const Color(0xFFF9FBFD), borderRadius: BorderRadius.circular(15), border: Border.all(color: member.isPrimaryClient ? widget.color.withOpacity(0.16) : Colors.blueGrey.withOpacity(0.10))),
+      decoration: BoxDecoration(color: member.isPrimaryClient ? widget.color.withValues(alpha: 0.045) : const Color(0xFFF9FBFD), borderRadius: BorderRadius.circular(15), border: Border.all(color: member.isPrimaryClient ? widget.color.withValues(alpha: 0.16) : Colors.blueGrey.withValues(alpha: 0.10))),
       child: ExpansionTile(
         tilePadding: EdgeInsets.zero,
         childrenPadding: const EdgeInsets.only(top: 10),
@@ -2977,7 +4102,7 @@ class _MgysdSocialInvestigationPageState
     return Container(
       margin: const EdgeInsets.only(bottom: 13),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: const Color(0xFFF9FBFD), borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.blueGrey.withOpacity(0.10))),
+      decoration: BoxDecoration(color: const Color(0xFFF9FBFD), borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.10))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(title, style: const TextStyle(fontSize: 14.8, fontWeight: FontWeight.w900)),
         const SizedBox(height: 4),
@@ -2994,7 +4119,7 @@ class _MgysdSocialInvestigationPageState
     return Container(
       margin: const EdgeInsets.only(bottom: 13),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: const Color(0xFFF9FBFD), borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.blueGrey.withOpacity(0.10))),
+      decoration: BoxDecoration(color: const Color(0xFFF9FBFD), borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.10))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(title, style: const TextStyle(fontSize: 14.8, fontWeight: FontWeight.w900)),
         const SizedBox(height: 4),
@@ -3040,14 +4165,14 @@ class _MgysdSocialInvestigationPageState
       decoration: BoxDecoration(
         color: const Color(0xFFF9FBFD),
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.blueGrey.withOpacity(0.10)),
+        border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.10)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           CircleAvatar(
             radius: 20,
-            backgroundColor: widget.color.withOpacity(0.12),
+            backgroundColor: widget.color.withValues(alpha: 0.12),
             child: Icon(icon, color: widget.color, size: 20),
           ),
           const SizedBox(width: 11),
@@ -3076,7 +4201,7 @@ class _MgysdSocialInvestigationPageState
             label: const Text('Add'),
             style: OutlinedButton.styleFrom(
               foregroundColor: widget.color,
-              side: BorderSide(color: widget.color.withOpacity(0.45)),
+              side: BorderSide(color: widget.color.withValues(alpha: 0.45)),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
@@ -3148,7 +4273,28 @@ class _MgysdSocialInvestigationPageState
     );
   }
 
-  // Auto-capitalizes the first letter of every word as the user types
+  // Normalizes names/surnames to standard format as the user types:
+  // capitalizes the first letter of every word (and of each part of a
+  // hyphenated or apostrophe-joined name) and lowercases the rest — so
+  // typing in ALL CAPS (e.g. "JOHN O'BRIEN-SMITH") is transformed into
+  // standard form ("John O'Brien-Smith") instead of staying all caps.
+  String _toStandardNameCase(String word) {
+    if (word.isEmpty) return word;
+    final buffer = StringBuffer();
+    bool capitalizeNext = true;
+    for (var i = 0; i < word.length; i++) {
+      final ch = word[i];
+      if (ch == '-' || ch == "'") {
+        buffer.write(ch);
+        capitalizeNext = true;
+      } else {
+        buffer.write(capitalizeNext ? ch.toUpperCase() : ch.toLowerCase());
+        capitalizeNext = false;
+      }
+    }
+    return buffer.toString();
+  }
+
   Widget _capitalizedInput(TextEditingController controller, String label,
       {String? Function(String?)? validator}) {
     return Padding(
@@ -3158,10 +4304,7 @@ class _MgysdSocialInvestigationPageState
         textCapitalization: TextCapitalization.words,
         validator: validator,
         onChanged: (value) {
-          final capitalized = value.split(' ').map((word) {
-            if (word.isEmpty) return word;
-            return word[0].toUpperCase() + word.substring(1);
-          }).join(' ');
+          final capitalized = value.split(' ').map(_toStandardNameCase).join(' ');
           if (capitalized != value) {
             controller.value = controller.value.copyWith(
               text: capitalized,
@@ -3198,7 +4341,7 @@ class _MgysdSocialInvestigationPageState
         color: const Color(0xFFF9FBFD),
         borderRadius: BorderRadius.circular(15),
         border: Border.all(
-          color: isCollapsed ? Colors.blueGrey.withOpacity(0.08) : Colors.blueGrey.withOpacity(0.12),
+          color: isCollapsed ? Colors.blueGrey.withValues(alpha: 0.08) : Colors.blueGrey.withValues(alpha: 0.12),
         ),
       ),
       child: Column(
@@ -3211,7 +4354,7 @@ class _MgysdSocialInvestigationPageState
               children: [
                 CircleAvatar(
                   radius: 18,
-                  backgroundColor: widget.color.withOpacity(0.12),
+                  backgroundColor: widget.color.withValues(alpha: 0.12),
                   child: Icon(Icons.person_outline, color: widget.color, size: 18),
                 ),
                 const SizedBox(width: 10),
@@ -3273,9 +4416,9 @@ class _MgysdSocialInvestigationPageState
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: widget.color.withOpacity(0.04),
+                      color: widget.color.withValues(alpha: 0.04),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: widget.color.withOpacity(0.14)),
+                      border: Border.all(color: widget.color.withValues(alpha: 0.14)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3344,7 +4487,8 @@ class _MgysdSocialInvestigationPageState
                         style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.blueGrey)),
                   ),
                   _PhoneInputField(
-                    entry: entry,
+                    controller: entry.contactNumberController,
+                    countryCode: entry.contactCountryCode,
                     countries: _countries,
                     accentColor: widget.color,
                     onCountryChanged: (code) => setState(() => entry.contactCountryCode = code),
@@ -3385,7 +4529,7 @@ class _MgysdSocialInvestigationPageState
                         label: const Text("Add who is responsible for the client's care"),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: widget.color,
-                          side: BorderSide(color: widget.color.withOpacity(0.45)),
+                          side: BorderSide(color: widget.color.withValues(alpha: 0.45)),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                       ),
@@ -3410,8 +4554,8 @@ class _MgysdSocialInvestigationPageState
                       ],
                     ),
                     _two(
-                      _input(entry.responsibleForCareFirstNameController, 'First Name'),
-                      _input(entry.responsibleForCareSurnameController, 'Surname'),
+                      _capitalizedInput(entry.responsibleForCareFirstNameController, 'First Name'),
+                      _capitalizedInput(entry.responsibleForCareSurnameController, 'Surname'),
                     ),
                   ],
 
@@ -3630,12 +4774,12 @@ class _MgysdSocialInvestigationPageState
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.amber.withOpacity(0.08),
+                      color: Colors.amber.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: Colors.amber.shade400, width: 1.5),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.amber.withOpacity(0.25),
+                          color: Colors.amber.withValues(alpha: 0.25),
                           blurRadius: 12,
                           spreadRadius: 1,
                         ),
@@ -3696,7 +4840,7 @@ class _MgysdSocialInvestigationPageState
         color: const Color(0xFFF9FBFD),
         borderRadius: BorderRadius.circular(15),
         border: Border.all(
-          color: isCollapsed ? Colors.blueGrey.withOpacity(0.08) : Colors.blueGrey.withOpacity(0.12),
+          color: isCollapsed ? Colors.blueGrey.withValues(alpha: 0.08) : Colors.blueGrey.withValues(alpha: 0.12),
         ),
       ),
       child: Column(
@@ -3709,7 +4853,7 @@ class _MgysdSocialInvestigationPageState
               children: [
                 CircleAvatar(
                   radius: 18,
-                  backgroundColor: widget.color.withOpacity(0.12),
+                  backgroundColor: widget.color.withValues(alpha: 0.12),
                   child: Icon(Icons.groups_outlined, color: widget.color, size: 18),
                 ),
                 const SizedBox(width: 10),
@@ -3763,9 +4907,9 @@ class _MgysdSocialInvestigationPageState
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: widget.color.withOpacity(0.04),
+                      color: widget.color.withValues(alpha: 0.04),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: widget.color.withOpacity(0.14)),
+                      border: Border.all(color: widget.color.withValues(alpha: 0.14)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3830,7 +4974,7 @@ class _MgysdSocialInvestigationPageState
                     Padding(
                       padding: const EdgeInsets.only(bottom: 6),
                       child: Text('No non-family participants added.',
-                          style: TextStyle(fontSize: 13, color: Colors.blueGrey.withOpacity(0.7),
+                          style: TextStyle(fontSize: 13, color: Colors.blueGrey.withValues(alpha: 0.7),
                               fontStyle: FontStyle.italic)),
                     ),
                   ...List.generate(entry.nonFamilyParticipants.length, (i) {
@@ -3875,7 +5019,7 @@ class _MgysdSocialInvestigationPageState
                     Padding(
                       padding: const EdgeInsets.only(bottom: 6),
                       child: Text('No family participants added.',
-                          style: TextStyle(fontSize: 13, color: Colors.blueGrey.withOpacity(0.7),
+                          style: TextStyle(fontSize: 13, color: Colors.blueGrey.withValues(alpha: 0.7),
                               fontStyle: FontStyle.italic)),
                     ),
                   ...List.generate(entry.familyParticipants.length, (i) {
@@ -3885,9 +5029,9 @@ class _MgysdSocialInvestigationPageState
                       margin: const EdgeInsets.only(bottom: 10),
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.blueGrey.withOpacity(0.03),
+                        color: Colors.blueGrey.withValues(alpha: 0.03),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.blueGrey.withOpacity(0.10)),
+                        border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.10)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3998,6 +5142,805 @@ class _MgysdSocialInvestigationPageState
   }
 
 
+  Widget _courtReportCard(int index, _CourtReportEntry entry) {
+    final isCollapsed = _collapsedCourtReports.contains(index);
+    final dateLabel = entry.reportDateController.text.trim();
+    final cardLabel = dateLabel.isNotEmpty
+        ? 'Court Report — $dateLabel'
+        : 'Court Report ${index + 1}';
+
+    final primaryClient = _familyMembers.isNotEmpty
+        ? _familyMembers.firstWhere((m) => m.isPrimaryClient, orElse: () => _familyMembers.first)
+        : null;
+    final clientName = primaryClient != null ? primaryClient.fullName : (widget.clientName ?? '').trim();
+
+    Widget miniLabel(String text) => Padding(
+      padding: const EdgeInsets.only(bottom: 6, top: 2),
+      child: Text(text, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.blueGrey)),
+    );
+    Widget emptyHint(String text) => Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(text, style: TextStyle(fontSize: 13, color: Colors.blueGrey.withValues(alpha: 0.7), fontStyle: FontStyle.italic)),
+    );
+    Widget miniCard({required Widget header, required List<Widget> children}) => Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.blueGrey.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.10)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [header, const SizedBox(height: 4), ...children]),
+    );
+    Widget rowHeader(String label, VoidCallback onRemove) => Row(children: [
+      Expanded(child: Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700))),
+      IconButton(
+        onPressed: onRemove,
+        icon: const Icon(Icons.remove_circle_outline, size: 18),
+        color: Colors.redAccent, padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(),
+      ),
+    ]);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 13),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FBFD),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(
+          color: isCollapsed ? Colors.blueGrey.withValues(alpha: 0.08) : Colors.blueGrey.withValues(alpha: 0.12),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: widget.color.withValues(alpha: 0.12),
+                  child: Icon(Icons.gavel_outlined, color: widget.color, size: 18),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(cardLabel, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900)),
+                      if (isCollapsed && entry.courtFileNumberController.text.trim().isNotEmpty)
+                        Text('Court file: ${entry.courtFileNumberController.text.trim()}',
+                            style: const TextStyle(fontSize: 11.5, color: Colors.blueGrey)),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: isCollapsed ? 'Expand' : 'Minimise',
+                  onPressed: () => setState(() {
+                    if (isCollapsed) { _collapsedCourtReports.remove(index); }
+                    else { _collapsedCourtReports.add(index); }
+                  }),
+                  icon: AnimatedRotation(
+                    turns: isCollapsed ? 0 : 0.5,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(Icons.keyboard_arrow_down_rounded, size: 22),
+                  ),
+                  color: Colors.blueGrey,
+                ),
+                const SizedBox(width: 2),
+                IconButton(
+                  tooltip: 'Remove court report',
+                  onPressed: () => _removeCourtReportEntry(index),
+                  icon: const Icon(Icons.delete_outline, size: 20),
+                  color: Colors.redAccent,
+                ),
+              ],
+            ),
+          ),
+          if (!isCollapsed) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _subHeading('Report Header'),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: widget.color.withValues(alpha: 0.04),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: widget.color.withValues(alpha: 0.14)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _readOnlyInfoRow('Case File Number', _householdFileNumberController.text.trim().isNotEmpty
+                            ? _householdFileNumberController.text.trim() : '—'),
+                        _readOnlyInfoRow('District', _householdDistrictController.text.trim().isNotEmpty
+                            ? _householdDistrictController.text.trim() : '—'),
+                        _readOnlyInfoRow('Social Worker',
+                            '${_socialWorkerFirstNameController.text.trim()} ${_socialWorkerSurnameController.text.trim()}'.trim().isNotEmpty
+                                ? '${_socialWorkerFirstNameController.text.trim()} ${_socialWorkerSurnameController.text.trim()}'.trim()
+                                : '—'),
+                      ],
+                    ),
+                  ),
+                  _two(
+                    _input(entry.reportDateController, 'Date of Report',
+                        readOnly: true,
+                        validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null),
+                    _input(entry.courtFileNumberController, 'Court File Number'),
+                  ),
+
+                  // ── Section 1: Identifying Details of Client(s) ──────────
+                  _subHeading('Section 1: Identifying Details of Client(s)'),
+                  const Text('List all clients. Mark the primary client with the checkbox.',
+                      style: TextStyle(fontSize: 12.5, color: Colors.blueGrey)),
+                  const SizedBox(height: 8),
+                  ...List.generate(entry.clientSubjects.length, (i) {
+                    final s = entry.clientSubjects[i];
+                    final dobCtrl = s['dob'] as TextEditingController;
+                    final ageCtrl = s['age'] as TextEditingController;
+                    return miniCard(
+                      header: Row(children: [
+                        Expanded(child: Text('Client ${i + 1}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700))),
+                        Checkbox(
+                          value: s['isMajorClient'] as bool,
+                          onChanged: (v) => setState(() {
+                            for (final sub in entry.clientSubjects) { sub['isMajorClient'] = false; }
+                            s['isMajorClient'] = v ?? false;
+                          }),
+                        ),
+                        const Text('Primary client', style: TextStyle(fontSize: 12.5)),
+                        if (entry.clientSubjects.length > 1)
+                          IconButton(
+                            onPressed: () => setState(() {
+                              (s['firstName'] as TextEditingController).dispose();
+                              (s['surname'] as TextEditingController).dispose();
+                              dobCtrl.dispose();
+                              ageCtrl.dispose();
+                              (s['idNumber'] as TextEditingController).dispose();
+                              entry.clientSubjects.removeAt(i);
+                            }),
+                            icon: const Icon(Icons.remove_circle_outline, size: 18),
+                            color: Colors.redAccent,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                      ]),
+                      children: [
+                        _two(
+                          _capitalizedInput(s['firstName'] as TextEditingController, 'First Name'),
+                          _capitalizedInput(s['surname'] as TextEditingController, 'Surname'),
+                        ),
+                        _two(
+                          _dropdown(
+                            label: 'Gender',
+                            value: s['gender'] as String,
+                            options: _genderOptions,
+                            labels: _genderLabels,
+                            onChanged: (v) => setState(() => s['gender'] = v),
+                          ),
+                          _input(s['idNumber'] as TextEditingController, 'Identity Number'),
+                        ),
+                        _two(
+                          _input(dobCtrl, 'Date of Birth', readOnly: true, onTap: () => _pickDobAndSetAgeYears(dobCtrl, ageCtrl)),
+                          _input(ageCtrl, 'Age', readOnly: true),
+                        ),
+                      ],
+                    );
+                  }),
+                  TextButton.icon(
+                    onPressed: () => setState(() { entry.clientSubjects.add(_CourtReportEntry._newClientSubject()); }),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add client'),
+                  ),
+                  _input(entry.residentialAddressController, 'Residential Address',
+                      maxLines: 4, textInputAction: TextInputAction.newline),
+                  _two(
+                    _dropdown(
+                      label: 'Home Language',
+                      value: entry.homeLanguage,
+                      options: _courtReportHomeLanguageOptions,
+                      labels: _courtReportHomeLanguageLabels,
+                      onChanged: (v) => setState(() => entry.homeLanguage = v),
+                    ),
+                    _dropdown(
+                      label: 'Religious Affiliation (if applicable)',
+                      value: entry.religiousAffiliation,
+                      options: _religiousAffiliationOptions,
+                      labels: _religiousAffiliationLabels,
+                      onChanged: (v) => setState(() => entry.religiousAffiliation = v),
+                    ),
+                  ),
+                  if (entry.homeLanguage == 'Other')
+                    _input(entry.homeLanguageOtherController, 'Please specify home language'),
+                  if (entry.religiousAffiliation == 'OTHER')
+                    _input(entry.religiousAffiliationOtherController, 'Please specify religious affiliation'),
+
+                  miniLabel('Present Caregiver'),
+                  _two(
+                    _capitalizedInput(entry.presentCaregiverFirstNameController, 'First Name'),
+                    _capitalizedInput(entry.presentCaregiverSurnameController, 'Surname'),
+                  ),
+                  _input(entry.presentCaregiverAddressController, 'Address',
+                      maxLines: 3, textInputAction: TextInputAction.newline),
+                  _PhoneInputField(
+                    controller: entry.presentCaregiverContactController,
+                    countryCode: entry.presentCaregiverCountryCode,
+                    countries: _countries,
+                    accentColor: widget.color,
+                    onCountryChanged: (code) => setState(() => entry.presentCaregiverCountryCode = code),
+                  ),
+
+                  // ── Section 2: Family Composition ─────────────────────────
+                  _subHeading('Section 2: Family Composition'),
+                  miniLabel('Biological Parents'),
+                  if (entry.biologicalParents.isEmpty) emptyHint('No biological parents added.'),
+                  ...List.generate(entry.biologicalParents.length, (i) {
+                    final p = entry.biologicalParents[i];
+                    final dobCtrl = p['dob'] as TextEditingController;
+                    final ageCtrl = p['age'] as TextEditingController;
+                    final maritalStatus = p['maritalStatus'] as String;
+                    return miniCard(
+                      header: rowHeader('Parent ${i + 1}', () => setState(() {
+                        (p['firstName'] as TextEditingController).dispose();
+                        (p['surname'] as TextEditingController).dispose();
+                        (p['idNumber'] as TextEditingController).dispose();
+                        dobCtrl.dispose();
+                        ageCtrl.dispose();
+                        (p['address'] as TextEditingController).dispose();
+                        (p['contact'] as TextEditingController).dispose();
+                        (p['qualifications'] as TextEditingController).dispose();
+                        (p['maritalStatusOther'] as TextEditingController).dispose();
+                        (p['employer'] as TextEditingController).dispose();
+                        entry.biologicalParents.removeAt(i);
+                      })),
+                      children: [
+                        _two(
+                          _capitalizedInput(p['firstName'] as TextEditingController, 'First Name'),
+                          _capitalizedInput(p['surname'] as TextEditingController, 'Surname'),
+                        ),
+                        _two(
+                          _input(p['idNumber'] as TextEditingController, 'Identity Number'),
+                          _input(dobCtrl, 'Date of Birth', readOnly: true, onTap: () => _pickDobAndSetAgeYears(dobCtrl, ageCtrl)),
+                        ),
+                        _two(
+                          _input(ageCtrl, 'Age', readOnly: true),
+                          _input(p['address'] as TextEditingController, 'Address',
+                              textInputAction: TextInputAction.newline),
+                        ),
+                        _PhoneInputField(
+                          controller: p['contact'] as TextEditingController,
+                          countryCode: p['countryCode'] as String,
+                          countries: _countries,
+                          accentColor: widget.color,
+                          onCountryChanged: (code) => setState(() => p['countryCode'] = code),
+                        ),
+                        _input(p['qualifications'] as TextEditingController, 'Qualifications'),
+                        _two(
+                          _dropdown(
+                            label: 'Marital Status',
+                            value: maritalStatus,
+                            options: _maritalStatusOptions,
+                            labels: _maritalStatusLabels,
+                            onChanged: (v) => setState(() => p['maritalStatus'] = v),
+                          ),
+                          _input(p['employer'] as TextEditingController, 'Employer'),
+                        ),
+                        if (maritalStatus == 'OTHER')
+                          _input(p['maritalStatusOther'] as TextEditingController, 'Please specify marital status'),
+                      ],
+                    );
+                  }),
+                  TextButton.icon(
+                    onPressed: () => setState(() { entry.biologicalParents.add(_CourtReportEntry._newBiologicalParent()); }),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add parent'),
+                  ),
+
+                  miniLabel('Siblings (indicate client with *)'),
+                  if (entry.siblings.isEmpty) emptyHint('No siblings added.'),
+                  ...List.generate(entry.siblings.length, (i) {
+                    final s = entry.siblings[i];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Expanded(flex: 4, child: _capitalizedInput(s['name'] as TextEditingController, 'Name')),
+                        const SizedBox(width: 6),
+                        Expanded(flex: 3, child: _dropdown(label: 'Gender', value: s['gender'] as String,
+                            options: _genderOptions, labels: _genderLabels,
+                            onChanged: (v) => setState(() => s['gender'] = v))),
+                        const SizedBox(width: 6),
+                        Expanded(flex: 2, child: _input(s['age'] as TextEditingController, 'Age',
+                            keyboardType: TextInputType.number)),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          onPressed: () => setState(() {
+                            (s['name'] as TextEditingController).dispose();
+                            (s['age'] as TextEditingController).dispose();
+                            (s['address'] as TextEditingController).dispose();
+                            entry.siblings.removeAt(i);
+                          }),
+                          icon: const Icon(Icons.remove_circle_outline, size: 18),
+                          color: Colors.redAccent, padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ]),
+                    );
+                  }),
+                  TextButton.icon(
+                    onPressed: () => setState(() { entry.siblings.add(_CourtReportEntry._newSibling()); }),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add sibling'),
+                  ),
+
+                  miniLabel('Alternate Caregiver(s) — adoptive, foster, stepparents, guardian (optional)'),
+                  if (entry.alternateCaregivers.isEmpty) emptyHint('No alternate caregivers added.'),
+                  ...List.generate(entry.alternateCaregivers.length, (i) {
+                    final c = entry.alternateCaregivers[i];
+                    final dobCtrl = c['dob'] as TextEditingController;
+                    final ageCtrl = c['age'] as TextEditingController;
+                    return miniCard(
+                      header: rowHeader('Caregiver ${i + 1}', () => setState(() {
+                        (c['firstName'] as TextEditingController).dispose();
+                        (c['surname'] as TextEditingController).dispose();
+                        (c['idNumber'] as TextEditingController).dispose();
+                        dobCtrl.dispose();
+                        ageCtrl.dispose();
+                        (c['address'] as TextEditingController).dispose();
+                        entry.alternateCaregivers.removeAt(i);
+                      })),
+                      children: [
+                        _two(
+                          _capitalizedInput(c['firstName'] as TextEditingController, 'First Name'),
+                          _capitalizedInput(c['surname'] as TextEditingController, 'Surname'),
+                        ),
+                        _two(
+                          _input(c['idNumber'] as TextEditingController, 'Identity Number'),
+                          _input(dobCtrl, 'Date of Birth', readOnly: true, onTap: () => _pickDobAndSetAgeYears(dobCtrl, ageCtrl)),
+                        ),
+                        _two(
+                          _input(ageCtrl, 'Age', readOnly: true),
+                          _input(c['address'] as TextEditingController, 'Address'),
+                        ),
+                      ],
+                    );
+                  }),
+                  TextButton.icon(
+                    onPressed: () => setState(() { entry.alternateCaregivers.add(_CourtReportEntry._newAlternateCaregiver()); }),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add caregiver'),
+                  ),
+
+                  miniLabel('Other Persons Living with Family'),
+                  if (entry.otherPersons.isEmpty) emptyHint('No other persons added.'),
+                  ...List.generate(entry.otherPersons.length, (i) {
+                    final p = entry.otherPersons[i];
+                    final relationship = p['relationship'] as String;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        _two(
+                          _capitalizedInput(p['firstName'] as TextEditingController, 'First Name'),
+                          _capitalizedInput(p['surname'] as TextEditingController, 'Surname'),
+                        ),
+                        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Expanded(flex: 2, child: _input(p['age'] as TextEditingController, 'Age',
+                              keyboardType: TextInputType.number)),
+                          const SizedBox(width: 6),
+                          Expanded(flex: 3, child: _dropdown(label: 'Gender', value: p['gender'] as String,
+                              options: _genderOptions, labels: _genderLabels,
+                              onChanged: (v) => setState(() => p['gender'] = v))),
+                          const SizedBox(width: 6),
+                          Expanded(flex: 4, child: _dropdown(label: 'Relationship', value: relationship,
+                              options: _familyRelationshipOptions, labels: _familyRelationshipLabels,
+                              onChanged: (v) => setState(() => p['relationship'] = v))),
+                          const SizedBox(width: 4),
+                          IconButton(
+                            onPressed: () => setState(() {
+                              (p['firstName'] as TextEditingController).dispose();
+                              (p['surname'] as TextEditingController).dispose();
+                              (p['age'] as TextEditingController).dispose();
+                              (p['relationshipOther'] as TextEditingController).dispose();
+                              entry.otherPersons.removeAt(i);
+                            }),
+                            icon: const Icon(Icons.remove_circle_outline, size: 18),
+                            color: Colors.redAccent, padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ]),
+                        if (relationship == 'OTHER')
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: _input(p['relationshipOther'] as TextEditingController, 'Please specify relationship'),
+                          ),
+                      ]),
+                    );
+                  }),
+                  TextButton.icon(
+                    onPressed: () => setState(() { entry.otherPersons.add(_CourtReportEntry._newOtherPerson()); }),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add person'),
+                  ),
+
+                  // ── Section 3: Sources of Information ─────────────────────
+                  _subHeading('Section 3: Sources of Information (Persons Consulted)'),
+                  const Text('Persons from whom information was obtained to compile this report.',
+                      style: TextStyle(fontSize: 12.5, color: Colors.blueGrey)),
+                  const SizedBox(height: 6),
+                  if (entry.personsConsulted.isEmpty) emptyHint('No persons consulted added.'),
+                  ...List.generate(entry.personsConsulted.length, (i) {
+                    final p = entry.personsConsulted[i];
+                    final relationship = p['relationship'] as String;
+                    return miniCard(
+                      header: rowHeader('Person ${i + 1}', () => setState(() {
+                        (p['firstName'] as TextEditingController).dispose();
+                        (p['surname'] as TextEditingController).dispose();
+                        (p['address'] as TextEditingController).dispose();
+                        (p['contact'] as TextEditingController).dispose();
+                        (p['relationshipOther'] as TextEditingController).dispose();
+                        entry.personsConsulted.removeAt(i);
+                      })),
+                      children: [
+                        _two(
+                          _capitalizedInput(p['firstName'] as TextEditingController, 'First Name'),
+                          _capitalizedInput(p['surname'] as TextEditingController, 'Surname'),
+                        ),
+                        _input(p['address'] as TextEditingController, 'Address',
+                            maxLines: 3, textInputAction: TextInputAction.newline),
+                        _PhoneInputField(
+                          controller: p['contact'] as TextEditingController,
+                          countryCode: p['countryCode'] as String,
+                          countries: _countries,
+                          accentColor: widget.color,
+                          onCountryChanged: (code) => setState(() => p['countryCode'] = code),
+                        ),
+                        _dropdown(
+                          label: 'Relationship to Client',
+                          value: relationship,
+                          options: _familyRelationshipOptions,
+                          labels: _familyRelationshipLabels,
+                          onChanged: (v) => setState(() => p['relationship'] = v),
+                        ),
+                        if (relationship == 'OTHER')
+                          _input(p['relationshipOther'] as TextEditingController, 'Please specify relationship'),
+                      ],
+                    );
+                  }),
+                  TextButton.icon(
+                    onPressed: () => setState(() { entry.personsConsulted.add(_CourtReportEntry._newPersonConsulted()); }),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add person'),
+                  ),
+
+                  // ── Section 4: Family Profile ──────────────────────────────
+                  _subHeading('Section 4: Family Profile'),
+                  miniLabel('Family Background'),
+                  _input(entry.placeOfBirthController, 'Place of birth (parents / guardian)', maxLines: 2),
+                  _input(entry.educationController, 'Education (level, schools attended)', maxLines: 3),
+                  _input(entry.familyHistoryController, 'Family history (background, significant events)', maxLines: 4),
+                  _input(entry.employmentController, 'Employment (employer, occupation, income)', maxLines: 3),
+
+                  miniLabel('Family Structure — Persons in Household'),
+                  const Text('List everyone currently living in the household.',
+                      style: TextStyle(fontSize: 12.5, color: Colors.blueGrey)),
+                  const SizedBox(height: 6),
+                  if (entry.householdMembers.isEmpty) emptyHint('No household members added.'),
+                  ...List.generate(entry.householdMembers.length, (i) {
+                    final m = entry.householdMembers[i];
+                    final rel = m['relationship'] as String;
+                    return miniCard(
+                      header: rowHeader('Member ${i + 1}', () => setState(() {
+                        (m['firstName'] as TextEditingController).dispose();
+                        (m['surname'] as TextEditingController).dispose();
+                        (m['relationshipOther'] as TextEditingController).dispose();
+                        (m['age'] as TextEditingController).dispose();
+                        entry.householdMembers.removeAt(i);
+                      })),
+                      children: [
+                        _two(
+                          _capitalizedInput(m['firstName'] as TextEditingController, 'First Name'),
+                          _capitalizedInput(m['surname'] as TextEditingController, 'Surname'),
+                        ),
+                        _two(
+                          _dropdown(
+                            label: 'Relationship to Client',
+                            value: rel,
+                            options: _familyRelationshipOptions,
+                            labels: _familyRelationshipLabels,
+                            onChanged: (v) => setState(() => m['relationship'] = v),
+                          ),
+                          _input(m['age'] as TextEditingController, 'Age',
+                              keyboardType: TextInputType.number),
+                        ),
+                        if (rel == 'OTHER')
+                          _input(m['relationshipOther'] as TextEditingController, 'Please specify relationship'),
+                      ],
+                    );
+                  }),
+                  TextButton.icon(
+                    onPressed: () => setState(() { entry.householdMembers.add(_CourtReportEntry._newHouseholdMember()); }),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add household member'),
+                  ),
+
+                  miniLabel('Family Relationships'),
+                  const Text('Describe the quality of relationships between family members.',
+                      style: TextStyle(fontSize: 12.5, color: Colors.blueGrey)),
+                  const SizedBox(height: 6),
+                  if (entry.familyRelationshipItems.isEmpty) emptyHint('No relationship entries added.'),
+                  ...List.generate(entry.familyRelationshipItems.length, (i) {
+                    final r = entry.familyRelationshipItems[i];
+                    final quality = r['relationshipQuality'] as String;
+                    return miniCard(
+                      header: rowHeader('Relationship ${i + 1}', () => setState(() {
+                        (r['memberName'] as TextEditingController).dispose();
+                        (r['details'] as TextEditingController).dispose();
+                        entry.familyRelationshipItems.removeAt(i);
+                      })),
+                      children: [
+                        _capitalizedInput(r['memberName'] as TextEditingController,
+                            'Family member name (e.g. Mother, John)'),
+                        _dropdown(
+                          label: 'Relationship quality',
+                          value: quality,
+                          options: _relationshipQualityOptions,
+                          labels: _relationshipQualityLabels,
+                          onChanged: (v) => setState(() => r['relationshipQuality'] = v),
+                        ),
+                        _input(r['details'] as TextEditingController,
+                            'Details / observations (optional)', maxLines: 3),
+                      ],
+                    );
+                  }),
+                  TextButton.icon(
+                    onPressed: () => setState(() { entry.familyRelationshipItems.add(_CourtReportEntry._newFamilyRelationshipItem()); }),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add relationship'),
+                  ),
+                  _dropdown(
+                    label: 'Physical Condition (relating to parents/guardian)',
+                    value: entry.physicalCondition,
+                    options: _physicalConditionOptions,
+                    labels: _physicalConditionLabels,
+                    onChanged: (v) => setState(() => entry.physicalCondition = v),
+                  ),
+                  _input(entry.physicalHealthDetailsController,
+                      'Physical factors details (disabilities, substance abuse, etc.)', maxLines: 3),
+                  _input(entry.psychologicalFactorsController, 'Psychological Factors (mental disabilities)', maxLines: 4),
+                  miniLabel('Housing and Environment'),
+                  _two(
+                    _dropdown(
+                      label: 'Housing Type',
+                      value: entry.housingType,
+                      options: _housingTypeOptions,
+                      labels: _housingTypeLabels,
+                      onChanged: (v) => setState(() => entry.housingType = v),
+                    ),
+                    _dropdown(
+                      label: 'Ownership / Tenure',
+                      value: entry.housingOwnership,
+                      options: _housingOwnershipOptions,
+                      labels: _housingOwnershipLabels,
+                      onChanged: (v) => setState(() => entry.housingOwnership = v),
+                    ),
+                  ),
+                  _input(entry.housingSizeController, 'Size / number of rooms'),
+                  _input(entry.housingImpressionController,
+                      'Overall impression of the home environment', maxLines: 3),
+                  _input(entry.religiousCulturalAspectsController, 'Religious and Cultural Aspects', maxLines: 3),
+                  _input(entry.socioCulturalAspectsController, 'Socio-cultural Aspects (community activities, norms)', maxLines: 3),
+                  miniLabel('Financial Aspects'),
+                  _two(
+                    _input(entry.incomeController, 'Income (sources and amounts)', maxLines: 3),
+                    _input(entry.expenditureController, 'Expenditure (main expenses)', maxLines: 3),
+                  ),
+
+                  // ── Section 5: Client Concerned ────────────────────────────
+                  _subHeading('Section 5: Client Concerned'),
+                  _input(entry.presentLivingCircumstancesController,
+                      'Present Living Circumstances (if not with biological parents)', maxLines: 4),
+                  _input(entry.clientPhysicalHealthController,
+                      'Physical Factors and Health (disabilities, substance abuse)', maxLines: 4),
+                  _dropdown(
+                    label: 'Psychological Factors (mental disabilities)',
+                    value: entry.clientPsychologicalFactors,
+                    options: _clientPsychologicalFactorOptions,
+                    labels: _clientPsychologicalFactorLabels,
+                    onChanged: (v) => setState(() => entry.clientPsychologicalFactors = v),
+                  ),
+                  if (entry.clientPsychologicalFactors == 'OTHER')
+                    _input(entry.clientPsychologicalFactorsOtherController, 'Please specify psychological factor'),
+                  _input(entry.clientRelationshipsController, 'Relationships with Parents, Siblings or Peers', maxLines: 4),
+                  miniLabel('Schooling'),
+                  _dropdown(
+                    label: 'Does / did the client attend school?',
+                    value: entry.clientAttendedSchool,
+                    options: _yesNoOptions,
+                    labels: _yesNoLabels,
+                    onChanged: (v) => setState(() => entry.clientAttendedSchool = v),
+                  ),
+                  if (entry.clientAttendedSchool == 'YES') ...[
+                    _input(entry.clientSchoolingAbilitiesController, 'Abilities (academic, social, practical)', maxLines: 3),
+                    _input(entry.clientSchoolingProblemsController, 'Problems / difficulties', maxLines: 3),
+                    _input(entry.clientSchoolingAchievementsController, 'Achievements', maxLines: 3),
+                  ],
+
+                  // ── Section 6: Special Circumstances ───────────────────────
+                  _subHeading('Section 6: Special Circumstances'),
+                  _input(entry.abandonedOrphanedController, 'Abandoned or Orphaned Client (discuss circumstances)', maxLines: 4),
+                  _input(entry.specialNeedsController, 'Client with Special Needs (indicate needs / requirements)', maxLines: 4),
+
+                  // ── Section 7: Views of Client ──────────────────────────────
+                  _subHeading('Section 7: Views of Client'),
+                  const Text('All fields optional — fill in whichever apply.',
+                      style: TextStyle(fontSize: 12.5, color: Colors.blueGrey)),
+                  const SizedBox(height: 6),
+                  _input(entry.emotionsController, 'Emotions (optional)', maxLines: 2),
+                  _input(entry.feelingsController, 'Feelings (optional)', maxLines: 2),
+                  _input(entry.preferencesController, 'Preferences (optional)', maxLines: 2),
+                  _input(entry.personalNeedsController, 'Personal Needs (optional)', maxLines: 2),
+                  _input(entry.otherObservationsController, 'Other Relevant Observations (optional)', maxLines: 3),
+
+                  // ── Section 8: Factors Resulting in Investigation ──────────
+                  _subHeading('Section 8: Factors Resulting in Investigation'),
+                  _input(entry.eventsLeadingToInvestigationController,
+                      'Events Leading to Investigation (chain of events, Section 23 CPWA factors)', maxLines: 5),
+                  miniLabel('Previous Interventions'),
+                  _input(entry.previousDecisionsInquiriesController,
+                      'Previous decisions or inquiries (optional)', maxLines: 3),
+                  _dropdown(
+                    label: 'Removed to temporary safe care?',
+                    value: entry.removedToTemporarySafeCare,
+                    options: _yesNoOptions,
+                    labels: _yesNoLabels,
+                    onChanged: (v) => setState(() => entry.removedToTemporarySafeCare = v),
+                  ),
+                  _dropdown(
+                    label: 'Family preservation services rendered or attempted?',
+                    value: entry.familyPreservationServicesRendered,
+                    options: _yesNoOptions,
+                    labels: _yesNoLabels,
+                    onChanged: (v) => setState(() => entry.familyPreservationServicesRendered = v),
+                  ),
+                  if (entry.familyPreservationServicesRendered == 'YES')
+                    _input(entry.familyPreservationDetailsController,
+                        'Details of family preservation services', maxLines: 3),
+                  _dropdown(
+                    label: 'Victim of trafficking, returned to / found in Lesotho?',
+                    value: entry.traffickingVictimReturned,
+                    options: _yesNoOptions,
+                    labels: _yesNoLabels,
+                    onChanged: (v) => setState(() => entry.traffickingVictimReturned = v),
+                  ),
+                  if (entry.traffickingVictimReturned == 'YES')
+                    _input(entry.traffickingLocationDetailsController,
+                        'Location / details of where victim was returned to or found', maxLines: 3),
+                  miniLabel('Evidence and Facts (optional)'),
+                  _input(entry.allegationsController, 'Allegations of abuse / neglect (optional)', maxLines: 3),
+                  _input(entry.incidentsController, 'Incidents (optional)', maxLines: 3),
+                  _input(entry.claimsAffidavitsController, 'Claims / affidavits (optional)', maxLines: 3),
+                  miniLabel('Medical Evidence'),
+                  CheckboxListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    value: entry.medicalEvidenceAvailable,
+                    title: const Text('Medical evidence available (cases of assault or abuse)', style: TextStyle(fontSize: 13.5)),
+                    onChanged: (v) => setState(() => entry.medicalEvidenceAvailable = v ?? false),
+                  ),
+                  if (entry.medicalEvidenceAvailable)
+                    _input(entry.medicalEvidenceDetailsController, 'Medical evidence details', maxLines: 4),
+
+                  // ── Section 9: Measures to Assist Family ───────────────────
+                  _subHeading('Section 9: Measures to Assist Family'),
+                  _checkboxGroup(
+                    label: 'Steps taken to improve family situation',
+                    options: _recommendedFamilyMeasureOptions,
+                    labels: _recommendedFamilyMeasureLabels,
+                    selected: entry.stepsTakenMeasures,
+                    onChanged: (option, checked) => setState(() {
+                      if (checked) { entry.stepsTakenMeasures.add(option); }
+                      else { entry.stepsTakenMeasures.remove(option); }
+                    }),
+                  ),
+                  if (entry.stepsTakenMeasures.contains('OTHER'))
+                    _input(entry.stepsTakenMeasuresOtherController, 'Please specify other step taken', maxLines: 2),
+                  _input(entry.stepsTakenNotesController, 'Additional details / notes (optional)', maxLines: 3),
+
+                  // ── Section 10: Private Family Arrangements ────────────────
+                  _subHeading('Section 10: Private Family Arrangements (if applicable)'),
+                  _input(entry.privateFamilyArrangementsController, 'Details', maxLines: 4),
+
+                  // ── Section 11: Evaluation ──────────────────────────────────
+                  _subHeading('Section 11: Evaluation'),
+                  _input(entry.positiveFactorsController, 'Positive factors', maxLines: 3),
+                  _input(entry.negativeFactorsController, 'Negative factors', maxLines: 3),
+                  _input(entry.causesController, 'Causes', maxLines: 3),
+                  _input(entry.resultsController, 'Results', maxLines: 3),
+
+                  // ── Section 12: Conclusion ───────────────────────────────────
+                  _subHeading('Section 12: Conclusion'),
+                  _input(entry.conclusionController,
+                      'Findings — whether client is in need of care and protection', maxLines: 5),
+
+                  // ── Section 13: Recommendations ──────────────────────────────
+                  _subHeading('Section 13: Recommendations'),
+                  _input(entry.recommendationController,
+                      'Recommended order(s) in terms of Section 37(1a–e) with motivation', maxLines: 5),
+                  _checkboxGroup(
+                    label: 'Recommended measures to assist the family',
+                    options: _recommendedFamilyMeasureOptions,
+                    labels: _recommendedFamilyMeasureLabels,
+                    selected: entry.recommendedFamilyMeasures,
+                    onChanged: (option, checked) => setState(() {
+                      if (checked) { entry.recommendedFamilyMeasures.add(option); }
+                      else { entry.recommendedFamilyMeasures.remove(option); }
+                    }),
+                  ),
+                  if (entry.recommendedFamilyMeasures.contains('OTHER'))
+                    _input(entry.recommendedFamilyMeasuresOtherController, 'Please specify other measure', maxLines: 2),
+                  _checkboxGroup(
+                    label: 'Recommended measures to assist the client',
+                    options: _recommendedClientMeasureOptions,
+                    labels: _recommendedClientMeasureLabels,
+                    selected: entry.recommendedClientMeasures,
+                    onChanged: (option, checked) => setState(() {
+                      if (checked) { entry.recommendedClientMeasures.add(option); }
+                      else { entry.recommendedClientMeasures.remove(option); }
+                    }),
+                  ),
+                  if (entry.recommendedClientMeasures.contains('OTHER'))
+                    _input(entry.recommendedClientMeasuresOtherController, 'Please specify other need', maxLines: 2),
+
+                  // ── Section 14: Written Request by Magistrate / Court Order ──
+                  _subHeading('Section 14: Written Request by Magistrate / Court Order'),
+                  const Text('Record the recommended placement order. Only one order can be added per report.',
+                      style: TextStyle(fontSize: 12.5, color: Colors.blueGrey)),
+                  const SizedBox(height: 6),
+                  if (entry.courtOrders.isEmpty) emptyHint('No court order recorded.'),
+                  ...List.generate(entry.courtOrders.length, (i) {
+                    final o = entry.courtOrders[i];
+                    return miniCard(
+                      header: rowHeader('Court Order', () => setState(() {
+                        (o['details'] as TextEditingController).dispose();
+                        entry.courtOrders.removeAt(i);
+                      })),
+                      children: [
+                        _checkboxGroup(
+                          label: 'Recommended placement (mark all that apply)',
+                          options: _courtOrderOptions,
+                          labels: _courtOrderLabels,
+                          selected: o['orders'] as Set<String>,
+                          onChanged: (option, checked) => setState(() {
+                            if (checked) { (o['orders'] as Set<String>).add(option); }
+                            else { (o['orders'] as Set<String>).remove(option); }
+                          }),
+                        ),
+                        _input(o['details'] as TextEditingController,
+                            'Reasons / details (names, circumstances, suitability of proposed placement)', maxLines: 5),
+                      ],
+                    );
+                  }),
+                  if (entry.courtOrders.isEmpty)
+                    TextButton.icon(
+                      onPressed: () => setState(() { entry.courtOrders.add(_CourtReportEntry._newCourtOrderEntry()); }),
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text('Add order'),
+                    ),
+                ],
+              ),
+            ),
+          ], // end if (!isCollapsed)
+        ],
+      ),
+    );
+  }
+
+
   Widget _part4() {
     return _surface(
       child: Column(
@@ -4005,10 +5948,8 @@ class _MgysdSocialInvestigationPageState
         children: [
           _sectionTitle(
             'Part 4: Supplementary Assessments',
-            'Optional records gathered outside the core investigation — external informant interviews and case conference proceedings.',
+            'Optional records gathered outside the core investigation — external informant interviews, case conference proceedings, and court reports.',
           ),
-
-          // ── External Informant Interviews ─────────────────────────────────
           Padding(
             padding: const EdgeInsets.only(top: 4, bottom: 6),
             child: Text('External Informant Interviews',
@@ -4022,31 +5963,17 @@ class _MgysdSocialInvestigationPageState
               onAdd: _addExternalInformantEntry,
             ),
           if (_externalInformantEntries.isNotEmpty) ...[
-            Row(
-              children: [
-                const Expanded(
-                  child: Text('External Informants',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                ),
-                TextButton.icon(
-                  onPressed: _addExternalInformantEntry,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add informant'),
-                ),
-              ],
-            ),
+            Row(children: [
+              const Expanded(child: Text('External Informants', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700))),
+              TextButton.icon(onPressed: _addExternalInformantEntry, icon: const Icon(Icons.add, size: 18), label: const Text('Add informant')),
+            ]),
             const SizedBox(height: 8),
-            ...List.generate(
-              _externalInformantEntries.length,
-                  (index) => _externalInformantCard(index, _externalInformantEntries[index]),
-            ),
+            ...List.generate(_externalInformantEntries.length,
+                    (index) => _externalInformantCard(index, _externalInformantEntries[index])),
           ],
-
           const SizedBox(height: 8),
           const Divider(),
           const SizedBox(height: 4),
-
-          // ── Case Conference Records ───────────────────────────────────────
           Padding(
             padding: const EdgeInsets.only(top: 4, bottom: 6),
             child: Text('Case Conference Records',
@@ -4060,24 +5987,37 @@ class _MgysdSocialInvestigationPageState
               onAdd: _addCaseConferenceEntry,
             ),
           if (_caseConferenceEntries.isNotEmpty) ...[
-            Row(
-              children: [
-                const Expanded(
-                  child: Text('Case Conferences',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                ),
-                TextButton.icon(
-                  onPressed: _addCaseConferenceEntry,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add conference'),
-                ),
-              ],
-            ),
+            Row(children: [
+              const Expanded(child: Text('Case Conferences', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700))),
+              TextButton.icon(onPressed: _addCaseConferenceEntry, icon: const Icon(Icons.add, size: 18), label: const Text('Add conference')),
+            ]),
             const SizedBox(height: 8),
-            ...List.generate(
-              _caseConferenceEntries.length,
-                  (index) => _caseConferenceCard(index, _caseConferenceEntries[index]),
+            ...List.generate(_caseConferenceEntries.length,
+                    (index) => _caseConferenceCard(index, _caseConferenceEntries[index])),
+          ],
+          const SizedBox(height: 8),
+          const Divider(),
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 6),
+            child: Text('Court Reports',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: widget.color)),
+          ),
+          if (_courtReportEntries.isEmpty)
+            _optionalAddCard(
+              title: 'Court Report',
+              subtitle: 'Add a court report compiled by the social worker.',
+              icon: Icons.gavel_outlined,
+              onAdd: _addCourtReportEntry,
             ),
+          if (_courtReportEntries.isNotEmpty) ...[
+            Row(children: [
+              const Expanded(child: Text('Court Reports', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700))),
+              TextButton.icon(onPressed: _addCourtReportEntry, icon: const Icon(Icons.add, size: 18), label: const Text('Add report')),
+            ]),
+            const SizedBox(height: 8),
+            ...List.generate(_courtReportEntries.length,
+                    (index) => _courtReportCard(index, _courtReportEntries[index])),
           ],
         ],
       ),
