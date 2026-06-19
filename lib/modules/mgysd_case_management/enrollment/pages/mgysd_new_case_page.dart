@@ -2839,15 +2839,16 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               selectedMember: _riskFamilyBackgroundMember,
               onMemberChanged: (v) => setState(() => _riskFamilyBackgroundMember = v ?? ''),
             ),
-            _riskDomainItem(
-              title: 'Caregiver wellbeing',
-              value: _riskCaregiverWellbeing,
-              options: riskCaregiverWellbeingOptions,
-              onChanged: (v) => setState(() => _riskCaregiverWellbeing = v ?? ''),
-              notesController: _riskCaregiverWellbeingNotesController,
-              selectedMember: _riskCaregiverWellbeingMember,
-              onMemberChanged: (v) => setState(() => _riskCaregiverWellbeingMember = v ?? ''),
-            ),
+            if (_caregivers.isNotEmpty)
+              _riskDomainItem(
+                title: 'Caregiver wellbeing',
+                value: _riskCaregiverWellbeing,
+                options: riskCaregiverWellbeingOptions,
+                onChanged: (v) => setState(() => _riskCaregiverWellbeing = v ?? ''),
+                notesController: _riskCaregiverWellbeingNotesController,
+                selectedMember: _riskCaregiverWellbeingMember,
+                onMemberChanged: (v) => setState(() => _riskCaregiverWellbeingMember = v ?? ''),
+              ),
             _riskDomainItem(
               title: 'Extended family relationships',
               value: _riskExtendedFamilyRelationships,
