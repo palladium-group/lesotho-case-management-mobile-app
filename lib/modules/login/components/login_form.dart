@@ -6,7 +6,6 @@ import 'package:lncmis_mobile_app/app_state/language_translation_state/language_
 import 'package:lncmis_mobile_app/app_state/login_form_state/login_form_state.dart';
 import 'package:lncmis_mobile_app/app_state/referral_notification_state/referral_notification_state.dart';
 import 'package:lncmis_mobile_app/core/components/circular_process_loader.dart';
-import 'package:lncmis_mobile_app/core/components/form_field_input_icon.dart';
 import 'package:lncmis_mobile_app/core/constants/custom_color.dart';
 import 'package:lncmis_mobile_app/core/services/device_tracking_service.dart';
 import 'package:lncmis_mobile_app/core/services/program_service.dart';
@@ -16,7 +15,6 @@ import 'package:lncmis_mobile_app/core/utils/app_util.dart';
 import 'package:lncmis_mobile_app/models/current_user.dart';
 import 'package:lncmis_mobile_app/modules/intervention_selection/intervention_selection.dart';
 import 'package:lncmis_mobile_app/modules/login/components/login_button.dart';
-import 'package:lncmis_mobile_app/core/components/line_separator.dart';
 import 'package:lncmis_mobile_app/modules/login/constants/login_page_style.dart';
 import 'package:provider/provider.dart';
 import 'package:lncmis_mobile_app/core/services/organisation_unit_service.dart';
@@ -225,135 +223,173 @@ class _LoginFormState extends State<LoginForm> {
     });
   }
 
+  Widget _connectionChip(bool? isOnline, String language) {
+    final online = isOnline == true;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: online ? Colors.green.withOpacity(0.08) : Colors.deepOrange.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: online ? Colors.green.withOpacity(0.20) : Colors.deepOrange.withOpacity(0.20),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            online ? Icons.wifi_rounded : Icons.wifi_off_rounded,
+            size: 18,
+            color: online ? Colors.green : Colors.deepOrange,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              online
+                  ? (language == 'lesotho' ? 'O online - o ka kena ka server' : 'Online - server login available')
+                  : (language == 'lesotho' ? 'Offline - o ka kena feela ka akhaonte e kileng ea kena' : 'Offline - previous users can sign in only'),
+              style: TextStyle(
+                color: online ? Colors.green.shade700 : Colors.deepOrange.shade700,
+                fontSize: 12.2,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _lastUserBox(String language) {
+    final username = (currentUser?.username ?? '').trim();
+    if (username.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: LoginPageStyles.lncmisBlue.withOpacity(0.055),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: LoginPageStyles.lncmisBlue.withOpacity(0.10)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.history_rounded, size: 18, color: LoginPageStyles.lncmisBlue),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              language == 'lesotho'
+                  ? 'Mosebelisi oa ho qetela: $username'
+                  : 'Last signed-in user: $username',
+              style: const TextStyle(
+                color: LoginPageStyles.lncmisMuted,
+                fontSize: 12.2,
+                fontWeight: FontWeight.w800,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    Color activeInputColor = const Color(0xFF4B9F46);
-    Color inActiveInputColor = const Color(0xFFD2E7D1);
     return SingleChildScrollView(
       child: Consumer<LanguageTranslationState>(
         builder: (context, languageState, child) => Consumer<LoginFormState>(
           builder: (context, loginFormState, child) {
-            String activeInput = loginFormState.activeInput;
             bool hasLoginFormError = loginFormState.hasLoginFormError;
             bool isLoginProcessActive = loginFormState.isLoginProcessActive;
             bool isPasswordVisible = loginFormState.isPasswordVisible;
+            final isOnline = Provider.of<DeviceConnectivityState>(context).connectivityStatus;
+
             return currentUser == null
                 ? CircularProcessLoader(
                     color: CustomColor.defaultSecondaryColor,
                     size: 2.0,
                   )
                 : Column(
-                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Text(
-                            languageState.currentLanguage == 'lesotho'
-                                ? 'Lebitso la mosebelisi'
-                                : 'Username',
-                            style: !hasLoginFormError
-                                ? LoginPageStyles.formLabelStyle
-                                : LoginPageStyles.formLabelStyle.copyWith(
-                                    color: Colors.redAccent,
-                                  ),
-                          )
-                        ],
+                      _lastUserBox(languageState.currentLanguage),
+                      Text(
+                        languageState.currentLanguage == 'lesotho'
+                            ? 'Lebitso la mosebelisi'
+                            : 'Username',
+                        style: !hasLoginFormError
+                            ? LoginPageStyles.formLabelStyle
+                            : LoginPageStyles.formLabelStyle.copyWith(
+                                color: Colors.redAccent,
+                              ),
                       ),
+                      const SizedBox(height: 7),
                       TextFormField(
                         controller: usernameController,
                         onTap: () => updateInputActiveStatus('username'),
-                        onChanged: (value) =>
-                            onFieldValueChanges(value, 'username'),
-                        onFieldSubmitted: (value) =>
-                            onFieldSubmitted(value, 'username'),
+                        onChanged: (value) => onFieldValueChanges(value, 'username'),
+                        onFieldSubmitted: (value) => onFieldSubmitted(value, 'username'),
                         readOnly: isLoginProcessActive,
                         autocorrect: false,
                         style: LoginPageStyles.formInputValueStyle,
-                        textInputAction: TextInputAction.done,
-                        decoration: InputDecoration(
-                          border: InputBorder.none,
-                          prefixIcon: const FormFieldInputIcon(
-                            backGroundColor: Color(0xFFEDF5EC),
-                            svgIcon: 'assets/icons/login-user-input.svg',
-                          ),
-                          prefixIconConstraints:
-                              LoginPageStyles.loginBoxConstraints,
+                        textInputAction: TextInputAction.next,
+                        decoration: LoginPageStyles.inputDecoration(
+                          hintText: languageState.currentLanguage == 'lesotho'
+                              ? 'Kenya username'
+                              : 'Enter username',
+                          icon: Icons.person_outline_rounded,
+                          hasError: hasLoginFormError,
                         ),
                       ),
-                      LineSeparator(
-                        color: activeInput == 'username'
-                            ? activeInputColor
-                            : inActiveInputColor,
+                      const SizedBox(height: 14),
+                      Text(
+                        languageState.currentLanguage == 'lesotho'
+                            ? 'Nomoro/lentsoe la lekunutu'
+                            : 'Password',
+                        style: !hasLoginFormError
+                            ? LoginPageStyles.formLabelStyle
+                            : LoginPageStyles.formLabelStyle.copyWith(
+                                color: Colors.redAccent,
+                              ),
                       ),
-                      Container(
-                        margin: const EdgeInsets.only(
-                          top: 10.0,
-                        ),
-                        child: Row(
-                          children: [
-                            Text(
-                              languageState.currentLanguage == 'lesotho'
-                                  ? 'Nomoro/lentsoe la lekunutu'
-                                  : 'Password',
-                              style: !hasLoginFormError
-                                  ? LoginPageStyles.formLabelStyle
-                                  : LoginPageStyles.formLabelStyle.copyWith(
-                                      color: Colors.redAccent,
-                                    ),
-                            )
-                          ],
-                        ),
-                      ),
+                      const SizedBox(height: 7),
                       TextFormField(
                         controller: passwordController,
                         onTap: () => updateInputActiveStatus('password'),
-                        onChanged: (value) =>
-                            onFieldValueChanges(value, 'password'),
-                        onFieldSubmitted: (value) =>
-                            onFieldSubmitted(value, 'password'),
+                        onChanged: (value) => onFieldValueChanges(value, 'password'),
+                        onFieldSubmitted: (value) => onFieldSubmitted(value, 'password'),
                         obscureText: !isPasswordVisible,
                         autocorrect: false,
                         style: LoginPageStyles.formInputValueStyle,
                         readOnly: isLoginProcessActive,
                         textInputAction: TextInputAction.done,
-                        decoration: InputDecoration(
-                          hintStyle: const TextStyle(
-                            fontSize: 15,
-                          ),
-                          border: InputBorder.none,
-                          prefixIcon: const FormFieldInputIcon(
-                            backGroundColor: Color(0xFFEDF5EC),
-                            svgIcon: 'assets/icons/login-lock.svg',
-                          ),
-                          prefixIconConstraints:
-                              LoginPageStyles.loginBoxConstraints,
-                          suffixIcon: GestureDetector(
-                            onTap: () => updatePasswordVisibilityStatus(
-                              !isPasswordVisible,
-                            ),
-                            child: FormFieldInputIcon(
-                              backGroundColor: const Color(0xFFFFFFFF),
-                              svgIcon: isPasswordVisible
-                                  ? 'assets/icons/login-close-eye.svg'
-                                  : 'assets/icons/login-open-eye.svg', // show and hide password icon
+                        decoration: LoginPageStyles.inputDecoration(
+                          hintText: languageState.currentLanguage == 'lesotho'
+                              ? 'Kenya password'
+                              : 'Enter password',
+                          icon: Icons.lock_outline_rounded,
+                          hasError: hasLoginFormError,
+                          suffixIcon: IconButton(
+                            onPressed: () => updatePasswordVisibilityStatus(!isPasswordVisible),
+                            icon: Icon(
+                              isPasswordVisible
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              color: LoginPageStyles.lncmisMuted,
+                              size: 20,
                             ),
                           ),
-                          suffixIconConstraints:
-                              LoginPageStyles.loginBoxConstraints,
                         ),
                       ),
-                      LineSeparator(
-                        color: activeInput == 'password'
-                            ? activeInputColor
-                            : inActiveInputColor,
-                      ),
+                      const SizedBox(height: 14),
+                      _connectionChip(isOnline, languageState.currentLanguage),
                       LoginButton(
                         currentLanguage: widget.currentLanguage,
                         isLoginProcessActive: isLoginProcessActive,
-                        onLogin: () => onLogin(
-                          isLoginProcessActive,
-                        ),
-                      )
+                        onLogin: () => onLogin(isLoginProcessActive),
+                      ),
                     ],
                   );
           },
