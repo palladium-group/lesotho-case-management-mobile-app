@@ -3261,87 +3261,87 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     final summary = '${caregiver.nameController.text.trim()} ${caregiver.surnameController.text.trim()}'.trim();
 
     return Container(
-        width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF9FBFD),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-        _collapsibleCardHeader(
-        title: 'Caregiver ${index + 1}',
-          summary: summary,
-          isExpanded: caregiver.isExpanded,
-          onToggle: () => setState(() => caregiver.isExpanded = !caregiver.isExpanded),
-          onDelete: () => _removeCaregiver(index),
-        ),
-            if (caregiver.isExpanded) ...[
-              const SizedBox(height: 10),
-              _row2(
-                _Input(
-                  controller: caregiver.nameController,
-                  label: 'Name',
-                  hint: 'Caregiver name',
-                  requiredField: true,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-                ),
-                _Input(
-                  controller: caregiver.surnameController,
-                  label: 'Surname',
-                  hint: 'Caregiver surname',
-                  requiredField: true,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-                ),
-              ),
-              const SizedBox(height: 10),
-              _row2(
-                _dropdown(
-                  label: 'Sex',
-                  value: caregiver.sex,
-                  options: sexOptions,
-                  requiredField: true,
-                  onChanged: (v) => setState(() => caregiver.sex = v ?? ''),
-                ),
-                _Input(
-                  controller: caregiver.relationshipController,
-                  label: 'Relationship with client',
-                  hint: 'e.g. Aunt, Grandmother',
-                  requiredField: true,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-                ),
-              ),
-              const SizedBox(height: 10),
-              _row2(
-                _dateInput(
-                  controller: caregiver.dobController,
-                  label: 'Date of Birth',
-                  hint: 'Pick date',
-                  requiredField: true,
-                ),
-                _Input(
-                  controller: caregiver.occupationController,
-                  label: 'Occupation',
-                  hint: 'Enter occupation',
-                  requiredField: true,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-                ),
-              ),
-              const SizedBox(height: 10),
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FBFD),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _collapsibleCardHeader(
+            title: 'Caregiver ${index + 1}',
+            summary: summary,
+            isExpanded: caregiver.isExpanded,
+            onToggle: () => setState(() => caregiver.isExpanded = !caregiver.isExpanded),
+            onDelete: () => _removeCaregiver(index),
+          ),
+          if (caregiver.isExpanded) ...[
+            const SizedBox(height: 10),
+            _row2(
               _Input(
-                controller: caregiver.phoneController,
-                label: 'Phone Number',
-                hint: 'e.g. 5xxxxxxx',
-                keyboardType: TextInputType.phone,
+                controller: caregiver.nameController,
+                label: 'Name',
+                hint: 'Caregiver name',
                 requiredField: true,
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
               ),
-            ],
+              _Input(
+                controller: caregiver.surnameController,
+                label: 'Surname',
+                hint: 'Caregiver surname',
+                requiredField: true,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+              ),
+            ),
+            const SizedBox(height: 10),
+            _row2(
+              _dropdown(
+                label: 'Sex',
+                value: caregiver.sex,
+                options: sexOptions,
+                requiredField: true,
+                onChanged: (v) => setState(() => caregiver.sex = v ?? ''),
+              ),
+              _Input(
+                controller: caregiver.relationshipController,
+                label: 'Relationship with client',
+                hint: 'e.g. Aunt, Grandmother',
+                requiredField: true,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+              ),
+            ),
+            const SizedBox(height: 10),
+            _row2(
+              _dateInput(
+                controller: caregiver.dobController,
+                label: 'Date of Birth',
+                hint: 'Pick date',
+                requiredField: true,
+              ),
+              _Input(
+                controller: caregiver.occupationController,
+                label: 'Occupation',
+                hint: 'Enter occupation',
+                requiredField: true,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+              ),
+            ),
+            const SizedBox(height: 10),
+            _Input(
+              controller: caregiver.phoneController,
+              label: 'Phone Number',
+              hint: 'e.g. 5xxxxxxx',
+              keyboardType: TextInputType.phone,
+              requiredField: true,
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+            ),
           ],
-        ),
+        ],
+      ),
     );
   }
 
@@ -3830,6 +3830,90 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     );
   }
 
+
+  Widget _partTile({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required List<Widget> children,
+    bool initiallyExpanded = false,
+  }) {
+    return MaterialCard(
+      body: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: initiallyExpanded,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          leading: CircleAvatar(
+            radius: 20,
+            backgroundColor: color.withOpacity(0.10),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          title: Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 15.5,
+            ),
+          ),
+          subtitle: Text(
+            subtitle,
+            style: const TextStyle(
+              color: Colors.blueGrey,
+              fontSize: 12.2,
+              height: 1.25,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          children: children,
+        ),
+      ),
+    );
+  }
+
+  Widget _subPartTile({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required Widget child,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F9FC),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.blueGrey.withOpacity(0.10)),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+          leading: Icon(icon, color: color, size: 20),
+          title: Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 14,
+            ),
+          ),
+          subtitle: Text(
+            subtitle,
+            style: const TextStyle(
+              color: Colors.blueGrey,
+              fontSize: 11.8,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          children: [child],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final activeInterventionProgram =
@@ -3851,8 +3935,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       body: SubPageBody(
         body: SingleChildScrollView(
           child: Container(
-            margin:
-            const EdgeInsets.symmetric(horizontal: 12.0, vertical: 12.0),
+            margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 12.0),
             child: Form(
               key: _formKey,
               child: Column(
@@ -3876,508 +3959,550 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                       ),
                     ),
                   const SizedBox(height: 12),
-                  MaterialCard(
-                    body: Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _titleRow(
-                            color: primary,
-                            title: 'Household Location',
-                            subtitle:
-                            'Capture the household location and file reference.',
-                            icon: Icons.home_work_outlined,
-                          ),
-                          const SizedBox(height: 12),
-                          _Input(
-                            controller: _fileNumberController,
-                            label: 'File Number',
-                            hint: 'e.g. MGYSD-0001',
-                            validator: (v) =>
-                            (v == null || v.trim().isEmpty)
-                                ? 'File number is required'
-                                : null,
-                          ),
-                          const SizedBox(height: 10),
-                          _orgUnitDropdown(
-                            label: 'District',
-                            value: _selectedDistrictId,
-                            options: _districtOrgUnits,
-                            hint: 'Select district',
-                            requiredField: true,
-                            onChanged: (selected) {
-                              setState(() {
-                                _selectedDistrictId = selected.id ?? '';
-                                _selectedDistrictName = selected.name ?? '';
-                                _districtController.text = _selectedDistrictName;
-                                _selectedCommunityCouncilId = '';
-                                _selectedCommunityCouncilName = '';
-                                _communityCouncilController.clear();
-                                _communityCouncilOrgUnits = [];
-                              });
-                              _loadCommunityCouncilsForDistrict(
-                                _selectedDistrictId,
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 10),
-                          _orgUnitDropdown(
-                            label: 'Community Council',
-                            value: _selectedCommunityCouncilId,
-                            options: _communityCouncilOrgUnits,
-                            hint: _selectedDistrictId.isEmpty
-                                ? 'Select district first'
-                                : 'Select community council',
-                            requiredField: true,
-                            onChanged: (selected) {
-                              setState(() {
-                                _selectedCommunityCouncilId = selected.id ?? '';
-                                _selectedCommunityCouncilName = selected.name ?? '';
-                                _communityCouncilController.text =
-                                    _selectedCommunityCouncilName;
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 10),
-                          _Input(
-                            controller: _villageController,
-                            label: 'Village',
-                            hint: 'e.g. Ha Thetsane',
-                            validator: (v) =>
-                            (v == null || v.trim().isEmpty)
-                                ? 'Village is required'
-                                : null,
-                          ),
-                          const SizedBox(height: 10),
-                          _Input(
-                            controller: _physicalAddressController,
-                            label: 'Physical Address',
-                            hint: 'Describe the household physical address',
-                            maxLines: 3,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  MaterialCard(
-                    body: Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _titleRow(
-                            color: primary,
-                            title: 'Demographics and Reporting Information',
-                            subtitle:
-                            'Capture the main client information for this case.',
-                            icon: Icons.person_outline,
-                          ),
-                          const SizedBox(height: 12),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF3F5F7),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  _clientCategory.isEmpty
-                                      ? Icons.info_outline
-                                      : Icons.check_circle_outline,
-                                  color: Colors.blueGrey,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Client category',
-                                        style: TextStyle(color: Colors.blueGrey, fontSize: 12.5),
-                                      ),
-                                      const SizedBox(height: 3),
-                                      Text(
-                                        _clientCategory.isEmpty
-                                            ? 'Not yet determined — pick the Date of Birth below'
-                                            : (_isChild ? 'Child' : 'Adult / Elderly Person'),
-                                        style: const TextStyle(
-                                          fontSize: 14.5,
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          _dropdown(
-                            label: 'Client has Disability',
-                            value: _isDisabled,
-                            options: yesNoOptions,
-                            requiredField: true,
-                            enabled: false,
-                            onChanged: (_) {},
-                          ),
-                          const SizedBox(height: 10),
-                          _Input(
-                            controller: _identityNumberController,
-                            label: 'Identity Number',
-                            hint: 'National ID / document number',
-                          ),
-                          const SizedBox(height: 10),
-                          _row2(
-                            _Input(
-                              controller: _clientFirstNameController,
-                              label: 'First name',
-                              hint: 'Client first name',
-                              validator: (v) =>
-                              (v == null || v.trim().isEmpty)
-                                  ? 'First name is required'
-                                  : null,
-                            ),
-                            _Input(
-                              controller: _clientSurnameController,
-                              label: 'Surname',
-                              hint: 'Client surname',
-                              validator: (v) =>
-                              (v == null || v.trim().isEmpty)
-                                  ? 'Surname is required'
-                                  : null,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          _row2(
-                            GestureDetector(
-                              onTap: _pickDobForClient,
-                              child: AbsorbPointer(
-                                child: _Input(
-                                  controller: _clientDobController,
-                                  label: 'Date of Birth',
-                                  hint: 'Pick date',
-                                  suffixIcon: const Icon(Icons.date_range),
-                                  validator: (v) =>
-                                  (v == null || v.trim().isEmpty)
-                                      ? 'Date of birth is required'
-                                      : null,
-                                ),
+                  _partTile(
+                    title: 'Part 1: Household, Client and Education',
+                    subtitle: 'Location, client identity, education and employment details.',
+                    icon: Icons.home_work_outlined,
+                    color: primary,
+                    initiallyExpanded: true,
+                    children: [
+                      MaterialCard(
+                        body: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _titleRow(
+                                color: primary,
+                                title: 'Household Location',
+                                subtitle:
+                                'Capture the household location and file reference.',
+                                icon: Icons.home_work_outlined,
                               ),
-                            ),
-                            _Input(
-                              controller: _clientAgeController,
-                              label: 'Age',
-                              hint: 'Auto-calculated',
-                              readOnly: true,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          _dropdown(
-                            label: 'Sex',
-                            value: _sex,
-                            options: sexOptions,
-                            requiredField: true,
-                            onChanged: (v) {
-                              setState(() {
-                                _sex = v ?? '';
-                                _removeHiddenReasonOptions();
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 10),
-                          _dropdown(
-                            label: 'Nationality',
-                            value: _nationality,
-                            options: nationalityOptions,
-                            requiredField: true,
-                            onChanged: (v) {
-                              setState(() {
-                                _nationality = v ?? '';
-                                if (_nationality != 'OTHER') {
-                                  _nationalityOtherController.clear();
-                                }
-                              });
-                            },
-                          ),
-                          if (_nationality == 'OTHER') ...[
-                            const SizedBox(height: 10),
-                            _Input(
-                              controller: _nationalityOtherController,
-                              label: 'Specify other nationality',
-                              hint: 'Enter nationality',
-                              validator: (v) {
-                                if (_nationality == 'OTHER' &&
-                                    (v == null || v.trim().isEmpty)) {
-                                  return 'Please specify nationality';
-                                }
-                                return null;
-                              },
-                            ),
-                          ],
-                          const SizedBox(height: 10),
-                          _dropdown(
-                            label: 'Home Language',
-                            value: _homeLanguage,
-                            options: homeLanguageOptions,
-                            requiredField: true,
-                            onChanged: (v) {
-                              setState(() {
-                                _homeLanguage = v ?? '';
-                                if (_homeLanguage != 'OTHER') {
-                                  _homeLanguageOtherController.text = '';
-                                }
-                              });
-                            },
-                          ),
-                          if (_homeLanguage == 'OTHER') ...[
-                            const SizedBox(height: 10),
-                            _Input(
-                              controller: _homeLanguageOtherController,
-                              label: 'Specify other language',
-                              hint: 'Enter language',
-                            ),
-                          ],
-                          const SizedBox(height: 10),
-                          _row2(
-                            _Input(
-                              controller: _phoneController,
-                              label: 'Phone Number',
-                              hint: 'e.g. 5xxxxxxx',
-                              keyboardType: TextInputType.phone,
-                            ),
-                            _Input(
-                              controller: _alternativePhoneController,
-                              label: 'Alternative Phone Number',
-                              hint: 'e.g. 5xxxxxxx',
-                              keyboardType: TextInputType.phone,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  MaterialCard(
-                    body: Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _titleRow(
-                            color: primary,
-                            title: 'Education',
-                            subtitle:
-                            'Capture school enrolment and attendance information.',
-                            icon: Icons.school_outlined,
-                          ),
-                          const SizedBox(height: 12),
-                          _dropdown(
-                            label: 'Is the client in School?',
-                            value: _isClientInSchool,
-                            options: yesNoOptions,
-                            requiredField: true,
-                            onChanged: (v) {
-                              setState(() {
-                                _isClientInSchool = v ?? '';
-                                _schoolAttendanceStatus = '';
-                                _notInSchoolStatus = '';
-                                _highestLevelAchieved = '';
-                                if (_isClientInSchool != 'YES') {
-                                  _schoolNameController.clear();
-                                  _grade = '';
-                                  _schoolLevel = '';
-                                }
-                              });
-                            },
-                          ),
-                          if (_isClientInSchool == 'YES') ...[
-                            const SizedBox(height: 10),
-                            _Input(
-                              controller: _schoolNameController,
-                              label: 'Name of School',
-                              hint: 'Enter school name',
-                            ),
-                            if (!_isAdultOrElderly) ...[
+                              const SizedBox(height: 12),
+                              _Input(
+                                controller: _fileNumberController,
+                                label: 'File Number',
+                                hint: 'e.g. MGYSD-0001',
+                                validator: (v) =>
+                                (v == null || v.trim().isEmpty)
+                                    ? 'File number is required'
+                                    : null,
+                              ),
                               const SizedBox(height: 10),
-                              _dropdown(
-                                label: 'Level of school',
-                                value: _schoolLevel,
-                                options: schoolLevelOptions,
+                              _orgUnitDropdown(
+                                label: 'District',
+                                value: _selectedDistrictId,
+                                options: _districtOrgUnits,
+                                hint: 'Select district',
                                 requiredField: true,
-                                onChanged: (v) {
+                                onChanged: (selected) {
                                   setState(() {
-                                    _schoolLevel = v ?? '';
-                                    _grade = '';
+                                    _selectedDistrictId = selected.id ?? '';
+                                    _selectedDistrictName = selected.name ?? '';
+                                    _districtController.text = _selectedDistrictName;
+                                    _selectedCommunityCouncilId = '';
+                                    _selectedCommunityCouncilName = '';
+                                    _communityCouncilController.clear();
+                                    _communityCouncilOrgUnits = [];
+                                  });
+                                  _loadCommunityCouncilsForDistrict(
+                                    _selectedDistrictId,
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 10),
+                              _orgUnitDropdown(
+                                label: 'Community Council',
+                                value: _selectedCommunityCouncilId,
+                                options: _communityCouncilOrgUnits,
+                                hint: _selectedDistrictId.isEmpty
+                                    ? 'Select district first'
+                                    : 'Select community council',
+                                requiredField: true,
+                                onChanged: (selected) {
+                                  setState(() {
+                                    _selectedCommunityCouncilId = selected.id ?? '';
+                                    _selectedCommunityCouncilName = selected.name ?? '';
+                                    _communityCouncilController.text =
+                                        _selectedCommunityCouncilName;
                                   });
                                 },
                               ),
-                              if (_schoolLevel == 'PRIMARY') ...[
-                                const SizedBox(height: 10),
-                                _dropdown(
-                                  label: 'Grade',
-                                  value: _grade,
-                                  options: primaryGradeOptions,
-                                  requiredField: true,
-                                  onChanged: (v) =>
-                                      setState(() => _grade = v ?? ''),
-                                ),
-                              ],
-                              if (_schoolLevel == 'SECONDARY') ...[
-                                const SizedBox(height: 10),
-                                _dropdown(
-                                  label: 'Grade',
-                                  value: _grade,
-                                  options: secondaryGradeOptions,
-                                  requiredField: true,
-                                  onChanged: (v) =>
-                                      setState(() => _grade = v ?? ''),
-                                ),
-                              ],
-                              if (_schoolLevel == 'HIGH_SCHOOL') ...[
-                                const SizedBox(height: 10),
-                                _dropdown(
-                                  label: 'Grade',
-                                  value: _grade,
-                                  options: highSchoolGradeOptions,
-                                  requiredField: true,
-                                  onChanged: (v) =>
-                                      setState(() => _grade = v ?? ''),
-                                ),
-                              ],
-                            ],
-                            const SizedBox(height: 10),
-                            _dropdown(
-                              label: 'School attendance Status',
-                              value: _schoolAttendanceStatus,
-                              options: inSchoolAttendanceOptions,
-                              requiredField: true,
-                              onChanged: (v) => setState(
-                                      () => _schoolAttendanceStatus = v ?? ''),
-                            ),
-                          ],
-                          if (_isClientInSchool == 'NO') ...[
-                            const SizedBox(height: 10),
-                            _dropdown(
-                              label: 'School attendance Status',
-                              value: _schoolAttendanceStatus,
-                              options: notInSchoolAttendanceOptions,
-                              requiredField: true,
-                              onChanged: (v) {
-                                setState(() {
-                                  _schoolAttendanceStatus = v ?? '';
-                                  if (_schoolAttendanceStatus != 'NO_LONGER_IN_SCHOOL') {
-                                    _highestLevelAchieved = '';
-                                  }
-                                });
-                              },
-                            ),
-                            if (_schoolAttendanceStatus == 'NO_LONGER_IN_SCHOOL') ...[
-                              const SizedBox(height: 10),
-                              _dropdown(
-                                label: 'Highest level achieved',
-                                value: _highestLevelAchieved,
-                                options: highestLevelAchievedOptions,
-                                requiredField: true,
-                                onChanged: (v) => setState(
-                                        () => _highestLevelAchieved = v ?? ''),
-                              ),
-                            ],
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (_isAdultOrElderly) ...[
-                    const SizedBox(height: 12),
-                    MaterialCard(
-                      body: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _titleRow(
-                              color: primary,
-                              title: 'Employment Information',
-                              subtitle:
-                              'Capture employment details for adult or elderly clients.',
-                              icon: Icons.work_outline,
-                            ),
-                            const SizedBox(height: 12),
-                            _dropdown(
-                              label: 'Is the adult employed?',
-                              value: _isAdultEmployed,
-                              options: yesNoOptions,
-                              requiredField: true,
-                              onChanged: (v) {
-                                setState(() {
-                                  _isAdultEmployed = v ?? '';
-                                  if (_isAdultEmployed != 'YES') {
-                                    _employerNameController.clear();
-                                  }
-                                });
-                              },
-                            ),
-                            if (_isAdultEmployed == 'YES') ...[
                               const SizedBox(height: 10),
                               _Input(
-                                controller: _employerNameController,
-                                label: 'Name of Employer',
-                                hint: 'Enter employer name',
+                                controller: _villageController,
+                                label: 'Village',
+                                hint: 'e.g. Ha Thetsane',
+                                validator: (v) =>
+                                (v == null || v.trim().isEmpty)
+                                    ? 'Village is required'
+                                    : null,
+                              ),
+                              const SizedBox(height: 10),
+                              _Input(
+                                controller: _physicalAddressController,
+                                label: 'Physical Address',
+                                hint: 'Describe the household physical address',
+                                maxLines: 3,
                               ),
                             ],
-                          ],
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  MaterialCard(
-                    body: Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _titleRow(
-                            color: primary,
-                            title: 'Details of Next of Kin or Significant Other',
-                            subtitle:
-                            'Capture the main contact person(s) linked to the client.',
-                            icon: Icons.contact_phone_outlined,
+                      const SizedBox(height: 12),
+                      MaterialCard(
+                        body: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _titleRow(
+                                color: primary,
+                                title: 'Demographics and Reporting Information',
+                                subtitle:
+                                'Capture the main client information for this case.',
+                                icon: Icons.person_outline,
+                              ),
+                              const SizedBox(height: 12),
+                              _Input(
+                                controller: _identityNumberController,
+                                label: 'Identity Number',
+                                hint: 'National ID / document number',
+                              ),
+                              const SizedBox(height: 10),
+                              _row2(
+                                _Input(
+                                  controller: _clientFirstNameController,
+                                  label: 'First name',
+                                  hint: 'Client first name',
+                                  validator: (v) =>
+                                  (v == null || v.trim().isEmpty)
+                                      ? 'First name is required'
+                                      : null,
+                                ),
+                                _Input(
+                                  controller: _clientSurnameController,
+                                  label: 'Surname',
+                                  hint: 'Client surname',
+                                  validator: (v) =>
+                                  (v == null || v.trim().isEmpty)
+                                      ? 'Surname is required'
+                                      : null,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              _row2(
+                                GestureDetector(
+                                  onTap: _pickDobForClient,
+                                  child: AbsorbPointer(
+                                    child: _Input(
+                                      controller: _clientDobController,
+                                      label: 'Date of Birth',
+                                      hint: 'Pick date',
+                                      suffixIcon: const Icon(Icons.date_range),
+                                      validator: (v) =>
+                                      (v == null || v.trim().isEmpty)
+                                          ? 'Date of birth is required'
+                                          : null,
+                                    ),
+                                  ),
+                                ),
+                                _Input(
+                                  controller: _clientAgeController,
+                                  label: 'Age',
+                                  hint: 'Auto-calculated',
+                                  readOnly: true,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              _dropdown(
+                                label: 'Sex',
+                                value: _sex,
+                                options: sexOptions,
+                                requiredField: true,
+                                onChanged: (v) {
+                                  setState(() {
+                                    _sex = v ?? '';
+                                    _removeHiddenReasonOptions();
+                                  });
+                                },
+                              ),
+                              const SizedBox(height: 10),
+                              _dropdown(
+                                label: 'Nationality',
+                                value: _nationality,
+                                options: nationalityOptions,
+                                requiredField: true,
+                                onChanged: (v) {
+                                  setState(() {
+                                    _nationality = v ?? '';
+                                    if (_nationality != 'OTHER') {
+                                      _nationalityOtherController.clear();
+                                    }
+                                  });
+                                },
+                              ),
+                              if (_nationality == 'OTHER') ...[
+                                const SizedBox(height: 10),
+                                _Input(
+                                  controller: _nationalityOtherController,
+                                  label: 'Specify other nationality',
+                                  hint: 'Enter nationality',
+                                  validator: (v) {
+                                    if (_nationality == 'OTHER' &&
+                                        (v == null || v.trim().isEmpty)) {
+                                      return 'Please specify nationality';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                              ],
+                              const SizedBox(height: 10),
+                              _dropdown(
+                                label: 'Home Language',
+                                value: _homeLanguage,
+                                options: homeLanguageOptions,
+                                requiredField: true,
+                                onChanged: (v) {
+                                  setState(() {
+                                    _homeLanguage = v ?? '';
+                                    if (_homeLanguage != 'OTHER') {
+                                      _homeLanguageOtherController.text = '';
+                                    }
+                                  });
+                                },
+                              ),
+                              if (_homeLanguage == 'OTHER') ...[
+                                const SizedBox(height: 10),
+                                _Input(
+                                  controller: _homeLanguageOtherController,
+                                  label: 'Specify other language',
+                                  hint: 'Enter language',
+                                ),
+                              ],
+                              const SizedBox(height: 10),
+                              _row2(
+                                _Input(
+                                  controller: _phoneController,
+                                  label: 'Phone Number',
+                                  hint: 'e.g. 5xxxxxxx',
+                                  keyboardType: TextInputType.phone,
+                                ),
+                                _Input(
+                                  controller: _alternativePhoneController,
+                                  label: 'Alternative Phone Number',
+                                  hint: 'e.g. 5xxxxxxx',
+                                  keyboardType: TextInputType.phone,
+                                ),
+                              ),
+
+                              const SizedBox(height: 10),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF3F5F7),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      _clientCategory.isEmpty
+                                          ? Icons.info_outline
+                                          : Icons.check_circle_outline,
+                                      color: Colors.blueGrey,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Client category',
+                                            style: TextStyle(color: Colors.blueGrey, fontSize: 12.5),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            _clientCategory.isEmpty
+                                                ? 'Not yet determined — pick the Date of Birth above'
+                                                : (_isChild ? 'Child' : 'Adult / Elderly Person'),
+                                            style: const TextStyle(
+                                              fontSize: 14.5,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              _dropdown(
+                                label: 'Client has Disability',
+                                value: _isDisabled,
+                                options: yesNoOptions,
+                                requiredField: true,
+                                enabled: false,
+                                onChanged: (_) {},
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 12),
-                          ...List.generate(
-                            _nextOfKins.length,
-                                (index) => _nextOfKinCard(index, _nextOfKins[index]),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      MaterialCard(
+                        body: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _titleRow(
+                                color: primary,
+                                title: 'Education',
+                                subtitle:
+                                'Capture school enrolment and attendance information.',
+                                icon: Icons.school_outlined,
+                              ),
+                              const SizedBox(height: 12),
+                              _dropdown(
+                                label: 'Is the client in School?',
+                                value: _isClientInSchool,
+                                options: yesNoOptions,
+                                requiredField: true,
+                                onChanged: (v) {
+                                  setState(() {
+                                    _isClientInSchool = v ?? '';
+                                    _schoolAttendanceStatus = '';
+                                    _notInSchoolStatus = '';
+                                    _highestLevelAchieved = '';
+                                    if (_isClientInSchool != 'YES') {
+                                      _schoolNameController.clear();
+                                      _grade = '';
+                                      _schoolLevel = '';
+                                    }
+                                  });
+                                },
+                              ),
+                              if (_isClientInSchool == 'YES') ...[
+                                const SizedBox(height: 10),
+                                _Input(
+                                  controller: _schoolNameController,
+                                  label: 'Name of School',
+                                  hint: 'Enter school name',
+                                ),
+                                if (!_isAdultOrElderly) ...[
+                                  const SizedBox(height: 10),
+                                  _dropdown(
+                                    label: 'Level of school',
+                                    value: _schoolLevel,
+                                    options: schoolLevelOptions,
+                                    requiredField: true,
+                                    onChanged: (v) {
+                                      setState(() {
+                                        _schoolLevel = v ?? '';
+                                        _grade = '';
+                                      });
+                                    },
+                                  ),
+                                  if (_schoolLevel == 'PRIMARY') ...[
+                                    const SizedBox(height: 10),
+                                    _dropdown(
+                                      label: 'Grade',
+                                      value: _grade,
+                                      options: primaryGradeOptions,
+                                      requiredField: true,
+                                      onChanged: (v) =>
+                                          setState(() => _grade = v ?? ''),
+                                    ),
+                                  ],
+                                  if (_schoolLevel == 'SECONDARY') ...[
+                                    const SizedBox(height: 10),
+                                    _dropdown(
+                                      label: 'Grade',
+                                      value: _grade,
+                                      options: secondaryGradeOptions,
+                                      requiredField: true,
+                                      onChanged: (v) =>
+                                          setState(() => _grade = v ?? ''),
+                                    ),
+                                  ],
+                                  if (_schoolLevel == 'HIGH_SCHOOL') ...[
+                                    const SizedBox(height: 10),
+                                    _dropdown(
+                                      label: 'Grade',
+                                      value: _grade,
+                                      options: highSchoolGradeOptions,
+                                      requiredField: true,
+                                      onChanged: (v) =>
+                                          setState(() => _grade = v ?? ''),
+                                    ),
+                                  ],
+                                ],
+                                const SizedBox(height: 10),
+                                _dropdown(
+                                  label: 'School attendance Status',
+                                  value: _schoolAttendanceStatus,
+                                  options: inSchoolAttendanceOptions,
+                                  requiredField: true,
+                                  onChanged: (v) => setState(
+                                          () => _schoolAttendanceStatus = v ?? ''),
+                                ),
+                              ],
+                              if (_isClientInSchool == 'NO') ...[
+                                const SizedBox(height: 10),
+                                _dropdown(
+                                  label: 'School attendance Status',
+                                  value: _schoolAttendanceStatus,
+                                  options: notInSchoolAttendanceOptions,
+                                  requiredField: true,
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _schoolAttendanceStatus = v ?? '';
+                                      if (_schoolAttendanceStatus != 'NO_LONGER_IN_SCHOOL') {
+                                        _highestLevelAchieved = '';
+                                      }
+                                    });
+                                  },
+                                ),
+                                if (_schoolAttendanceStatus == 'NO_LONGER_IN_SCHOOL') ...[
+                                  const SizedBox(height: 10),
+                                  _dropdown(
+                                    label: 'Highest level achieved',
+                                    value: _highestLevelAchieved,
+                                    options: highestLevelAchievedOptions,
+                                    requiredField: true,
+                                    onChanged: (v) => setState(
+                                            () => _highestLevelAchieved = v ?? ''),
+                                  ),
+                                ],
+                              ],
+                            ],
                           ),
-                          OutlinedButton.icon(
-                            onPressed: _addNextOfKin,
-                            icon: const Icon(Icons.add),
-                            label: const Text('Add next of kin'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: widget.color,
-                              side: BorderSide(color: widget.color),
+                        ),
+                      ),
+                      if (_isAdultOrElderly) ...[
+                        const SizedBox(height: 12),
+                        MaterialCard(
+                          body: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _titleRow(
+                                  color: primary,
+                                  title: 'Employment Information',
+                                  subtitle:
+                                  'Capture employment details for adult or elderly clients.',
+                                  icon: Icons.work_outline,
+                                ),
+                                const SizedBox(height: 12),
+                                _dropdown(
+                                  label: 'Is the adult employed?',
+                                  value: _isAdultEmployed,
+                                  options: yesNoOptions,
+                                  requiredField: true,
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _isAdultEmployed = v ?? '';
+                                      if (_isAdultEmployed != 'YES') {
+                                        _employerNameController.clear();
+                                      }
+                                    });
+                                  },
+                                ),
+                                if (_isAdultEmployed == 'YES') ...[
+                                  const SizedBox(height: 10),
+                                  _Input(
+                                    controller: _employerNameController,
+                                    label: 'Name of Employer',
+                                    hint: 'Enter employer name',
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
-                        ],
-                      ),
-                    ),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 12),
-                  _buildFamilyInformationSection(primary),
+                  _partTile(
+                    title: 'Part 2: Family and Household Members',
+                    subtitle: 'Next of kin, parents, caregivers, assistants and household members.',
+                    icon: Icons.family_restroom_outlined,
+                    color: primary,
+                    children: [
+                      MaterialCard(
+                        body: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _titleRow(
+                                color: primary,
+                                title: 'Details of Next of Kin or Significant Other',
+                                subtitle:
+                                'Capture the main contact person(s) linked to the client.',
+                                icon: Icons.contact_phone_outlined,
+                              ),
+                              const SizedBox(height: 12),
+                              ...List.generate(
+                                _nextOfKins.length,
+                                    (index) => _nextOfKinCard(index, _nextOfKins[index]),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: _addNextOfKin,
+                                icon: const Icon(Icons.add),
+                                label: const Text('Add next of kin'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: widget.color,
+                                  side: BorderSide(color: widget.color),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildFamilyInformationSection(primary),
+                      const SizedBox(height: 12),
+                      _buildOtherHouseholdMembersSection(primary),
+                    ],
+                  ),
                   const SizedBox(height: 12),
-                  _buildOtherHouseholdMembersSection(primary),
-                  const SizedBox(height: 12),
-                  _buildReasonSection(primary),
-                  const SizedBox(height: 12),
-                  _buildInitialRiskAssessmentSection(primary),
-                  const SizedBox(height: 12),
-                  _buildAdditionalAssessmentSection(primary),
+                  _partTile(
+                    title: 'Part 3: Reason for Enrolment and Risk Assessment',
+                    subtitle: 'Reason for enrolment and initial risk assessment domains.',
+                    icon: Icons.fact_check_outlined,
+                    color: primary,
+                    children: [
+                      _subPartTile(
+                        title: '3.1 Reason for Enrolment',
+                        subtitle: 'Select the reason(s) that apply to this case.',
+                        icon: Icons.assignment_late_outlined,
+                        color: primary,
+                        child: _buildReasonSection(primary),
+                      ),
+                      _subPartTile(
+                        title: '3.2 Initial Risk Assessment',
+                        subtitle: 'Emergency actions, risk level and key risk domains.',
+                        icon: Icons.health_and_safety_outlined,
+                        color: primary,
+                        child: _buildInitialRiskAssessmentSection(primary),
+                      ),
+                      _subPartTile(
+                        title: '3.3 Additional Assessment',
+                        subtitle: 'Disability, self-care, rehabilitation and employability details.',
+                        icon: Icons.accessibility_new_outlined,
+                        color: primary,
+                        child: _buildAdditionalAssessmentSection(primary),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 16),
                   EntryFormSaveButton(
                     marginLeft: 20.0,
@@ -4399,6 +4524,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       ),
     );
   }
+
 }
 
 class _Input extends StatelessWidget {
