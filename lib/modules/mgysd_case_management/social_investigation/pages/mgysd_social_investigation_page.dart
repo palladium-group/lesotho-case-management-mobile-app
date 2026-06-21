@@ -1391,6 +1391,9 @@ class _MgysdSocialInvestigationPageState
   bool _saving = false;
   String _savedStatus = 'NOT_STARTED';
 
+  // Main form navigation: keep every major part collapsible to reduce scrolling.
+  final Set<String> _expandedParts = {'part1'};
+
   String _clientTei = '';
   String _caseOrgUnit = '';
   String _householdTei = '';
@@ -3857,6 +3860,79 @@ class _MgysdSocialInvestigationPageState
     ]));
   }
 
+
+  Widget _collapsiblePart({
+    required String id,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Widget child,
+  }) {
+    final expanded = _expandedParts.contains(id);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: expanded ? widget.color.withValues(alpha: 0.20) : Colors.blueGrey.withValues(alpha: 0.10)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: expanded ? 0.045 : 0.025),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () => setState(() {
+              if (expanded) {
+                _expandedParts.remove(id);
+              } else {
+                _expandedParts.add(id);
+              }
+            }),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundColor: widget.color.withValues(alpha: 0.11),
+                    child: Icon(icon, color: widget.color, size: 21),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title, style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 3),
+                        Text(subtitle, style: const TextStyle(color: Colors.blueGrey, fontSize: 12.3, height: 1.3, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: Colors.blueGrey),
+                ],
+              ),
+            ),
+          ),
+          if (expanded) ...[
+            Divider(height: 1, color: Colors.blueGrey.withValues(alpha: 0.10)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              child: child,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _part1() {
     return _surface(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _sectionTitle('Part 1: Summary Data', 'This form is completed for all clients who have been assessed using the intake and risk assessment form and have been assigned to a social worker for protective services.'),
@@ -3949,15 +4025,8 @@ class _MgysdSocialInvestigationPageState
             _input(member.controllers['occupation']!, 'Occupation'),
             _controllerDropdown(controller: member.controllers['relationshipToClient']!, label: 'Relationship to Client', options: _relationshipToClientOptions, labels: _relationshipToClientLabels, requiredField: true),
           ),
-          _two(
-            _controllerDropdown(controller: member.controllers['hasDisability']!, label: 'Disability', options: _disabilityOptions, labels: _yesNoLabels, requiredField: true),
-            _input(member.controllers['disabilitySpecify']!, 'Disability Specify', maxLines: 2),
-          ),
           if (member.isPrimaryClient) ...[
-            _two(
-              _controllerDropdown(controller: member.controllers['clientCategory']!, label: 'Client Category', options: _clientCategoryOptions, labels: _clientCategoryLabels),
-              _input(member.controllers['identityNumber']!, 'Identity Number'),
-            ),
+            _input(member.controllers['identityNumber']!, 'Identity Number'),
             _two(
               _controllerDropdown(controller: member.controllers['nationality']!, label: 'Nationality', options: _nationalityOptions, labels: _nationalityLabels, requiredField: true),
               _controllerDropdown(controller: member.controllers['homeLanguage']!, label: 'Home Language', options: _homeLanguageOptions, labels: _homeLanguageLabels, requiredField: true),
@@ -3988,6 +4057,30 @@ class _MgysdSocialInvestigationPageState
             ),
             _input(member.controllers['motherWhyNotLiving']!, 'Why is Mother not living with Child?', maxLines: 2),
           ],
+          const Divider(height: 20),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text('Client category and disability', style: TextStyle(fontWeight: FontWeight.w900)),
+          ),
+          const SizedBox(height: 8),
+          if (member.isPrimaryClient)
+            _controllerDropdown(
+              controller: member.controllers['clientCategory']!,
+              label: 'Client Category',
+              options: _clientCategoryOptions,
+              labels: _clientCategoryLabels,
+              requiredField: true,
+            ),
+          _two(
+            _controllerDropdown(
+              controller: member.controllers['hasDisability']!,
+              label: 'Does this person have disability?',
+              options: _disabilityOptions,
+              labels: _yesNoLabels,
+              requiredField: true,
+            ),
+            _input(member.controllers['disabilitySpecify']!, 'Disability Specify', maxLines: 2),
+          ),
         ],
       ),
     );
@@ -4006,36 +4099,60 @@ class _MgysdSocialInvestigationPageState
     ]));
   }
 
-  Widget _domainSection({required String title, required String subtitle, required String rating, required List<String> options, required Map<String, String> labels, required void Function(String value) onRatingChanged, required TextEditingController observations, required TextEditingController strengths, required TextEditingController challenges}) {
+  Widget _domainSection({required String title, required String subtitle, required String rating, required List<String> options, required Map<String, String> labels, required Function(String) onRatingChanged, required TextEditingController observations, required TextEditingController strengths, required TextEditingController challenges}) {
+    final hasData = rating.trim().isNotEmpty || observations.text.trim().isNotEmpty || strengths.text.trim().isNotEmpty || challenges.text.trim().isNotEmpty;
     return Container(
-      margin: const EdgeInsets.only(bottom: 13),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: const Color(0xFFF9FBFD), borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.10))),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title, style: const TextStyle(fontSize: 14.8, fontWeight: FontWeight.w900)),
-        const SizedBox(height: 4),
-        Text(subtitle, style: const TextStyle(color: Colors.blueGrey, height: 1.35, fontSize: 12)),
-        const SizedBox(height: 10),
-        _dropdown(label: '$title rating', value: rating, options: options, labels: labels, onChanged: onRatingChanged),
-        _input(observations, 'Observations / notes', maxLines: 4),
-        _two(_input(strengths, 'Strengths', maxLines: 3), _input(challenges, 'Challenges', maxLines: 3)),
-      ]),
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FBFD),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.10)),
+      ),
+      child: ExpansionTile(
+        initiallyExpanded: false,
+        tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        leading: CircleAvatar(
+          radius: 18,
+          backgroundColor: hasData ? widget.color.withValues(alpha: 0.12) : Colors.blueGrey.withValues(alpha: 0.08),
+          child: Icon(hasData ? Icons.check_circle_outline : Icons.add_chart_outlined, size: 18, color: hasData ? widget.color : Colors.blueGrey),
+        ),
+        title: Text(title, style: const TextStyle(fontSize: 14.8, fontWeight: FontWeight.w900)),
+        subtitle: Text(subtitle, style: const TextStyle(color: Colors.blueGrey, height: 1.35, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
+        children: [
+          _dropdown(label: '$title rating', value: rating, options: options, labels: labels, onChanged: onRatingChanged),
+          _input(observations, 'Observations / notes', maxLines: 4),
+          _two(_input(strengths, 'Strengths', maxLines: 3), _input(challenges, 'Challenges', maxLines: 3)),
+        ],
+      ),
     );
   }
 
   Widget _narrativeDomain({required String title, required String subtitle, required TextEditingController observations, required TextEditingController strengths, required TextEditingController challenges}) {
+    final hasData = observations.text.trim().isNotEmpty || strengths.text.trim().isNotEmpty || challenges.text.trim().isNotEmpty;
     return Container(
-      margin: const EdgeInsets.only(bottom: 13),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: const Color(0xFFF9FBFD), borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.10))),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title, style: const TextStyle(fontSize: 14.8, fontWeight: FontWeight.w900)),
-        const SizedBox(height: 4),
-        Text(subtitle, style: const TextStyle(color: Colors.blueGrey, height: 1.35, fontSize: 12)),
-        const SizedBox(height: 10),
-        _input(observations, 'Observations / notes', maxLines: 4),
-        _two(_input(strengths, 'Strengths', maxLines: 3), _input(challenges, 'Challenges', maxLines: 3)),
-      ]),
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FBFD),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.10)),
+      ),
+      child: ExpansionTile(
+        initiallyExpanded: false,
+        tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        leading: CircleAvatar(
+          radius: 18,
+          backgroundColor: hasData ? widget.color.withValues(alpha: 0.12) : Colors.blueGrey.withValues(alpha: 0.08),
+          child: Icon(hasData ? Icons.check_circle_outline : Icons.notes_outlined, size: 18, color: hasData ? widget.color : Colors.blueGrey),
+        ),
+        title: Text(title, style: const TextStyle(fontSize: 14.8, fontWeight: FontWeight.w900)),
+        subtitle: Text(subtitle, style: const TextStyle(color: Colors.blueGrey, height: 1.35, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
+        children: [
+          _input(observations, 'Observations / notes', maxLines: 4),
+          _two(_input(strengths, 'Strengths', maxLines: 3), _input(challenges, 'Challenges', maxLines: 3)),
+        ],
+      ),
     );
   }
 
@@ -5953,10 +6070,34 @@ class _MgysdSocialInvestigationPageState
           padding: const EdgeInsets.all(16),
           children: [
             _header(),
-            _part1(),
-            _part2(),
-            _part3(),
-            _part4(),
+            _collapsiblePart(
+              id: 'part1',
+              title: 'Part 1: Summary Data',
+              subtitle: 'Social worker allocation, household details, client and family summary.',
+              icon: Icons.summarize_outlined,
+              child: _part1(),
+            ),
+            _collapsiblePart(
+              id: 'part2',
+              title: 'Part 2: Case Details',
+              subtitle: 'Incident pattern, date, location and case context.',
+              icon: Icons.folder_open_outlined,
+              child: _part2(),
+            ),
+            _collapsiblePart(
+              id: 'part3',
+              title: 'Part 3: Social Investigation',
+              subtitle: 'Wellbeing domains, risks, strengths and social-worker observations.',
+              icon: Icons.manage_search_outlined,
+              child: _part3(),
+            ),
+            _collapsiblePart(
+              id: 'part4',
+              title: 'Part 4: Supplementary Assessments',
+              subtitle: 'External informants, case conferences and court reports.',
+              icon: Icons.library_books_outlined,
+              child: _part4(),
+            ),
             _actions(),
             const SizedBox(height: 26),
           ],
