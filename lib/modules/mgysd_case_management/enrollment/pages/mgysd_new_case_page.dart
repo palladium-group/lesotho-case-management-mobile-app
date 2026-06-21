@@ -910,6 +910,28 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   bool get _isChild => _clientCategory == 'CHILD';
   bool get _isDisabledYes => _isDisabled == 'YES';
   bool get _showGuardianOption => _isDisabledYes;
+  bool get _disabilityAutoDetected =>
+      _usesAssistiveDevice == 'YES' || _hasDisabilityDiagnosis == 'YES';
+
+  void _syncDisabilityStatus() {
+    _isDisabled = _disabilityAutoDetected ? 'YES' : '';
+    if (!_showGuardianOption) {
+      for (final nextOfKin in _nextOfKins) {
+        if (nextOfKin.relationship == 'GUARDIAN') {
+          nextOfKin.relationship = '';
+        }
+      }
+    }
+    if (!_isDisabledYes) {
+      _personalAssistantNameController.clear();
+      _personalAssistantSurnameController.clear();
+      _personalAssistantSex = '';
+      _personalAssistantRelationshipController.clear();
+      _personalAssistantDobController.clear();
+      _personalAssistantOccupationController.clear();
+      _personalAssistantPhoneController.clear();
+    }
+  }
   bool get _reasonOtherSelected => _selectedReasonOptions.contains('OTHER');
 
   int? get _clientAge => int.tryParse(_clientAgeController.text.trim());
@@ -2165,6 +2187,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required List<_Opt> options,
     required void Function(String?) onChanged,
     bool requiredField = false,
+    bool enabled = true,
   }) {
     final safeValue = options.any((o) => o.code == value) ? value : null;
 
@@ -2179,7 +2202,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         ),
       )
           .toList(),
-      onChanged: onChanged,
+      onChanged: enabled ? onChanged : null,
       validator: (v) {
         if (!requiredField) return null;
         if ((v ?? '').trim().isEmpty) return 'Required';
@@ -2198,6 +2221,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         )
             : null,
         labelText: requiredField ? null : label,
+        filled: !enabled,
+        fillColor: !enabled ? const Color(0xFFF3F5F7) : null,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
         contentPadding:
         const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -2999,7 +3024,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               title: 'Disability diagnosis',
               subtitle: 'Have you ever been diagnosed with any form of disability? e.g. hearing loss, blindness, speech impairment, mobility impairment.',
               gateValue: _hasDisabilityDiagnosis,
-              onGateChanged: (v) => setState(() => _hasDisabilityDiagnosis = v ?? ''),
+              onGateChanged: (v) => setState(() {
+                _hasDisabilityDiagnosis = v ?? '';
+                _syncDisabilityStatus();
+              }),
               revealOn: 'YES',
               options: disabilityTypeOptions,
               selectedValues: _disabilityTypes,
@@ -3009,7 +3037,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               title: 'Assistive devices',
               subtitle: 'Is there any assistive device the client is using? e.g. wheelchair, hearing aid, spectacles, crutches, white cane.',
               gateValue: _usesAssistiveDevice,
-              onGateChanged: (v) => setState(() => _usesAssistiveDevice = v ?? ''),
+              onGateChanged: (v) => setState(() {
+                _usesAssistiveDevice = v ?? '';
+                _syncDisabilityStatus();
+              }),
               revealOn: 'YES',
               options: assistiveDeviceOptions,
               selectedValues: _assistiveDevices,
@@ -3988,33 +4019,12 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                           ),
                           const SizedBox(height: 10),
                           _dropdown(
-                            label: 'Is the client disabled?',
+                            label: 'Client has Disability',
                             value: _isDisabled,
                             options: yesNoOptions,
                             requiredField: true,
-                            onChanged: (v) {
-                              setState(() {
-                                _isDisabled = v ?? '';
-                                if (!_showGuardianOption) {
-                                  for (final nextOfKin in _nextOfKins) {
-                                    if (nextOfKin.relationship == 'GUARDIAN') {
-                                      nextOfKin.relationship = '';
-                                    }
-                                  }
-                                }
-                                if (!_isDisabledYes) {
-                                  _personalAssistantNameController.clear();
-                                  _personalAssistantSurnameController.clear();
-                                  _personalAssistantSex = '';
-                                  _personalAssistantRelationshipController
-                                      .clear();
-                                  _personalAssistantDobController.clear();
-                                  _personalAssistantOccupationController
-                                      .clear();
-                                  _personalAssistantPhoneController.clear();
-                                }
-                              });
-                            },
+                            enabled: false,
+                            onChanged: (_) {},
                           ),
                           const SizedBox(height: 10),
                           _Input(
