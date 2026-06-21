@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lncmis_mobile_app/app_state/language_translation_state/language_translation_state.dart';
+import 'package:lncmis_mobile_app/modules/login/constants/login_page_style.dart';
 import 'package:provider/provider.dart';
 
 class LoginButton extends StatelessWidget {
@@ -18,22 +19,25 @@ class LoginButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<LanguageTranslationState>(
       builder: (context, languageState, child) => Container(
-        width: MediaQuery.of(context).size.width,
-        margin: const EdgeInsets.only(
-          top: 20.0,
-        ),
-        child: TextButton(
+        width: double.infinity,
+        margin: const EdgeInsets.only(top: 20.0),
+        child: TextButton.icon(
           onPressed: isLoginProcessActive ? null : onLogin,
+          icon: isLoginProcessActive
+              ? const SizedBox.shrink()
+              : const Icon(Icons.login_rounded, color: Colors.white, size: 20),
           style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(
-              vertical: 15.0,
-            ),
+            padding: const EdgeInsets.symmetric(vertical: 16.0),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12.0),
+              borderRadius: BorderRadius.circular(16.0),
             ),
-            backgroundColor: const Color(0xFF4B9F46),
+            backgroundColor: isLoginProcessActive
+                ? LoginPageStyles.lncmisBlue.withOpacity(0.70)
+                : LoginPageStyles.lncmisBlue,
+            foregroundColor: Colors.white,
+            shadowColor: LoginPageStyles.lncmisBlue.withOpacity(0.30),
           ),
-          child: isLoginProcessActive
+          label: isLoginProcessActive
               ? const SizedBox(
                   height: 21.0,
                   width: 21.0,
@@ -42,12 +46,12 @@ class LoginButton extends StatelessWidget {
                     strokeWidth: 2.0,
                   ),
                 )
-              :  Text(
-                  languageState.currentLanguage == 'lesotho' ? 'Kena' : 'Login',
-                  style:const TextStyle(
-                    fontSize: 18.0,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFFFAFAFA),
+              : Text(
+                  languageState.currentLanguage == 'lesotho' ? 'Kena' : 'Sign In',
+                  style: const TextStyle(
+                    fontSize: 16.0,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
                   ),
                 ),
         ),
