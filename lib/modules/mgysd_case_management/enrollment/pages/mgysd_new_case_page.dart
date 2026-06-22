@@ -330,17 +330,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   String _riskEducation = '';
   String _riskLevel = '';
 
-  String _riskFamilyBackgroundMember = '';
-  String _riskCaregiverWellbeingMember = '';
-  String _riskExtendedFamilyMember = '';
-  String _riskClientRelationshipsMember = '';
-  String _riskLivingCircumstancesMember = '';
-  String _riskHousingMember = '';
-  String _riskPhysicalHealthMember = '';
-  String _riskNutritionMember = '';
-  String _riskEmotionalHealthMember = '';
-  String _riskSupervisionMember = '';
-  String _riskEducationMember = '';
 
   String _selfCareIndependent = '';
   String _hasDisabilityDiagnosis = '';
@@ -769,7 +758,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   ];
 
   static const List<_Opt> riskLevelOptions = [
-    _Opt('LOW', 'No / Low Risk'),
+    _Opt('NO_RISK', 'No Risk'),
+    _Opt('LOW', 'Low Risk'),
     _Opt('MEDIUM', 'Medium Risk'),
     _Opt('HIGH', 'High Risk'),
   ];
@@ -914,7 +904,17 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       _usesAssistiveDevice == 'YES' || _hasDisabilityDiagnosis == 'YES';
 
   void _syncDisabilityStatus() {
-    _isDisabled = _disabilityAutoDetected ? 'YES' : '';
+    final diagnosis = _hasDisabilityDiagnosis.trim();
+    final device = _usesAssistiveDevice.trim();
+
+    if (diagnosis == 'YES' || device == 'YES') {
+      _isDisabled = 'YES';
+    } else if (diagnosis == 'NO' && device == 'NO') {
+      _isDisabled = 'NO';
+    } else {
+      _isDisabled = '';
+    }
+
     if (!_showGuardianOption) {
       for (final nextOfKin in _nextOfKins) {
         if (nextOfKin.relationship == 'GUARDIAN') {
@@ -1677,7 +1677,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   bool _shouldEnrollForCaseManagement() {
     final value = _riskLevel.trim().toUpperCase().replaceAll(RegExp(r'[^A-Z]'), '');
     if (value.isEmpty) return false;
-    return value != 'LOW' && value != 'NOLOW' && value != 'NOLOWRISK' && value != 'NORISK';
+
+    // Only a clear No Risk assessment remains in the assessed-only program.
+    // Low, Medium and High Risk cases continue into the enrolled household case program.
+    return value != 'NORISK';
   }
 
   Future<void> _saveCase() async {
@@ -1708,13 +1711,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     if (_riskLevel.trim().isEmpty) {
       AppUtil.showToastMessage(
         message: 'Please select the initial risk level.',
-      );
-      return;
-    }
-
-    if (_riskHasActionTaken.trim().isEmpty) {
-      AppUtil.showToastMessage(
-        message: 'Please indicate whether emergency action was taken in the initial risk assessment.',
       );
       return;
     }
@@ -2212,7 +2208,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         label: requiredField
             ? RichText(
           text: TextSpan(
-            style: const TextStyle(color: Colors.black87, fontSize: 14),
+            style: const TextStyle(color: Colors.black87, fontSize: 14, fontWeight: FontWeight.w700),
             children: [
               TextSpan(text: label),
               const TextSpan(text: ' *', style: TextStyle(color: Colors.red)),
@@ -2221,11 +2217,26 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         )
             : null,
         labelText: requiredField ? null : label,
-        filled: !enabled,
-        fillColor: !enabled ? const Color(0xFFF3F5F7) : null,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-        contentPadding:
-        const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        labelStyle: const TextStyle(fontWeight: FontWeight.w700, color: Colors.blueGrey),
+        filled: true,
+        fillColor: enabled ? const Color(0xFFF3F7FA) : const Color(0xFFF1F5F9),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Colors.blueGrey.withOpacity(0.24)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 1.6),
+        ),
+        disabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Colors.blueGrey.withOpacity(0.18)),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Colors.red.withOpacity(0.65)),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       ),
     );
   }
@@ -2330,7 +2341,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: primary.withOpacity(0.04),
+                color: primary.withOpacity(0.10),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: primary.withOpacity(0.16)),
               ),
@@ -2549,9 +2560,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FBFD),
+        color: const Color(0xFFEFF4F8),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
+        border: Border.all(color: Colors.blueGrey.withOpacity(0.22)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2610,9 +2621,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FBFD),
+        color: const Color(0xFFEFF4F8),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
+        border: Border.all(color: Colors.blueGrey.withOpacity(0.22)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2724,18 +2735,14 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required List<_Opt> options,
     required void Function(String?) onChanged,
     required TextEditingController notesController,
-    required String selectedMember,
-    required void Function(String?) onMemberChanged,
   }) {
-    final memberOptions = _availableHouseholdMembersForRisk();
-
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FBFD),
+        color: const Color(0xFFEFF4F8),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
+        border: Border.all(color: Colors.blueGrey.withOpacity(0.22)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2750,13 +2757,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             value: value,
             options: options,
             onChanged: onChanged,
-          ),
-          const SizedBox(height: 10),
-          _dropdown(
-            label: 'Household member this note is about',
-            value: selectedMember,
-            options: memberOptions,
-            onChanged: onMemberChanged,
           ),
           const SizedBox(height: 10),
           _Input(
@@ -2811,58 +2811,12 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               onChanged: (v) => setState(() => _riskReportSource = v ?? ''),
             ),
             const SizedBox(height: 14),
-            _dropdown(
-              label: 'Has any emergency action been taken? *',
-              value: _riskHasActionTaken,
-              options: yesNoOptions,
-              requiredField: true,
-              onChanged: (v) {
-                setState(() {
-                  _riskHasActionTaken = v ?? '';
-                  if (_riskHasActionTaken != 'NO') {
-                    _riskNoActionReason = '';
-                  }
-                  if (_riskHasActionTaken != 'YES') {
-                    _riskEmergencyActionsTaken.clear();
-                    _riskServicesAccessed.clear();
-                  }
-                });
-              },
-            ),
-            if (_riskHasActionTaken == 'NO') ...[
-              const SizedBox(height: 10),
-              _dropdown(
-                label: 'If no, why?',
-                value: _riskNoActionReason,
-                options: riskNoActionReasonOptions,
-                onChanged: (v) => setState(() => _riskNoActionReason = v ?? ''),
-              ),
-            ],
-            if (_riskHasActionTaken == 'YES') ...[
-              const SizedBox(height: 12),
-              _riskMultiSelect(
-                title: 'Emergency actions taken',
-                options: riskEmergencyActionOptions,
-                selectedValues: _riskEmergencyActionsTaken,
-                otherController: _riskEmergencyActionOtherController,
-              ),
-              const SizedBox(height: 12),
-              _riskMultiSelect(
-                title: 'Services accessed',
-                options: riskServicesAccessedOptions,
-                selectedValues: _riskServicesAccessed,
-                otherController: _riskServicesAccessedOtherController,
-              ),
-            ],
-            const SizedBox(height: 14),
             _riskDomainItem(
               title: 'Family background',
               value: _riskFamilyBackground,
               options: riskFamilyBackgroundOptions,
               onChanged: (v) => setState(() => _riskFamilyBackground = v ?? ''),
               notesController: _riskFamilyBackgroundNotesController,
-              selectedMember: _riskFamilyBackgroundMember,
-              onMemberChanged: (v) => setState(() => _riskFamilyBackgroundMember = v ?? ''),
             ),
             if (_caregivers.isNotEmpty)
               _riskDomainItem(
@@ -2871,8 +2825,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 options: riskCaregiverWellbeingOptions,
                 onChanged: (v) => setState(() => _riskCaregiverWellbeing = v ?? ''),
                 notesController: _riskCaregiverWellbeingNotesController,
-                selectedMember: _riskCaregiverWellbeingMember,
-                onMemberChanged: (v) => setState(() => _riskCaregiverWellbeingMember = v ?? ''),
               ),
             _riskDomainItem(
               title: 'Extended family relationships',
@@ -2880,8 +2832,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               options: riskRelationshipOptions,
               onChanged: (v) => setState(() => _riskExtendedFamilyRelationships = v ?? ''),
               notesController: _riskExtendedFamilyNotesController,
-              selectedMember: _riskExtendedFamilyMember,
-              onMemberChanged: (v) => setState(() => _riskExtendedFamilyMember = v ?? ''),
             ),
             _riskDomainItem(
               title: 'Client relationships',
@@ -2889,8 +2839,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               options: riskRelationshipOptions,
               onChanged: (v) => setState(() => _riskClientRelationships = v ?? ''),
               notesController: _riskClientRelationshipsNotesController,
-              selectedMember: _riskClientRelationshipsMember,
-              onMemberChanged: (v) => setState(() => _riskClientRelationshipsMember = v ?? ''),
             ),
             _riskDomainItem(
               title: 'Living circumstances',
@@ -2898,8 +2846,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               options: riskLivingCircumstancesOptions,
               onChanged: (v) => setState(() => _riskLivingCircumstances = v ?? ''),
               notesController: _riskLivingCircumstancesNotesController,
-              selectedMember: _riskLivingCircumstancesMember,
-              onMemberChanged: (v) => setState(() => _riskLivingCircumstancesMember = v ?? ''),
             ),
             _riskDomainItem(
               title: 'Housing',
@@ -2907,8 +2853,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               options: riskHousingOptions,
               onChanged: (v) => setState(() => _riskHousing = v ?? ''),
               notesController: _riskHousingNotesController,
-              selectedMember: _riskHousingMember,
-              onMemberChanged: (v) => setState(() => _riskHousingMember = v ?? ''),
             ),
             _riskDomainItem(
               title: 'Physical health',
@@ -2916,8 +2860,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               options: riskPhysicalHealthOptions,
               onChanged: (v) => setState(() => _riskPhysicalHealth = v ?? ''),
               notesController: _riskPhysicalHealthNotesController,
-              selectedMember: _riskPhysicalHealthMember,
-              onMemberChanged: (v) => setState(() => _riskPhysicalHealthMember = v ?? ''),
             ),
             _riskDomainItem(
               title: 'Nutrition',
@@ -2925,8 +2867,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               options: riskNutritionOptions,
               onChanged: (v) => setState(() => _riskNutrition = v ?? ''),
               notesController: _riskNutritionNotesController,
-              selectedMember: _riskNutritionMember,
-              onMemberChanged: (v) => setState(() => _riskNutritionMember = v ?? ''),
             ),
             _riskDomainItem(
               title: 'Emotional health',
@@ -2934,8 +2874,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               options: riskEmotionalHealthOptions,
               onChanged: (v) => setState(() => _riskEmotionalHealth = v ?? ''),
               notesController: _riskEmotionalHealthNotesController,
-              selectedMember: _riskEmotionalHealthMember,
-              onMemberChanged: (v) => setState(() => _riskEmotionalHealthMember = v ?? ''),
             ),
             _riskDomainItem(
               title: 'Supervision',
@@ -2943,8 +2881,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               options: riskSupervisionOptions,
               onChanged: (v) => setState(() => _riskSupervision = v ?? ''),
               notesController: _riskSupervisionNotesController,
-              selectedMember: _riskSupervisionMember,
-              onMemberChanged: (v) => setState(() => _riskSupervisionMember = v ?? ''),
             ),
             _riskDomainItem(
               title: 'Education',
@@ -2952,8 +2888,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               options: riskEducationOptions,
               onChanged: (v) => setState(() => _riskEducation = v ?? ''),
               notesController: _riskEducationNotesController,
-              selectedMember: _riskEducationMember,
-              onMemberChanged: (v) => setState(() => _riskEducationMember = v ?? ''),
             ),
             const SizedBox(height: 8),
             _dropdown(
@@ -3061,9 +2995,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFFF9FBFD),
+                color: const Color(0xFFEFF4F8),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
+                border: Border.all(color: Colors.blueGrey.withOpacity(0.22)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -3110,9 +3044,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFFF9FBFD),
+                color: const Color(0xFFEFF4F8),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
+                border: Border.all(color: Colors.blueGrey.withOpacity(0.22)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -3155,6 +3089,48 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 ],
               ),
             ),
+
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: primary.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: primary.withOpacity(0.18)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.verified_outlined, color: primary, size: 19),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Auto disability result',
+                          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 5),
+                  const Text(
+                    'Auto-populated from disability diagnosis and assistive device responses.',
+                    style: TextStyle(color: Colors.blueGrey, fontSize: 12.3, height: 1.3, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 10),
+                  _dropdown(
+                    label: 'Client has disability',
+                    value: _isDisabled,
+                    options: yesNoOptions,
+                    requiredField: true,
+                    enabled: false,
+                    onChanged: (_) {},
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -3180,9 +3156,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FBFD),
+        color: const Color(0xFFEFF4F8),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
+        border: Border.all(color: Colors.blueGrey.withOpacity(0.22)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3265,9 +3241,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FBFD),
+        color: const Color(0xFFEFF4F8),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
+        border: Border.all(color: Colors.blueGrey.withOpacity(0.22)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3354,9 +3330,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FBFD),
+        color: const Color(0xFFEFF4F8),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
+        border: Border.all(color: Colors.blueGrey.withOpacity(0.22)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3472,9 +3448,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FBFD),
+        color: const Color(0xFFEFF4F8),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
+        border: Border.all(color: Colors.blueGrey.withOpacity(0.22)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3647,9 +3623,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FBFD),
+        color: const Color(0xFFEFF4F8),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
+        border: Border.all(color: Colors.blueGrey.withOpacity(0.22)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3883,9 +3859,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F9FC),
+        color: const Color(0xFFEFF4F8),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.blueGrey.withOpacity(0.10)),
+        border: Border.all(color: Colors.blueGrey.withOpacity(0.18)),
       ),
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -3926,7 +3902,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         preferredSize: const Size.fromHeight(65.0),
         child: SubPageAppBar(
           label: widget.reportedEventId == null
-              ? 'Intake And Initial Risk Assessment'
+              ? 'Intake & Risk Assessment'
               : 'Enroll Client Case',
           activeInterventionProgram: activeInterventionProgram,
           disableSelectionOfActiveIntervention: false,
@@ -3935,7 +3911,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       body: SubPageBody(
         body: SingleChildScrollView(
           child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 12.0),
+            margin: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 10.0),
             child: Form(
               key: _formKey,
               child: Column(
@@ -3960,8 +3936,39 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                     ),
                   const SizedBox(height: 12),
                   _partTile(
-                    title: 'Part 1: Household, Client and Education',
-                    subtitle: 'Location, client identity, education and employment details.',
+                    title: 'Part 1: Risk Assessment and Reasons for Enrolment',
+                    subtitle: 'Start with assessment, then confirm why the client is enrolled.',
+                    icon: Icons.fact_check_outlined,
+                    color: primary,
+                    initiallyExpanded: true,
+                    children: [
+                      _subPartTile(
+                        title: '1.1 Initial Assessment',
+                        subtitle: 'Capture risk level and key assessment domains.',
+                        icon: Icons.health_and_safety_outlined,
+                        color: primary,
+                        child: _buildInitialRiskAssessmentSection(primary),
+                      ),
+                      _subPartTile(
+                        title: '1.2 Reasons for Enrolment',
+                        subtitle: 'Select only the reason(s) that apply.',
+                        icon: Icons.assignment_late_outlined,
+                        color: primary,
+                        child: _buildReasonSection(primary),
+                      ),
+                      _subPartTile(
+                        title: '1.3 Additional Assessment',
+                        subtitle: 'Disability, self-care, rehabilitation and employability.',
+                        icon: Icons.accessibility_new_outlined,
+                        color: primary,
+                        child: _buildAdditionalAssessmentSection(primary),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _partTile(
+                    title: 'Part 2: Household, Client and Education',
+                    subtitle: 'Location, client identity, school and employment details.',
                     icon: Icons.home_work_outlined,
                     color: primary,
                     initiallyExpanded: true,
@@ -4202,9 +4209,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                                 width: double.infinity,
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFF3F5F7),
+                                  color: const Color(0xFFE7EEF4),
                                   borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
+                                  border: Border.all(color: Colors.blueGrey.withOpacity(0.22)),
                                 ),
                                 child: Row(
                                   children: [
@@ -4239,15 +4246,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                                     ),
                                   ],
                                 ),
-                              ),
-                              const SizedBox(height: 10),
-                              _dropdown(
-                                label: 'Client has Disability',
-                                value: _isDisabled,
-                                options: yesNoOptions,
-                                requiredField: true,
-                                enabled: false,
-                                onChanged: (_) {},
                               ),
                             ],
                           ),
@@ -4430,9 +4428,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                     ],
                   ),
                   const SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   _partTile(
-                    title: 'Part 2: Family and Household Members',
-                    subtitle: 'Next of kin, parents, caregivers, assistants and household members.',
+                    title: 'Part 3: Family and Household Members',
+                    subtitle: 'Next of kin, parents, caregivers and household members.',
                     icon: Icons.family_restroom_outlined,
                     color: primary,
                     children: [
@@ -4474,35 +4473,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  _partTile(
-                    title: 'Part 3: Reason for Enrolment and Risk Assessment',
-                    subtitle: 'Reason for enrolment and initial risk assessment domains.',
-                    icon: Icons.fact_check_outlined,
-                    color: primary,
-                    children: [
-                      _subPartTile(
-                        title: '3.1 Reason for Enrolment',
-                        subtitle: 'Select the reason(s) that apply to this case.',
-                        icon: Icons.assignment_late_outlined,
-                        color: primary,
-                        child: _buildReasonSection(primary),
-                      ),
-                      _subPartTile(
-                        title: '3.2 Initial Risk Assessment',
-                        subtitle: 'Emergency actions, risk level and key risk domains.',
-                        icon: Icons.health_and_safety_outlined,
-                        color: primary,
-                        child: _buildInitialRiskAssessmentSection(primary),
-                      ),
-                      _subPartTile(
-                        title: '3.3 Additional Assessment',
-                        subtitle: 'Disability, self-care, rehabilitation and employability details.',
-                        icon: Icons.accessibility_new_outlined,
-                        color: primary,
-                        child: _buildAdditionalAssessmentSection(primary),
-                      ),
-                    ],
-                  ),
                   const SizedBox(height: 16),
                   EntryFormSaveButton(
                     marginLeft: 20.0,
@@ -4563,7 +4533,7 @@ class _Input extends StatelessWidget {
         label: requiredField
             ? RichText(
           text: TextSpan(
-            style: const TextStyle(color: Colors.black87, fontSize: 14),
+            style: const TextStyle(color: Colors.black87, fontSize: 14, fontWeight: FontWeight.w700),
             children: [
               TextSpan(text: label),
               const TextSpan(text: ' *', style: TextStyle(color: Colors.red)),
@@ -4572,13 +4542,29 @@ class _Input extends StatelessWidget {
         )
             : null,
         labelText: requiredField ? null : label,
+        labelStyle: const TextStyle(fontWeight: FontWeight.w700, color: Colors.blueGrey),
         hintText: hint,
+        hintStyle: TextStyle(color: Colors.blueGrey.withOpacity(0.82), fontSize: 13, fontWeight: FontWeight.w500),
         suffixIcon: suffixIcon,
         filled: true,
-        fillColor: readOnly ? const Color(0xFFF3F5F7) : Colors.white,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-        contentPadding:
-        const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        fillColor: readOnly ? const Color(0xFFF1F5F9) : const Color(0xFFF3F7FA),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Colors.blueGrey.withOpacity(0.24)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 1.6),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Colors.red.withOpacity(0.65)),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Colors.red.withOpacity(0.85), width: 1.4),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       ),
     );
   }
