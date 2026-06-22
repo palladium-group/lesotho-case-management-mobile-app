@@ -12,15 +12,11 @@ class MgysdDhis2Uids {
 
   // Households are enrolled here only when risk level is NOT No/Low.
   // Replace this placeholder with the real DHIS2 UID once created.
-  static const String enrolledHouseholdsProgram = 'MGYSD_ENROLLED_HOUSEHOLDS_PROGRAM_UID';
+  static const String enrolledHouseholdsProgram = 'IiNM5kQkHLu';
 
   // Family members, including the primary client, are enrolled here only when
   // the household risk level is NOT No/Low.
   static const String familyMemberTrackerProgram = 'zDB0BXM9SWI';
-
-  // Backward-compatible alias used by older pages. It now points to the
-  // assessed-households program.
-  static const String caseManagementTrackerProgram = assessedHouseholdsProgram;
 
   // ---------------------------------------------------------------------------
   // TRACKED ENTITY TYPES

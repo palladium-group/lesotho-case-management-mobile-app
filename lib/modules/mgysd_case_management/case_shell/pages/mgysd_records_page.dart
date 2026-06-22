@@ -19,8 +19,8 @@ class MgysdRecordsPage extends StatefulWidget {
   State<MgysdRecordsPage> createState() => _MgysdRecordsPageState();
 }
 
-enum _RecordsFilter { all, reportedOnly, enrolledOnly }
-enum _RecordsSort { newest, oldest, clientName, priority }
+enum _RecordsFilter { all, newCases, activeCases }
+enum _RecordsSort { priority, newest, oldest, clientName }
 
 class _OfflineReportedCase {
   final String dbRowId;
@@ -69,10 +69,8 @@ class _OfflineReportedCase {
 
   String get displayName {
     final full = ('$clientFirstName $clientLastName').trim();
-    return full.isEmpty ? '(No client name)' : full;
+    return full.isEmpty ? 'Unnamed client' : full;
   }
-
-  String get statusLabel => isEnrolled ? 'Enrolled' : 'Reported only';
 
   bool get hasConcern => concernReason.trim().isNotEmpty;
   bool get hasIncidentNarrative => incidentDescription.trim().isNotEmpty;
@@ -85,24 +83,31 @@ class _OfflineReportedCase {
     return 10;
   }
 
+  String get workStatusLabel {
+    if (!isEnrolled) return 'New Case';
+    if (!hasPhone) return 'Follow Up';
+    if (!hasIncidentNarrative) return 'Review';
+    return 'Active Case';
+  }
+
   String get nextActionTitle {
-    if (!isEnrolled) return 'Open intake and assess household';
-    if (!hasPhone) return 'Review client contact details';
-    if (!hasIncidentNarrative) return 'Review report narrative';
-    return 'Report already linked to household case';
+    if (!isEnrolled) return 'Open Intake Assessment';
+    if (!hasPhone) return 'Update Client Contact';
+    if (!hasIncidentNarrative) return 'Review Report Narrative';
+    return 'Continue Household Case';
   }
 
   String get nextActionSubtitle {
     if (!isEnrolled) {
-      return 'This report has not yet been converted into Intake and Initial Risk Assessment.';
+      return 'This report must be converted into intake and initial risk assessment.';
     }
     if (!hasPhone) {
-      return 'The primary client has no phone number captured in the report.';
+      return 'Client contact details are missing and should be verified.';
     }
     if (!hasIncidentNarrative) {
-      return 'The report has limited incident description. Verify details during follow-up.';
+      return 'The incident description is limited. Confirm details during follow-up.';
     }
-    return 'Use the household case record for investigation, care planning and services.';
+    return 'Use the household case for investigation, care planning and services.';
   }
 
   String get searchableText {
@@ -116,8 +121,9 @@ class _OfflineReportedCase {
       concernReasonOther,
       incidentLocation,
       incidentDescription,
-      isEnrolled ? 'enrolled' : 'reported only not enrolled',
+      isEnrolled ? 'active enrolled household case' : 'new case reported intake assessment',
       nextActionTitle,
+      workStatusLabel,
     ].join(' ').toLowerCase();
   }
 }
@@ -384,10 +390,10 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
     Iterable<_OfflineReportedCase> filtered = items;
 
     switch (_filter) {
-      case _RecordsFilter.reportedOnly:
+      case _RecordsFilter.newCases:
         filtered = filtered.where((item) => !item.isEnrolled);
         break;
-      case _RecordsFilter.enrolledOnly:
+      case _RecordsFilter.activeCases:
         filtered = filtered.where((item) => item.isEnrolled);
         break;
       case _RecordsFilter.all:
@@ -411,16 +417,16 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
           ),
         );
         break;
+      case _RecordsSort.newest:
+        list.sort((a, b) => b.eventDate.compareTo(a.eventDate));
+        break;
       case _RecordsSort.priority:
+      default:
         list.sort((a, b) {
           final score = b.priorityScore.compareTo(a.priorityScore);
           if (score != 0) return score;
           return b.eventDate.compareTo(a.eventDate);
         });
-        break;
-      case _RecordsSort.newest:
-      default:
-        list.sort((a, b) => b.eventDate.compareTo(a.eventDate));
         break;
     }
 
@@ -447,16 +453,73 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
     await _refresh();
   }
 
+  Color _statusColor(_OfflineReportedCase item) {
+    if (!item.isEnrolled) return Colors.redAccent;
+    if (!item.hasPhone) return Colors.deepOrange;
+    if (!item.hasIncidentNarrative) return Colors.amber.shade800;
+    return Colors.green;
+  }
+
+  IconData _statusIcon(_OfflineReportedCase item) {
+    if (!item.isEnrolled) return Icons.priority_high_rounded;
+    if (!item.hasPhone) return Icons.phone_disabled_outlined;
+    if (!item.hasIncidentNarrative) return Icons.notes_outlined;
+    return Icons.check_circle_outline;
+  }
+
+  String _primaryConcern(_OfflineReportedCase item) {
+    final concern = item.concernReason.trim();
+    if (concern.isEmpty) return 'Concern not captured';
+    return concern.split(',').first.trim();
+  }
+
+  String _dateForList(_OfflineReportedCase item) {
+    if (item.incidentDate.trim().isNotEmpty) return item.incidentDate.trim();
+    if (item.eventDate.trim().isNotEmpty) return item.eventDate.trim();
+    return 'Date not captured';
+  }
+
+  String _listMeta(_OfflineReportedCase item) {
+    final parts = <String>[];
+    if (item.clientDistrict.trim().isNotEmpty) parts.add(item.clientDistrict.trim());
+    parts.add(_dateForList(item));
+    return parts.join(' • ');
+  }
+
+  String _sortLabel() {
+    switch (_sort) {
+      case _RecordsSort.newest:
+        return 'Newest';
+      case _RecordsSort.oldest:
+        return 'Oldest';
+      case _RecordsSort.clientName:
+        return 'Client name';
+      case _RecordsSort.priority:
+      default:
+        return 'Priority';
+    }
+  }
+
+  int _activeFilterCount() {
+    int count = 0;
+    if (_filter != _RecordsFilter.all) count++;
+    if (_sort != _RecordsSort.priority) count++;
+    if (_searchController.text.trim().isNotEmpty) count++;
+    return count;
+  }
+
   void _showRecordDetails(_OfflineReportedCase item) {
+    final statusColor = _statusColor(item);
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) {
         return DraggableScrollableSheet(
-          initialChildSize: 0.86,
+          initialChildSize: 0.78,
           minChildSize: 0.45,
-          maxChildSize: 0.96,
+          maxChildSize: 0.94,
           builder: (context, scrollController) {
             return Container(
               decoration: const BoxDecoration(
@@ -481,24 +544,32 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
                   Row(
                     children: [
                       CircleAvatar(
-                        radius: 25,
-                        backgroundColor: (item.isEnrolled ? Colors.green : widget.color)
-                            .withOpacity(0.12),
-                        child: Icon(
-                          item.isEnrolled
-                              ? Icons.verified_user_outlined
-                              : Icons.report_outlined,
-                          color: item.isEnrolled ? Colors.green : widget.color,
-                        ),
+                        radius: 26,
+                        backgroundColor: statusColor.withOpacity(0.12),
+                        child: Icon(_statusIcon(item), color: statusColor),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: Text(
-                          item.displayName,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.displayName,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              item.workStatusLabel,
+                              style: TextStyle(
+                                color: statusColor,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       IconButton(
@@ -508,39 +579,32 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
                     ],
                   ),
                   const SizedBox(height: 14),
-                  _decisionBox(item),
-                  const SizedBox(height: 14),
                   _detailSection(
-                    title: 'Report Summary',
+                    title: 'Case Summary',
                     icon: Icons.article_outlined,
                     children: [
-                      _detailRow('Status', item.statusLabel),
+                      _detailRow('Concern', item.concernReason),
                       _detailRow('Report Date', item.eventDate),
                       _detailRow('Incident Date', item.incidentDate),
-                      _detailRow('Concern', item.concernReason),
-                      _detailRow('Incident Location', item.incidentLocation),
-                      _detailRow('Report Event', item.eventId),
+                      _detailRow('Location', item.incidentLocation),
                     ],
                   ),
                   const SizedBox(height: 12),
                   _detailSection(
-                    title: 'Client Details',
+                    title: 'Client Information',
                     icon: Icons.person_outline,
                     children: [
-                      _detailRow('Client Name', item.displayName),
+                      _detailRow('Name', item.displayName),
                       _detailRow('Phone', item.clientPhone),
                       _detailRow('Sex', item.clientSex),
                       _detailRow('District', item.clientDistrict),
-                      _detailRow('Clients Captured', item.clientsCount.toString()),
-                      _detailRow(
-                        'People Involved',
-                        item.peopleInvolvedCount.toString(),
-                      ),
+                      _detailRow('Clients', item.clientsCount.toString()),
+                      _detailRow('People involved', item.peopleInvolvedCount.toString()),
                     ],
                   ),
                   const SizedBox(height: 12),
                   _detailSection(
-                    title: 'Incident Description',
+                    title: 'Narrative',
                     icon: Icons.notes_outlined,
                     children: [
                       Text(
@@ -558,51 +622,43 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
                   if (item.isEnrolled) ...[
                     const SizedBox(height: 12),
                     _detailSection(
-                      title: 'Linked Intake / Household',
+                      title: 'Linked Household Case',
                       icon: Icons.link_outlined,
                       children: [
                         _detailRow('Linked TEI', item.linkedTei),
-                        _detailRow('Linked Enrollment', item.linkedEnrollment),
+                        _detailRow('Enrollment', item.linkedEnrollment),
                       ],
                     ),
                   ],
                   const SizedBox(height: 18),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.close),
-                          label: const Text('Close'),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: item.isEnrolled
+                          ? null
+                          : () async {
+                        Navigator.pop(context);
+                        await _openEnrollForm(item);
+                      },
+                      icon: Icon(
+                        item.isEnrolled
+                            ? Icons.check_circle_outline
+                            : Icons.arrow_forward_rounded,
+                      ),
+                      label: Text(
+                        item.isEnrolled ? 'Already Active' : 'Open Intake Assessment',
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: widget.color,
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: Colors.blueGrey.withOpacity(0.18),
+                        disabledForegroundColor: Colors.blueGrey,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: item.isEnrolled
-                              ? null
-                              : () async {
-                            Navigator.pop(context);
-                            await _openEnrollForm(item);
-                          },
-                          icon: Icon(
-                            item.isEnrolled
-                                ? Icons.check_circle_outline
-                                : Icons.edit_outlined,
-                          ),
-                          label: Text(
-                            item.isEnrolled ? 'Already Enrolled' : 'Edit / Intake',
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: widget.color,
-                            foregroundColor: Colors.white,
-                            disabledBackgroundColor:
-                            Colors.blueGrey.withOpacity(0.18),
-                            disabledForegroundColor: Colors.blueGrey,
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ],
               ),
@@ -654,7 +710,7 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 122,
+            width: 116,
             child: Text(
               label,
               style: const TextStyle(
@@ -679,42 +735,71 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
     );
   }
 
-  Widget _chip(
-      String text, {
-        Color? color,
-        IconData? icon,
-        bool strong = false,
-      }) {
-    if (text.trim().isEmpty) return const SizedBox.shrink();
-
-    final c = color ?? Colors.blueGrey;
+  Widget _statusPill(_OfflineReportedCase item) {
+    final color = _statusColor(item);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: c.withOpacity(strong ? 0.14 : 0.08),
+        color: color.withOpacity(0.10),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: c.withOpacity(strong ? 0.24 : 0.12)),
+        border: Border.all(color: color.withOpacity(0.20)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (icon != null) ...[
-            Icon(icon, size: 14, color: c),
-            const SizedBox(width: 5),
-          ],
-          Flexible(
-            child: Text(
-              text,
-              style: TextStyle(
-                color: c,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-              ),
-              overflow: TextOverflow.ellipsis,
+          Icon(_statusIcon(item), color: color, size: 14),
+          const SizedBox(width: 5),
+          Text(
+            item.workStatusLabel,
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _miniStat({
+    required String label,
+    required int value,
+    required Color color,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.13)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              value.toString(),
+              style: TextStyle(
+                color: color,
+                fontSize: 17,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.blueGrey,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -725,14 +810,12 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
     return ChoiceChip(
       label: Text(label),
       selected: selected,
-      onSelected: (_) {
-        setState(() => _filter = value);
-      },
+      onSelected: (_) => setState(() => _filter = value),
       selectedColor: widget.color.withOpacity(0.16),
       backgroundColor: Colors.white,
       labelStyle: TextStyle(
         color: selected ? widget.color : Colors.blueGrey,
-        fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
+        fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
       ),
       side: BorderSide(
         color: selected
@@ -743,93 +826,12 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
     );
   }
 
-  Widget _summaryTile({
-    required String label,
-    required String value,
-    required IconData icon,
-    required Color color,
-  }) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(11),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.07),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.12)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    value,
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 16,
-                    ),
-                  ),
-                  Text(
-                    label,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.blueGrey,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 11.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _headerMessage({
-    required int reportedCount,
-    required int enrolledCount,
-  }) {
-    if (reportedCount > 0) {
-      return '$reportedCount reported case${reportedCount == 1 ? '' : 's'} still need Intake and Initial Risk Assessment.';
-    }
-    if (enrolledCount > 0) {
-      return 'All visible reports have been converted into household cases.';
-    }
-    return 'No report records are available yet.';
-  }
-
-  int _activeFilterCount() {
-    int count = 0;
-    if (_filter != _RecordsFilter.all) count++;
-    if (_sort != _RecordsSort.priority) count++;
-    if (_searchController.text.trim().isNotEmpty) count++;
-    return count;
-  }
-
-  String _sortLabel() {
-    switch (_sort) {
-      case _RecordsSort.newest:
-        return 'Newest';
-      case _RecordsSort.oldest:
-        return 'Oldest';
-      case _RecordsSort.clientName:
-        return 'Client name';
-      case _RecordsSort.priority:
-        return 'Priority';
-    }
-  }
-
   Widget _searchAndFilters({
     required int allCount,
     required int filteredCount,
-    required int reportedCount,
-    required int enrolledCount,
+    required int newCount,
+    required int activeCount,
+    required int followUpCount,
   }) {
     final activeFilters = _activeFilterCount();
 
@@ -844,11 +846,56 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Case Work Queue',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      newCount > 0
+                          ? '$newCount case${newCount == 1 ? '' : 's'} require assessment'
+                          : 'No new case is waiting for assessment',
+                      style: const TextStyle(
+                        color: Colors.blueGrey,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Refresh',
+                onPressed: _refresh,
+                icon: Icon(Icons.refresh_rounded, color: widget.color),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _miniStat(label: 'New', value: newCount, color: Colors.redAccent),
+              const SizedBox(width: 8),
+              _miniStat(label: 'Follow Up', value: followUpCount, color: Colors.deepOrange),
+              const SizedBox(width: 8),
+              _miniStat(label: 'Active', value: activeCount, color: Colors.green),
+            ],
+          ),
+          const SizedBox(height: 12),
           TextField(
             controller: _searchController,
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
-              hintText: 'Search reports by client, phone, district or concern',
+              hintText: 'Search by name, phone, district or concern',
               prefixIcon: Icon(Icons.search, color: widget.color),
               suffixIcon: _searchController.text.trim().isEmpty
                   ? null
@@ -871,84 +918,6 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(13),
-            decoration: BoxDecoration(
-              color: widget.color.withOpacity(0.07),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: widget.color.withOpacity(0.12)),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundColor: widget.color.withOpacity(0.12),
-                      child: Icon(
-                        Icons.support_agent_outlined,
-                        color: widget.color,
-                      ),
-                    ),
-                    const SizedBox(width: 11),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Records Decision Support',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 14.5,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _headerMessage(
-                              reportedCount: reportedCount,
-                              enrolledCount: enrolledCount,
-                            ),
-                            style: const TextStyle(
-                              color: Colors.blueGrey,
-                              fontSize: 12.4,
-                              height: 1.28,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 11),
-                Row(
-                  children: [
-                    _summaryTile(
-                      label: 'Reports',
-                      value: allCount.toString(),
-                      icon: Icons.assignment_outlined,
-                      color: widget.color,
-                    ),
-                    const SizedBox(width: 8),
-                    _summaryTile(
-                      label: 'Need Intake',
-                      value: reportedCount.toString(),
-                      icon: Icons.priority_high_outlined,
-                      color: Colors.deepOrange,
-                    ),
-                    const SizedBox(width: 8),
-                    _summaryTile(
-                      label: 'Enrolled',
-                      value: enrolledCount.toString(),
-                      icon: Icons.verified_user_outlined,
-                      color: Colors.green,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
           const SizedBox(height: 10),
           InkWell(
             borderRadius: BorderRadius.circular(14),
@@ -962,13 +931,13 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.filter_alt_outlined, color: widget.color, size: 19),
+                  Icon(Icons.tune_rounded, color: widget.color, size: 19),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       activeFilters == 0
                           ? 'Filters hidden • Sorted by ${_sortLabel()}'
-                          : '$activeFilters active filter${activeFilters == 1 ? '' : 's'} • ${_sortLabel()}',
+                          : '$activeFilters active • Sorted by ${_sortLabel()}',
                       style: const TextStyle(
                         color: Colors.blueGrey,
                         fontSize: 12.8,
@@ -1008,14 +977,8 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
                     runSpacing: 8,
                     children: [
                       _filterChip('All $allCount', _RecordsFilter.all),
-                      _filterChip(
-                        'Need Intake $reportedCount',
-                        _RecordsFilter.reportedOnly,
-                      ),
-                      _filterChip(
-                        'Enrolled $enrolledCount',
-                        _RecordsFilter.enrolledOnly,
-                      ),
+                      _filterChip('New $newCount', _RecordsFilter.newCases),
+                      _filterChip('Active $activeCount', _RecordsFilter.activeCases),
                     ],
                   ),
                   const SizedBox(height: 10),
@@ -1024,9 +987,7 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: Colors.blueGrey.withOpacity(0.14),
-                      ),
+                      border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<_RecordsSort>(
@@ -1068,7 +1029,7 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Showing $filteredCount of $allCount report${allCount == 1 ? '' : 's'}',
+            'Showing $filteredCount of $allCount case${allCount == 1 ? '' : 's'}',
             style: const TextStyle(
               color: Colors.blueGrey,
               fontWeight: FontWeight.w600,
@@ -1080,7 +1041,7 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
     );
   }
 
-  Widget _emptyState(String message) {
+  Widget _emptyState(String title, String message) {
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(24),
@@ -1089,13 +1050,13 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
         CircleAvatar(
           radius: 38,
           backgroundColor: widget.color.withOpacity(0.10),
-          child: Icon(Icons.folder_open, color: widget.color, size: 36),
+          child: Icon(Icons.task_alt_rounded, color: widget.color, size: 36),
         ),
         const SizedBox(height: 16),
-        const Center(
+        Center(
           child: Text(
-            'No reports found',
-            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
           ),
         ),
         const SizedBox(height: 8),
@@ -1110,214 +1071,132 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
     );
   }
 
-  Widget _decisionBox(_OfflineReportedCase item) {
-    final color = item.isEnrolled ? Colors.green : Colors.deepOrange;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(11),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.075),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: color.withOpacity(0.14)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.tips_and_updates_outlined, color: color, size: 19),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.nextActionTitle,
-                  style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13.2,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  item.nextActionSubtitle,
-                  style: const TextStyle(
-                    color: Colors.blueGrey,
-                    fontWeight: FontWeight.w600,
-                    height: 1.28,
-                    fontSize: 12.2,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _recordCard(_OfflineReportedCase item) {
-    final statusColor = item.isEnrolled ? Colors.green : widget.color;
-    final statusText = item.isEnrolled ? 'Enrolled' : 'Need Intake';
+    final statusColor = _statusColor(item);
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.blueGrey.withOpacity(0.08)),
+        border: Border.all(color: statusColor.withOpacity(0.12)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(item.isEnrolled ? 0.03 : 0.05),
+            color: Colors.black.withOpacity(item.isEnrolled ? 0.03 : 0.055),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
         ],
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(22),
-        onTap: () => _showRecordDetails(item),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: statusColor.withOpacity(0.12),
-                    child: Icon(
-                      item.isEnrolled
-                          ? Icons.verified_user_outlined
-                          : Icons.report_outlined,
-                      color: statusColor,
-                    ),
-                  ),
-                  const SizedBox(width: 11),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.displayName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 15.8,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 23,
+                  backgroundColor: statusColor.withOpacity(0.12),
+                  child: Icon(_statusIcon(item), color: statusColor),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              item.displayName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 16,
+                              ),
+                            ),
                           ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 5),
-                        Wrap(
-                          spacing: 7,
-                          runSpacing: 7,
-                          children: [
-                            _chip(statusText, color: statusColor, strong: true),
-                            if (item.eventDate.isNotEmpty)
-                              _chip(item.eventDate, icon: Icons.event_outlined),
-                            if (item.clientsCount > 1)
-                              _chip(
-                                '${item.clientsCount} clients',
-                                icon: Icons.groups_outlined,
-                              ),
-                            if (item.peopleInvolvedCount > 0)
-                              _chip(
-                                '${item.peopleInvolvedCount} involved',
-                                icon: Icons.people_outline,
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  PopupMenuButton<String>(
-                    tooltip: 'Actions',
-                    onSelected: (value) async {
-                      if (value == 'view') {
-                        _showRecordDetails(item);
-                      }
-                      if (value == 'edit') {
-                        await _openEnrollForm(item);
-                      }
-                    },
-                    itemBuilder: (_) => [
-                      const PopupMenuItem(
-                        value: 'view',
-                        child: Row(
-                          children: [
-                            Icon(Icons.visibility_outlined),
-                            SizedBox(width: 10),
-                            Text('View details'),
-                          ],
+                          const SizedBox(width: 8),
+                          _statusPill(item),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _primaryConcern(item),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.black87,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13.2,
                         ),
                       ),
-                      PopupMenuItem(
-                        value: 'edit',
-                        enabled: !item.isEnrolled,
-                        child: Row(
-                          children: [
-                            Icon(
-                              item.isEnrolled
-                                  ? Icons.lock_outline
-                                  : Icons.edit_outlined,
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              item.isEnrolled
-                                  ? 'Already enrolled'
-                                  : 'Edit / open intake',
-                            ),
-                          ],
+                      const SizedBox(height: 4),
+                      Text(
+                        _listMeta(item),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.blueGrey,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12.3,
                         ),
                       ),
                     ],
                   ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              if (item.concernReason.isNotEmpty)
-                Text(
-                  item.concernReason,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    color: Colors.black87,
+                ),
+              ],
+            ),
+            const SizedBox(height: 13),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showRecordDetails(item),
+                    icon: const Icon(Icons.visibility_outlined, size: 18),
+                    label: const Text('View'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: widget.color,
+                      side: BorderSide(color: widget.color.withOpacity(0.28)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                    ),
                   ),
                 ),
-              if (item.incidentDescription.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text(
-                  item.incidentDescription,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.blueGrey,
-                    height: 1.35,
-                    fontWeight: FontWeight.w500,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: item.isEnrolled
+                        ? null
+                        : () async => _openEnrollForm(item),
+                    icon: Icon(
+                      item.isEnrolled
+                          ? Icons.lock_outline
+                          : Icons.assignment_turned_in_outlined,
+                      size: 18,
+                    ),
+                    label: Text(item.isEnrolled ? 'Active Case' : 'Open Intake'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: widget.color,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.blueGrey.withOpacity(0.16),
+                      disabledForegroundColor: Colors.blueGrey,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                    ),
                   ),
                 ),
               ],
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  if (item.clientPhone.isNotEmpty)
-                    _chip(item.clientPhone, icon: Icons.phone_outlined),
-                  if (item.clientDistrict.isNotEmpty)
-                    _chip(item.clientDistrict, icon: Icons.place_outlined),
-                  if (item.clientSex.isNotEmpty)
-                    _chip(item.clientSex, icon: Icons.person_outline),
-                  if (item.incidentLocation.isNotEmpty)
-                    _chip(item.incidentLocation,
-                        icon: Icons.location_on_outlined),
-                ],
-              ),
-              const SizedBox(height: 11),
-              _decisionBox(item),
-              const SizedBox(height: 2),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -1332,7 +1211,7 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
         SizedBox(height: 12),
         Center(
           child: Text(
-            'Loading reported cases...',
+            'Loading case work queue...',
             style: TextStyle(color: Colors.blueGrey),
           ),
         ),
@@ -1377,13 +1256,20 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
           }
 
           final all = snapshot.data ?? <_OfflineReportedCase>[];
-          final reportedCount = all.where((item) => !item.isEnrolled).length;
-          final enrolledCount = all.where((item) => item.isEnrolled).length;
+          final newCount = all.where((item) => !item.isEnrolled).length;
+          final activeCount = all.where((item) => item.isEnrolled).length;
+          final followUpCount = all
+              .where(
+                (item) => item.isEnrolled &&
+                (!item.hasPhone || !item.hasIncidentNarrative),
+          )
+              .length;
           final filtered = _applyFilter(all);
 
           if (all.isEmpty) {
             return _emptyState(
-              'Submit a report first, then come back here to view reported cases.',
+              'No Cases Requiring Attention',
+              'Submit a case report first, then return here to continue intake and assessment.',
             );
           }
 
@@ -1393,11 +1279,15 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
               _searchAndFilters(
                 allCount: all.length,
                 filteredCount: filtered.length,
-                reportedCount: reportedCount,
-                enrolledCount: enrolledCount,
+                newCount: newCount,
+                activeCount: activeCount,
+                followUpCount: followUpCount,
               ),
               if (filtered.isEmpty)
-                _emptyState('No reports match the selected filter or search.')
+                _emptyState(
+                  'No Matching Cases',
+                  'No case matches the selected search or filter.',
+                )
               else ...[
                 const SizedBox(height: 14),
                 ...filtered.map(_recordCard),
