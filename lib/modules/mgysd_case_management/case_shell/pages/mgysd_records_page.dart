@@ -836,205 +836,201 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
     final activeFilters = _activeFilterCount();
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFFF2F5F8),
         border: Border(
-          bottom: BorderSide(color: Colors.blueGrey.withOpacity(0.08)),
+          bottom: BorderSide(color: Colors.blueGrey.withOpacity(0.10)),
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Case Work Queue',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      newCount > 0
-                          ? '$newCount case${newCount == 1 ? '' : 's'} require assessment'
-                          : 'No new case is waiting for assessment',
-                      style: const TextStyle(
-                        color: Colors.blueGrey,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                tooltip: 'Refresh',
-                onPressed: _refresh,
-                icon: Icon(Icons.refresh_rounded, color: widget.color),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _miniStat(label: 'New', value: newCount, color: Colors.redAccent),
-              const SizedBox(width: 8),
-              _miniStat(label: 'Follow Up', value: followUpCount, color: Colors.deepOrange),
-              const SizedBox(width: 8),
-              _miniStat(label: 'Active', value: activeCount, color: Colors.green),
-            ],
-          ),
-          const SizedBox(height: 12),
           TextField(
             controller: _searchController,
             onChanged: (_) => setState(() {}),
+            style: const TextStyle(
+              color: Color(0xFF17202A),
+              fontWeight: FontWeight.w700,
+            ),
             decoration: InputDecoration(
-              hintText: 'Search by name, phone, district or concern',
-              prefixIcon: Icon(Icons.search, color: widget.color),
+              hintText: 'Search reported cases',
+              hintStyle: const TextStyle(
+                color: Color(0xFF607D8B),
+                fontWeight: FontWeight.w600,
+              ),
+              prefixIcon: Icon(Icons.search_rounded, color: widget.color),
               suffixIcon: _searchController.text.trim().isEmpty
-                  ? null
+                  ? IconButton(
+                tooltip: 'Refresh',
+                onPressed: _refresh,
+                icon: Icon(Icons.refresh_rounded, color: widget.color),
+              )
                   : IconButton(
                 onPressed: () {
                   _searchController.clear();
                   setState(() {});
                 },
-                icon: const Icon(Icons.close),
+                icon: const Icon(Icons.close_rounded),
               ),
               filled: true,
-              fillColor: const Color(0xFFF7F9FC),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
+              fillColor: Colors.white,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 14,
                 vertical: 12,
               ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: BorderSide(color: Colors.blueGrey.withOpacity(0.16)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: BorderSide(color: Colors.blueGrey.withOpacity(0.16)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: BorderSide(color: widget.color, width: 1.5),
+              ),
             ),
           ),
-          const SizedBox(height: 10),
-          InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: () => setState(() => _showFilters = !_showFilters),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF7F9FC),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.blueGrey.withOpacity(0.12)),
+          const SizedBox(height: 9),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '$filteredCount of $allCount case${allCount == 1 ? '' : 's'}',
+                  style: const TextStyle(
+                    color: Color(0xFF455A64),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12.5,
+                  ),
+                ),
               ),
-              child: Row(
-                children: [
-                  Icon(Icons.tune_rounded, color: widget.color, size: 19),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      activeFilters == 0
-                          ? 'Filters hidden • Sorted by ${_sortLabel()}'
-                          : '$activeFilters active • Sorted by ${_sortLabel()}',
-                      style: const TextStyle(
-                        color: Colors.blueGrey,
-                        fontSize: 12.8,
-                        fontWeight: FontWeight.w800,
+              InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () => setState(() => _showFilters = !_showFilters),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: Colors.blueGrey.withOpacity(0.16)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.tune_rounded, color: widget.color, size: 17),
+                      const SizedBox(width: 6),
+                      Text(
+                        activeFilters == 0 ? 'Filters' : 'Filters ($activeFilters)',
+                        style: TextStyle(
+                          color: activeFilters == 0 ? const Color(0xFF455A64) : widget.color,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12.5,
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        _showFilters
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_down_rounded,
+                        color: Colors.blueGrey,
+                        size: 18,
+                      ),
+                    ],
                   ),
-                  if (activeFilters > 0)
-                    TextButton(
-                      onPressed: () {
-                        _searchController.clear();
-                        _filter = _RecordsFilter.all;
-                        _sort = _RecordsSort.priority;
-                        setState(() {});
-                      },
-                      child: const Text('Clear'),
-                    ),
-                  Icon(
-                    _showFilters
-                        ? Icons.keyboard_arrow_up
-                        : Icons.keyboard_arrow_down,
-                    color: Colors.blueGrey,
-                  ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
           AnimatedCrossFade(
             firstChild: const SizedBox.shrink(),
             secondChild: Padding(
               padding: const EdgeInsets.only(top: 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _filterChip('All $allCount', _RecordsFilter.all),
-                      _filterChip('New $newCount', _RecordsFilter.newCases),
-                      _filterChip('Active $activeCount', _RecordsFilter.activeCases),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: Colors.blueGrey.withOpacity(0.12)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _filterChip('All $allCount', _RecordsFilter.all),
+                        _filterChip('New $newCount', _RecordsFilter.newCases),
+                        _filterChip('Active $activeCount', _RecordsFilter.activeCases),
+                      ],
                     ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<_RecordsSort>(
-                        value: _sort,
-                        isExpanded: true,
-                        icon: const Icon(Icons.keyboard_arrow_down),
-                        items: const [
-                          DropdownMenuItem(
-                            value: _RecordsSort.priority,
-                            child: Text('Sort by priority'),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF2F5F8),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: Colors.blueGrey.withOpacity(0.14)),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<_RecordsSort>(
+                                value: _sort,
+                                isExpanded: true,
+                                icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: _RecordsSort.priority,
+                                    child: Text('Priority first'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: _RecordsSort.newest,
+                                    child: Text('Newest first'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: _RecordsSort.oldest,
+                                    child: Text('Oldest first'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: _RecordsSort.clientName,
+                                    child: Text('Client name'),
+                                  ),
+                                ],
+                                onChanged: (value) {
+                                  if (value == null) return;
+                                  setState(() => _sort = value);
+                                },
+                              ),
+                            ),
                           ),
-                          DropdownMenuItem(
-                            value: _RecordsSort.newest,
-                            child: Text('Sort by newest'),
-                          ),
-                          DropdownMenuItem(
-                            value: _RecordsSort.oldest,
-                            child: Text('Sort by oldest'),
-                          ),
-                          DropdownMenuItem(
-                            value: _RecordsSort.clientName,
-                            child: Text('Sort by client name'),
+                        ),
+                        if (activeFilters > 0) ...[
+                          const SizedBox(width: 8),
+                          TextButton(
+                            onPressed: () {
+                              _searchController.clear();
+                              _filter = _RecordsFilter.all;
+                              _sort = _RecordsSort.priority;
+                              setState(() {});
+                            },
+                            child: const Text('Clear'),
                           ),
                         ],
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setState(() => _sort = value);
-                        },
-                      ),
+                      ],
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             crossFadeState: _showFilters
                 ? CrossFadeState.showSecond
                 : CrossFadeState.showFirst,
             duration: const Duration(milliseconds: 180),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Showing $filteredCount of $allCount case${allCount == 1 ? '' : 's'}',
-            style: const TextStyle(
-              color: Colors.blueGrey,
-              fontWeight: FontWeight.w600,
-              fontSize: 12.5,
-            ),
           ),
         ],
       ),
@@ -1150,51 +1146,62 @@ class _MgysdRecordsPageState extends State<MgysdRecordsPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 13),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  OutlinedButton.icon(
                     onPressed: () => _showRecordDetails(item),
-                    icon: const Icon(Icons.visibility_outlined, size: 18),
+                    icon: const Icon(Icons.visibility_outlined, size: 15),
                     label: const Text('View'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: widget.color,
-                      side: BorderSide(color: widget.color.withOpacity(0.28)),
+                      foregroundColor: const Color(0xFF37474F),
+                      visualDensity: VisualDensity.compact,
+                      minimumSize: const Size(0, 34),
+                      padding: const EdgeInsets.symmetric(horizontal: 11),
+                      side: BorderSide(color: Colors.blueGrey.withOpacity(0.24)),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(999),
                       ),
-                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      textStyle: const TextStyle(
+                        fontSize: 12.2,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton.icon(
+                  FilledButton.tonalIcon(
                     onPressed: item.isEnrolled
                         ? null
                         : () async => _openEnrollForm(item),
                     icon: Icon(
                       item.isEnrolled
-                          ? Icons.lock_outline
+                          ? Icons.check_circle_outline
                           : Icons.assignment_turned_in_outlined,
-                      size: 18,
+                      size: 15,
                     ),
-                    label: Text(item.isEnrolled ? 'Active Case' : 'Open Intake'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: widget.color,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: Colors.blueGrey.withOpacity(0.16),
+                    label: Text(item.isEnrolled ? 'Active' : 'Intake'),
+                    style: FilledButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      minimumSize: const Size(0, 34),
+                      padding: const EdgeInsets.symmetric(horizontal: 11),
+                      foregroundColor: widget.color,
+                      backgroundColor: widget.color.withOpacity(0.11),
+                      disabledBackgroundColor: Colors.blueGrey.withOpacity(0.12),
                       disabledForegroundColor: Colors.blueGrey,
-                      elevation: 0,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(999),
                       ),
-                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      textStyle: const TextStyle(
+                        fontSize: 12.2,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),
