@@ -3459,7 +3459,7 @@ class _MgysdSocialInvestigationPageState
         'id': _eventId,
         'event': _eventId,
         'eventDate': eventDate,
-        'program': MgysdDhis2Uids.caseManagementTrackerProgram,
+        'program': MgysdDhis2Uids.assessedHouseholdsProgram,
         'programStage': MgysdDhis2Uids.socialInvestigationStage,
         'trackedEntityInstance': _eventOwnerTei,
         'status': status,
