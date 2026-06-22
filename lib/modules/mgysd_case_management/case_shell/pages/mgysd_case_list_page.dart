@@ -773,40 +773,44 @@ class _MgysdCaseListPageState extends State<MgysdCaseListPage> {
 
   Widget _buildSearchBox() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
       child: TextField(
         controller: _searchController,
         onChanged: (_) => _reapplyFilters(),
+        style: const TextStyle(
+          color: Color(0xFF172033),
+          fontWeight: FontWeight.w700,
+        ),
         decoration: InputDecoration(
           filled: true,
           fillColor: Colors.white,
-          prefixIcon: Icon(Icons.search, color: widget.color),
+          prefixIcon: Icon(Icons.search_rounded, color: widget.color),
           suffixIcon: _searchController.text.trim().isNotEmpty
               ? IconButton(
             onPressed: () {
               _searchController.clear();
               _reapplyFilters();
             },
-            icon: const Icon(Icons.close),
+            icon: const Icon(Icons.close_rounded),
           )
               : null,
-          hintText: 'Search client, file number, village, phone or action',
-          hintStyle: const TextStyle(color: Colors.blueGrey),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 14,
+          hintText: 'Search cases',
+          hintStyle: const TextStyle(
+            color: Color(0xFF697386),
+            fontWeight: FontWeight.w600,
           ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide(color: Colors.blueGrey.withOpacity(0.18)),
+            borderRadius: BorderRadius.circular(18),
+            borderSide: const BorderSide(color: Color(0xFFD7DEE8)),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide(color: Colors.blueGrey.withOpacity(0.18)),
+            borderRadius: BorderRadius.circular(18),
+            borderSide: const BorderSide(color: Color(0xFFD7DEE8)),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide(color: widget.color, width: 1.4),
+            borderRadius: BorderRadius.circular(18),
+            borderSide: BorderSide(color: widget.color, width: 1.6),
           ),
         ),
       ),
@@ -821,25 +825,33 @@ class _MgysdCaseListPageState extends State<MgysdCaseListPage> {
   }) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(11),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.72),
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: Colors.white.withOpacity(0.9)),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFDDE5EF)),
         ),
         child: Row(
           children: [
-            Icon(icon, size: 18, color: color),
-            const SizedBox(width: 8),
+            Container(
+              height: 32,
+              width: 32,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, size: 18, color: color),
+            ),
+            const SizedBox(width: 9),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     value,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: color,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      color: Color(0xFF172033),
                       fontWeight: FontWeight.w900,
                     ),
                   ),
@@ -847,9 +859,9 @@ class _MgysdCaseListPageState extends State<MgysdCaseListPage> {
                     label,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: Colors.blueGrey,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF5F6F86),
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],
@@ -861,30 +873,6 @@ class _MgysdCaseListPageState extends State<MgysdCaseListPage> {
     );
   }
 
-  String _decisionMessage() {
-    final needsAction = _filtered.where((item) => item.needsAction).length;
-    final monitoringDue = _filtered.where((item) => item.monitoringDue).length;
-    final openGoals = _filtered.fold<int>(0, (sum, item) => sum + item.openGoals);
-
-    if (_filtered.isEmpty) {
-      return 'No households match the current filters.';
-    }
-
-    if (needsAction > 0) {
-      return '$needsAction household${needsAction == 1 ? '' : 's'} need attention. Start with the highest priority case at the top.';
-    }
-
-    if (monitoringDue > 0) {
-      return '$monitoringDue household${monitoringDue == 1 ? '' : 's'} need monitoring after services were provided.';
-    }
-
-    if (openGoals > 0) {
-      return '$openGoals outstanding goal${openGoals == 1 ? '' : 's'} remain across the current list.';
-    }
-
-    return 'The current list looks stable. Continue routine support and review.';
-  }
-
   Widget _buildHeaderSummary() {
     final assessed = _cases
         .where((item) => item.programStatus.toUpperCase() == 'ASSESSED')
@@ -893,45 +881,39 @@ class _MgysdCaseListPageState extends State<MgysdCaseListPage> {
         .where((item) => item.programStatus.toUpperCase() == 'ENROLLED')
         .length;
     final needsAction = _cases.where((item) => item.needsAction).length;
-    final monitoringDue = _cases.where((item) => item.monitoringDue).length;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: widget.color.withOpacity(0.08),
-        border: Border.all(color: widget.color.withOpacity(0.15)),
+        borderRadius: BorderRadius.circular(22),
+        color: const Color(0xFFEFF4FA),
+        border: Border.all(color: const Color(0xFFD5DFEC)),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 23,
-                backgroundColor: widget.color.withOpacity(0.14),
-                child: Icon(Icons.support_agent_outlined, color: widget.color),
-              ),
-              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Household Decision Support',
+                  children: const [
+                    Text(
+                      'Household Cases',
                       style: TextStyle(
-                        fontSize: 15.5,
+                        color: Color(0xFF172033),
+                        fontSize: 18,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
-                    const SizedBox(height: 3),
+                    SizedBox(height: 3),
                     Text(
-                      _decisionMessage(),
-                      style: const TextStyle(
-                        color: Colors.blueGrey,
+                      'Focus on cases that still need action.',
+                      style: TextStyle(
+                        color: Color(0xFF5F6F86),
                         fontSize: 12.5,
-                        height: 1.28,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
@@ -939,7 +921,7 @@ class _MgysdCaseListPageState extends State<MgysdCaseListPage> {
               ),
               IconButton(
                 onPressed: _refresh,
-                icon: Icon(Icons.refresh, color: widget.color),
+                icon: Icon(Icons.refresh_rounded, color: widget.color),
                 tooltip: 'Refresh',
               ),
             ],
@@ -948,6 +930,13 @@ class _MgysdCaseListPageState extends State<MgysdCaseListPage> {
           Row(
             children: [
               _summaryTile(
+                label: 'Need action',
+                value: needsAction.toString(),
+                icon: Icons.priority_high_rounded,
+                color: Colors.redAccent,
+              ),
+              const SizedBox(width: 8),
+              _summaryTile(
                 label: 'Enrolled',
                 value: enrolled.toString(),
                 icon: Icons.verified_user_outlined,
@@ -955,28 +944,10 @@ class _MgysdCaseListPageState extends State<MgysdCaseListPage> {
               ),
               const SizedBox(width: 8),
               _summaryTile(
-                label: 'Assessed only',
+                label: 'Assessed',
                 value: assessed.toString(),
                 icon: Icons.fact_check_outlined,
                 color: Colors.deepOrange,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              _summaryTile(
-                label: 'Need action',
-                value: needsAction.toString(),
-                icon: Icons.priority_high_outlined,
-                color: Colors.redAccent,
-              ),
-              const SizedBox(width: 8),
-              _summaryTile(
-                label: 'Monitoring due',
-                value: monitoringDue.toString(),
-                icon: Icons.monitor_heart_outlined,
-                color: Colors.amber.shade800,
               ),
             ],
           ),
@@ -1502,51 +1473,132 @@ class _MgysdCaseListPageState extends State<MgysdCaseListPage> {
     );
   }
 
-  Widget _buildDecisionPanel(_CaseListItem item) {
-    final color = _decisionColor(item);
+  String _actionLabel(_CaseListItem item) {
+    if (item.isAssessed) return 'Review risk';
+    if (item.investigationCount == 0) return 'Start investigation';
+    if (item.activeCarePlanCount == 0) return 'Create care plan';
+    if (item.openGoals > 0 && item.serviceCount == 0) return 'Provide service';
+    if (item.monitoringDue) return 'Monitor progress';
+    if (item.openGoals == 0 && item.activeCarePlanCount > 0) return 'Review for closure';
+    return 'Routine support';
+  }
 
+  IconData _actionIcon(_CaseListItem item) {
+    if (item.isAssessed) return Icons.fact_check_outlined;
+    if (item.investigationCount == 0) return Icons.search_rounded;
+    if (item.activeCarePlanCount == 0) return Icons.assignment_outlined;
+    if (item.openGoals > 0 && item.serviceCount == 0) {
+      return Icons.volunteer_activism_outlined;
+    }
+    if (item.monitoringDue) return Icons.monitor_heart_outlined;
+    return Icons.check_circle_outline_rounded;
+  }
+
+  Widget _buildActionPill(_CaseListItem item) {
+    final color = _decisionColor(item);
     return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(top: 11),
-      padding: const EdgeInsets.all(11),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.075),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: color.withOpacity(0.15)),
+        color: color.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withOpacity(0.22)),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.tips_and_updates_outlined, color: color, size: 19),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.decisionTitle,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 13.2,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  item.decisionSubtitle,
-                  style: const TextStyle(
-                    color: Colors.blueGrey,
-                    fontSize: 12.2,
-                    height: 1.26,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+          Icon(_actionIcon(item), size: 15, color: color),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              _actionLabel(item),
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: color,
+                fontSize: 12.4,
+                fontWeight: FontWeight.w900,
+              ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _miniStat(String value, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5FA),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFDCE4EF)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: const Color(0xFF516176)),
+          const SizedBox(width: 5),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Color(0xFF2E3A4D),
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  Widget _cardActionPill({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+    required Color color,
+    bool filled = false,
+  }) {
+    final ButtonStyle style = filled
+        ? ElevatedButton.styleFrom(
+      elevation: 0,
+      backgroundColor: color,
+      foregroundColor: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+      minimumSize: const Size(0, 32),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(999),
+      ),
+    )
+        : OutlinedButton.styleFrom(
+      foregroundColor: color,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+      minimumSize: const Size(0, 32),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      side: BorderSide(color: const Color(0xFFD8E1EC)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(999),
+      ),
+    );
+
+    final child = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 15),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11.7,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
+    );
+
+    return filled
+        ? ElevatedButton(onPressed: onPressed, style: style, child: child)
+        : OutlinedButton(onPressed: onPressed, style: style, child: child);
   }
 
   Widget _buildCaseCard(_CaseListItem item) {
@@ -1559,25 +1611,31 @@ class _MgysdCaseListPageState extends State<MgysdCaseListPage> {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
       child: Material(
         color: Colors.white,
-        elevation: item.needsAction ? 2.2 : 1.1,
+        elevation: 1.6,
+        shadowColor: Colors.black.withOpacity(0.10),
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
-          onTap: () => _openCase(item),
+          onTap: null,
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CircleAvatar(
-                      radius: 25,
-                      backgroundColor: widget.color.withOpacity(0.12),
+                    Container(
+                      height: 48,
+                      width: 48,
+                      decoration: BoxDecoration(
+                        color: widget.color.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                       child: Icon(
                         item.isEnrolled
                             ? Icons.family_restroom_outlined
-                            : Icons.home_outlined,
+                            : Icons.home_work_outlined,
                         color: widget.color,
                       ),
                     ),
@@ -1588,8 +1646,11 @@ class _MgysdCaseListPageState extends State<MgysdCaseListPage> {
                         children: [
                           Text(
                             name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              fontSize: 15.7,
+                              fontSize: 16,
+                              color: Color(0xFF172033),
                               fontWeight: FontWeight.w900,
                             ),
                           ),
@@ -1597,102 +1658,82 @@ class _MgysdCaseListPageState extends State<MgysdCaseListPage> {
                             const SizedBox(height: 3),
                             Text(
                               sub,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                fontSize: 12.2,
-                                color: Colors.blueGrey,
-                                fontWeight: FontWeight.w600,
+                                fontSize: 12.4,
+                                color: Color(0xFF5F6F86),
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ],
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 5),
                           Text(
-                            'File / Household: ${record.caseNo}',
+                            record.caseNo,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              fontSize: 12.5,
-                              color: Colors.blueGrey,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 12.3,
+                              color: Color(0xFF6B788C),
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(width: 8),
-                    const Icon(Icons.chevron_right, color: Colors.blueGrey),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        _statusChip(record.status),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          alignment: WrapAlignment.end,
+                          children: [
+                            _cardActionPill(
+                              icon: Icons.visibility_outlined,
+                              label: 'View',
+                              color: const Color(0xFF5F6F86),
+                              onPressed: () => _openCase(item),
+                            ),
+                            _cardActionPill(
+                              icon: Icons.folder_open_outlined,
+                              label: 'Open',
+                              color: widget.color,
+                              filled: true,
+                              onPressed: () => _openCase(item),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _statusChip(record.status),
-                      if (record.district.trim().isNotEmpty)
-                        _chip(
-                          record.district,
-                          icon: Icons.place_outlined,
-                        ),
-                      if ((record.phone ?? '').trim().isNotEmpty)
-                        _chip(
-                          record.phone!.trim(),
-                          icon: Icons.phone_outlined,
-                        ),
-                      if ((record.enrollmentDate ?? '').trim().isNotEmpty)
-                        _chip(
-                          record.enrollmentDate!.trim(),
-                          icon: Icons.event_outlined,
-                        ),
-                    ],
-                  ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    _buildActionPill(item),
+                    if (record.district.trim().isNotEmpty)
+                      _miniStat(record.district, Icons.place_outlined),
+                    if ((record.phone ?? '').trim().isNotEmpty)
+                      _miniStat(record.phone!.trim(), Icons.phone_outlined),
+                  ],
                 ),
-                const SizedBox(height: 10),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF7F9FC),
-                    borderRadius: BorderRadius.circular(15),
-                    border: Border.all(color: Colors.blueGrey.withOpacity(0.08)),
-                  ),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _chip('Members: ${item.memberCount}',
-                          icon: Icons.groups_2_outlined),
-                      _chip('Investigations: ${item.investigationCount}',
-                          icon: Icons.fact_check_outlined),
-                      _chip('Plans: ${item.carePlanCount}',
-                          icon: Icons.assignment_outlined),
-                      _chip(
-                        'Open goals: ${item.openGoals}',
-                        icon: Icons.track_changes_outlined,
-                        color: item.openGoals > 0
-                            ? Colors.deepPurple
-                            : Colors.blueGrey,
-                        strong: item.openGoals > 0,
-                      ),
-                      _chip(
-                        'Services: ${item.serviceCount}',
-                        icon: Icons.volunteer_activism_outlined,
-                        color: item.serviceCount > 0
-                            ? Colors.teal
-                            : Colors.blueGrey,
-                        strong: item.serviceCount > 0,
-                      ),
-                      _chip(
-                        'Monitoring: ${item.monitoringCount}',
-                        icon: Icons.monitor_heart_outlined,
-                        color: item.monitoringCount > 0
-                            ? Colors.green
-                            : Colors.blueGrey,
-                        strong: item.monitoringCount > 0,
-                      ),
-                    ],
-                  ),
+                const SizedBox(height: 11),
+                Row(
+                  children: [
+                    Expanded(child: _miniStat('${item.memberCount} members', Icons.groups_2_outlined)),
+                    const SizedBox(width: 7),
+                    Expanded(child: _miniStat('${item.openGoals} goals', Icons.track_changes_outlined)),
+                    const SizedBox(width: 7),
+                    Expanded(child: _miniStat('${item.monitoringCount} visits', Icons.monitor_heart_outlined)),
+                  ],
                 ),
-                _buildDecisionPanel(item),
               ],
             ),
           ),
@@ -1704,7 +1745,7 @@ class _MgysdCaseListPageState extends State<MgysdCaseListPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9FC),
+      backgroundColor: const Color(0xFFEFF4FA),
       floatingActionButton: FloatingActionButton(
         backgroundColor: widget.color,
         onPressed: _onAddCase,
