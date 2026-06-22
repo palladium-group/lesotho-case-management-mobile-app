@@ -772,47 +772,73 @@ class _MgysdCaseListPageState extends State<MgysdCaseListPage> {
   }
 
   Widget _buildSearchBox() {
+    final total = _cases.length;
+    final shown = _filtered.length;
+    final countText = _loading
+        ? 'Loading cases...'
+        : shown == total
+        ? '$total case${total == 1 ? '' : 's'} available'
+        : 'Showing $shown of $total case${total == 1 ? '' : 's'}';
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-      child: TextField(
-        controller: _searchController,
-        onChanged: (_) => _reapplyFilters(),
-        style: const TextStyle(
-          color: Color(0xFF172033),
-          fontWeight: FontWeight.w700,
-        ),
-        decoration: InputDecoration(
-          filled: true,
-          fillColor: Colors.white,
-          prefixIcon: Icon(Icons.search_rounded, color: widget.color),
-          suffixIcon: _searchController.text.trim().isNotEmpty
-              ? IconButton(
-            onPressed: () {
-              _searchController.clear();
-              _reapplyFilters();
-            },
-            icon: const Icon(Icons.close_rounded),
-          )
-              : null,
-          hintText: 'Search cases',
-          hintStyle: const TextStyle(
-            color: Color(0xFF697386),
-            fontWeight: FontWeight.w600,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _searchController,
+            onChanged: (_) => _reapplyFilters(),
+            style: const TextStyle(
+              color: Color(0xFF172033),
+              fontWeight: FontWeight.w700,
+            ),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: Colors.white,
+              prefixIcon: Icon(Icons.search_rounded, color: widget.color),
+              suffixIcon: _searchController.text.trim().isNotEmpty
+                  ? IconButton(
+                onPressed: () {
+                  _searchController.clear();
+                  _reapplyFilters();
+                },
+                icon: const Icon(Icons.close_rounded),
+              )
+                  : null,
+              hintText: 'Search cases',
+              hintStyle: const TextStyle(
+                color: Color(0xFF697386),
+                fontWeight: FontWeight.w600,
+              ),
+              contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: const BorderSide(color: Color(0xFFD7DEE8)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: const BorderSide(color: Color(0xFFD7DEE8)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: BorderSide(color: widget.color, width: 1.6),
+              ),
+            ),
           ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(18),
-            borderSide: const BorderSide(color: Color(0xFFD7DEE8)),
+          const SizedBox(height: 7),
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Text(
+              countText,
+              style: const TextStyle(
+                color: Color(0xFF5B6678),
+                fontSize: 12.4,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(18),
-            borderSide: const BorderSide(color: Color(0xFFD7DEE8)),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(18),
-            borderSide: BorderSide(color: widget.color, width: 1.6),
-          ),
-        ),
+        ],
       ),
     );
   }
@@ -869,89 +895,6 @@ class _MgysdCaseListPageState extends State<MgysdCaseListPage> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildHeaderSummary() {
-    final assessed = _cases
-        .where((item) => item.programStatus.toUpperCase() == 'ASSESSED')
-        .length;
-    final enrolled = _cases
-        .where((item) => item.programStatus.toUpperCase() == 'ENROLLED')
-        .length;
-    final needsAction = _cases.where((item) => item.needsAction).length;
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        color: const Color(0xFFEFF4FA),
-        border: Border.all(color: const Color(0xFFD5DFEC)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text(
-                      'Household Cases',
-                      style: TextStyle(
-                        color: Color(0xFF172033),
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    SizedBox(height: 3),
-                    Text(
-                      'Focus on cases that still need action.',
-                      style: TextStyle(
-                        color: Color(0xFF5F6F86),
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                onPressed: _refresh,
-                icon: Icon(Icons.refresh_rounded, color: widget.color),
-                tooltip: 'Refresh',
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _summaryTile(
-                label: 'Need action',
-                value: needsAction.toString(),
-                icon: Icons.priority_high_rounded,
-                color: Colors.redAccent,
-              ),
-              const SizedBox(width: 8),
-              _summaryTile(
-                label: 'Enrolled',
-                value: enrolled.toString(),
-                icon: Icons.verified_user_outlined,
-                color: Colors.green,
-              ),
-              const SizedBox(width: 8),
-              _summaryTile(
-                label: 'Assessed',
-                value: assessed.toString(),
-                icon: Icons.fact_check_outlined,
-                color: Colors.deepOrange,
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
@@ -1756,7 +1699,6 @@ class _MgysdCaseListPageState extends State<MgysdCaseListPage> {
         child: Column(
           children: [
             _buildSearchBox(),
-            _buildHeaderSummary(),
             _buildFilters(),
             Expanded(
               child: _loading
