@@ -217,6 +217,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
 
   final Map<String, TextEditingController> _goalControllers = {};
   final Map<String, String> _selectedSubjectIds = {};
+  final Set<String> _expandedGoalCategories = <String>{};
 
   final TextEditingController _agreedPlanActionController =
   TextEditingController();
@@ -224,6 +225,62 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
   final List<_PlanParticipantEntry> _planParticipants = [];
   final List<_DisagreementEntry> _disagreementEntries = [
     _DisagreementEntry(),
+  ];
+
+  final TextEditingController _otherMgysdServiceController =
+  TextEditingController();
+
+  String _counsellingProvided = '';
+  String _placementIntoCareFacilities = '';
+  String _ivrcVocationalTraining = '';
+
+  final Map<String, List<String>> _selectedMgysdServices = {
+    'empowermentEconomic': <String>[],
+    'socialAssistance': <String>[],
+    'informationDissemination': <String>[],
+    'advocacy': <String>[],
+    'communityDevelopment': <String>[],
+    'kaLapengCentre': <String>[],
+  };
+
+  static const List<String> _yesNoOptions = ['Yes', 'No'];
+
+  static const List<String> _empowermentEconomicOptions = [
+    'Skills',
+    'Political',
+    'Social',
+    'Community',
+  ];
+
+  static const List<String> _socialAssistanceOptions = [
+    'Public Assistance (Cash/Kind)',
+    'Disability Grants',
+    'Old Age Pension',
+  ];
+
+  static const List<String> _informationDisseminationOptions = [
+    'Dementia Care and Support',
+    'Retirement program',
+    'Community Based Rehabilitation',
+    'Response and prevention of GBV',
+  ];
+
+  static const List<String> _advocacyOptions = [
+    'Disability Mainstreaming',
+    'GBV',
+  ];
+
+  static const List<String> _communityDevelopmentOptions = [
+    'Livelihoods opportunities',
+    'Income Generating Projects',
+    'Savings and Internal Lending Communities',
+    'Formation of social clubs/groups',
+  ];
+
+  static const List<String> _kaLapengCentreOptions = [
+    'Accommodation for Survivors of GBV',
+    'Counselling',
+    'Health Care',
   ];
 
   List<_GoalSubject> _subjects = [];
@@ -237,7 +294,6 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
 
   static const List<String> goalGroups = [
     goalGroupClient,
-    goalGroupSocialWorker,
   ];
 
   static const List<String> goalTerms = [
@@ -268,6 +324,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     }
 
     _agreedPlanActionController.dispose();
+    _otherMgysdServiceController.dispose();
 
     for (final entry in _planParticipants) {
       entry.dispose();
@@ -619,6 +676,18 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     if (rows.isNotEmpty) {
       _status = (rows.first['status'] ?? 'DRAFT').toString();
 
+      final rowPayloadJson = (rows.first['payloadJson'] ?? '').toString();
+
+      if (rowPayloadJson.trim().isNotEmpty) {
+        try {
+          final payload = jsonDecode(rowPayloadJson);
+
+          if (payload is Map && payload['servicesProvidedByMgysd'] != null) {
+            _loadMgysdServicesProvided(payload['servicesProvidedByMgysd']);
+          }
+        } catch (_) {}
+      }
+
       final agreedPlanAction =
       (rows.first['agreedPlanAction'] ?? '').toString().trim();
 
@@ -869,6 +938,60 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     return true;
   }
 
+  Map<String, dynamic> _mgysdServicesProvidedPayload() {
+    return {
+      'empowermentEconomic': _selectedMgysdServices['empowermentEconomic'] ?? [],
+      'counselling': _counsellingProvided,
+      'placementIntoCareFacilities': _placementIntoCareFacilities,
+      'socialAssistance': _selectedMgysdServices['socialAssistance'] ?? [],
+      'informationDissemination':
+      _selectedMgysdServices['informationDissemination'] ?? [],
+      'advocacy': _selectedMgysdServices['advocacy'] ?? [],
+      'communityDevelopment':
+      _selectedMgysdServices['communityDevelopment'] ?? [],
+      'kaLapengCentre': _selectedMgysdServices['kaLapengCentre'] ?? [],
+      'ivrcVocationalTraining': _ivrcVocationalTraining,
+      'otherSpecify': _otherMgysdServiceController.text.trim(),
+    };
+  }
+
+  void _loadMgysdServicesProvided(dynamic raw) {
+    if (raw == null) return;
+
+    try {
+      final Map<String, dynamic> data =
+      raw is Map<String, dynamic> ? raw : Map<String, dynamic>.from(raw);
+
+      List<String> listFrom(dynamic value) {
+        if (value is List) {
+          return value.map((e) => e.toString()).toList();
+        }
+        return <String>[];
+      }
+
+      _selectedMgysdServices['empowermentEconomic'] =
+          listFrom(data['empowermentEconomic']);
+      _selectedMgysdServices['socialAssistance'] =
+          listFrom(data['socialAssistance']);
+      _selectedMgysdServices['informationDissemination'] =
+          listFrom(data['informationDissemination']);
+      _selectedMgysdServices['advocacy'] = listFrom(data['advocacy']);
+      _selectedMgysdServices['communityDevelopment'] =
+          listFrom(data['communityDevelopment']);
+      _selectedMgysdServices['kaLapengCentre'] =
+          listFrom(data['kaLapengCentre']);
+
+      _counsellingProvided = (data['counselling'] ?? '').toString();
+      _placementIntoCareFacilities =
+          (data['placementIntoCareFacilities'] ?? '').toString();
+      _ivrcVocationalTraining =
+          (data['ivrcVocationalTraining'] ?? '').toString();
+
+      _otherMgysdServiceController.text =
+          (data['otherSpecify'] ?? '').toString();
+    } catch (_) {}
+  }
+
   Future<void> _saveCarePlanShell({
     required Database db,
     required String status,
@@ -922,7 +1045,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       'personsInvolvedInMakingPlan': _planParticipantsPayload(),
       'disagreementDetails': _disagreementDetailsPayload(),
       'clientGoals': _payloadForGoalGroup(goalGroupClient),
-      'socialWorkerGoals': _payloadForGoalGroup(goalGroupSocialWorker),
+      'servicesProvidedByMgysd': _mgysdServicesProvidedPayload(),
       'updatedAt': nowIso,
     };
 
@@ -1058,6 +1181,22 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
   }
 
   String _goalKey(String goalGroup, String term) => '$goalGroup::$term';
+
+  bool _isGoalCategoryExpanded(String goalGroup, String term) {
+    return _expandedGoalCategories.contains(_goalKey(goalGroup, term));
+  }
+
+  void _toggleGoalCategory(String goalGroup, String term) {
+    final key = _goalKey(goalGroup, term);
+
+    setState(() {
+      if (_expandedGoalCategories.contains(key)) {
+        _expandedGoalCategories.remove(key);
+      } else {
+        _expandedGoalCategories.add(key);
+      }
+    });
+  }
 
   TextEditingController _controllerForGoal(String goalGroup, String term) {
     final key = _goalKey(goalGroup, term);
@@ -1574,40 +1713,88 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     required String term,
   }) {
     final goals = _goalsByGroupAndTerm(goalGroup, term);
+    final isExpanded = _isGoalCategoryExpanded(goalGroup, term);
 
     return _card(
       color: const Color(0xFFFBFCFE),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _sectionTitle(
-            title: _termTitle(term),
-            subtitle: _termSubtitle(term),
-            icon: term == 'SHORT_TERM'
-                ? Icons.flash_on_outlined
-                : term == 'MEDIUM_TERM'
-                ? Icons.trending_up_outlined
-                : Icons.flag_outlined,
-          ),
-          const SizedBox(height: 12),
-          _goalInputCard(goalGroup: goalGroup, term: term),
-          if (goals.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(13),
-              decoration: BoxDecoration(
-                color: Colors.blueGrey.withOpacity(0.045),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const Text(
-                'No goals added yet.',
-                style: TextStyle(color: Colors.blueGrey),
-              ),
-            )
-          else
-            Column(
-              children: goals.map(_goalTile).toList(),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _toggleGoalCategory(goalGroup, term),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _sectionTitle(
+                    title: _termTitle(term),
+                    subtitle: _termSubtitle(term),
+                    icon: term == 'SHORT_TERM'
+                        ? Icons.flash_on_outlined
+                        : term == 'MEDIUM_TERM'
+                        ? Icons.trending_up_outlined
+                        : Icons.flag_outlined,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: widget.color.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: widget.color.withOpacity(0.12),
+                        ),
+                      ),
+                      child: Text(
+                        '${goals.length} goal${goals.length == 1 ? '' : 's'}',
+                        style: TextStyle(
+                          color: widget.color,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 11.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Icon(
+                      isExpanded
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                      color: Colors.blueGrey,
+                    ),
+                  ],
+                ),
+              ],
             ),
+          ),
+          if (isExpanded) ...[
+            const SizedBox(height: 12),
+            _goalInputCard(goalGroup: goalGroup, term: term),
+            if (goals.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(13),
+                decoration: BoxDecoration(
+                  color: Colors.blueGrey.withOpacity(0.045),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Text(
+                  'No goals added yet.',
+                  style: TextStyle(color: Colors.blueGrey),
+                ),
+              )
+            else
+              Column(
+                children: goals.map(_goalTile).toList(),
+              ),
+          ],
         ],
       ),
     );
@@ -1968,6 +2155,270 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     );
   }
 
+  String _selectedServiceLabel(List<String> selected) {
+    if (selected.isEmpty) return 'Select options';
+    if (selected.length == 1) return selected.first;
+    return '${selected.length} selected';
+  }
+
+  Widget _multiSelectServiceField({
+    required String title,
+    required String subtitle,
+    required String keyName,
+    required List<String> options,
+  }) {
+    final selected = _selectedMgysdServices[keyName] ?? <String>[];
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: _viewOnly
+            ? null
+            : () async {
+          final tempSelected = List<String>.from(selected);
+
+          await showModalBottomSheet<void>(
+            context: context,
+            isScrollControlled: true,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
+            ),
+            builder: (context) {
+              return StatefulBuilder(
+                builder: (context, modalSetState) {
+                  return SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle,
+                            style: const TextStyle(
+                              color: Colors.blueGrey,
+                              fontSize: 12.5,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          ...options.map((option) {
+                            final checked = tempSelected.contains(option);
+
+                            return CheckboxListTile(
+                              value: checked,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(option),
+                              activeColor: widget.color,
+                              onChanged: (value) {
+                                modalSetState(() {
+                                  if (value == true) {
+                                    if (!tempSelected.contains(option)) {
+                                      tempSelected.add(option);
+                                    }
+                                  } else {
+                                    tempSelected.remove(option);
+                                  }
+                                });
+                              },
+                            );
+                          }).toList(),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Cancel'),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: widget.color,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _selectedMgysdServices[keyName] =
+                                          tempSelected;
+                                    });
+                                    Navigator.pop(context);
+                                  },
+                                  child: const Text('Done'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          );
+        },
+        child: InputDecorator(
+          decoration: InputDecoration(
+            labelText: title,
+            helperText: subtitle,
+            helperMaxLines: 2,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            filled: true,
+            fillColor: const Color(0xFFF9FBFD),
+            suffixIcon: const Icon(Icons.arrow_drop_down),
+          ),
+          child: Text(
+            _selectedServiceLabel(selected),
+            style: TextStyle(
+              color: selected.isEmpty ? Colors.blueGrey : Colors.black87,
+              fontWeight: selected.isEmpty ? FontWeight.w500 : FontWeight.w700,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _yesNoServiceField({
+    required String title,
+    required String subtitle,
+    required String value,
+    required ValueChanged<String> onChanged,
+  }) {
+    final safeValue = _yesNoOptions.contains(value) ? value : null;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: DropdownButtonFormField<String>(
+        value: safeValue,
+        isExpanded: true,
+        items: _yesNoOptions.map((option) {
+          return DropdownMenuItem<String>(
+            value: option,
+            child: Text(option),
+          );
+        }).toList(),
+        onChanged: _viewOnly
+            ? null
+            : (selected) {
+          if (selected == null) return;
+          setState(() {
+            onChanged(selected);
+          });
+        },
+        decoration: InputDecoration(
+          labelText: title,
+          helperText: subtitle,
+          helperMaxLines: 2,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          filled: true,
+          fillColor: const Color(0xFFF9FBFD),
+        ),
+      ),
+    );
+  }
+
+  Widget _servicesProvidedByMgysdSection() {
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle(
+            title: 'Services provided by MGYSD',
+            subtitle:
+            'Select all MGYSD services provided or planned for this care plan.',
+            icon: Icons.volunteer_activism_outlined,
+          ),
+          const SizedBox(height: 14),
+          _multiSelectServiceField(
+            title: '1. Empowerment – Economic',
+            subtitle: 'Select one or more empowerment services.',
+            keyName: 'empowermentEconomic',
+            options: _empowermentEconomicOptions,
+          ),
+          _yesNoServiceField(
+            title: '2. Counselling',
+            subtitle: 'Select whether counselling is provided.',
+            value: _counsellingProvided,
+            onChanged: (selected) => _counsellingProvided = selected,
+          ),
+          _yesNoServiceField(
+            title: '3. Placement into the care facilities',
+            subtitle: 'Select whether placement into care facilities is provided.',
+            value: _placementIntoCareFacilities,
+            onChanged: (selected) => _placementIntoCareFacilities = selected,
+          ),
+          _multiSelectServiceField(
+            title: '4. Social Assistance',
+            subtitle: 'Select one or more social assistance services.',
+            keyName: 'socialAssistance',
+            options: _socialAssistanceOptions,
+          ),
+          _multiSelectServiceField(
+            title: '5. Information Dissemination',
+            subtitle: 'Select one or more information dissemination services.',
+            keyName: 'informationDissemination',
+            options: _informationDisseminationOptions,
+          ),
+          _multiSelectServiceField(
+            title: '6. Advocacy',
+            subtitle: 'Select one or more advocacy services.',
+            keyName: 'advocacy',
+            options: _advocacyOptions,
+          ),
+          _multiSelectServiceField(
+            title: '7. Community Development',
+            subtitle: 'Select one or more community development services.',
+            keyName: 'communityDevelopment',
+            options: _communityDevelopmentOptions,
+          ),
+          _multiSelectServiceField(
+            title: '8. Ka Lapeng Centre',
+            subtitle: 'Select one or more Ka Lapeng Centre services.',
+            keyName: 'kaLapengCentre',
+            options: _kaLapengCentreOptions,
+          ),
+          _yesNoServiceField(
+            title: '9. IVRC Vocational training',
+            subtitle: 'Select whether IVRC vocational training is provided.',
+            value: _ivrcVocationalTraining,
+            onChanged: (selected) => _ivrcVocationalTraining = selected,
+          ),
+          TextFormField(
+            controller: _otherMgysdServiceController,
+            readOnly: _viewOnly,
+            maxLines: 2,
+            decoration: InputDecoration(
+              labelText: '10. Other (specify)',
+              hintText: 'Specify any other service provided...',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              filled: true,
+              fillColor: const Color(0xFFF9FBFD),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _header() {
     final title = (widget.clientName ?? '').trim().isNotEmpty
         ? widget.clientName!.trim()
@@ -2238,7 +2689,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
                 _emptySubjects()
               else ...[
                 _goalGroupSection(goalGroupClient),
-                _goalGroupSection(goalGroupSocialWorker),
+                _servicesProvidedByMgysdSection(),
                 _agreedPlanActionSection(),
                 _personsInvolvedInPlanSection(),
                 _disagreementDetailsSection(),
