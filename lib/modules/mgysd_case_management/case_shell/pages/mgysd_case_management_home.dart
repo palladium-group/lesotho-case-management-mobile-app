@@ -3,7 +3,8 @@ import 'package:lncmis_mobile_app/app_state/intervention_card_state/intervention
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/home/assessment/mgysd_assessment_workspace.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/home/reporting/mgysd_reporting_workspace.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/home/services/mgysd_services_workspace.dart';
-import 'package:lncmis_mobile_app/modules/mgysd_case_management/home/monitoring/mgysd_monitoring_workspace.dart';
+import 'package:lncmis_mobile_app/modules/mgysd_case_management/home/referral/mgysd_referral_workspace.dart';
+import 'package:lncmis_mobile_app/modules/mgysd_case_management/home/closure/mgysd_closure_workspace.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/home/shared/mgysd_workspace_placeholder.dart';
 import 'package:provider/provider.dart';
 
@@ -35,21 +36,8 @@ class _MgysdCaseManagementHomeState extends State<MgysdCaseManagementHome> {
       MgysdReportingWorkspace(color: color),
       MgysdAssessmentWorkspace(color: color),
       MgysdServicesWorkspace(color: color),
-      MgysdMonitoringWorkspace(color: color),
-      MgysdWorkspacePlaceholder(
-        color: color,
-        icon: Icons.handshake_outlined,
-        title: 'Referral',
-        message:
-            'Open, pending and completed referrals will be managed from this workspace.',
-      ),
-      MgysdWorkspacePlaceholder(
-        color: color,
-        icon: Icons.task_alt_outlined,
-        title: 'Closure',
-        message:
-            'Cases ready for review and closure will appear here with supporting checks.',
-      ),
+      MgysdReferralWorkspace(color: color),
+      MgysdClosureWorkspace(color: color),
     ];
 
     return Scaffold(
@@ -106,11 +94,6 @@ class _MgysdCaseManagementHomeState extends State<MgysdCaseManagementHome> {
               icon: Icon(Icons.volunteer_activism_outlined),
               selectedIcon: Icon(Icons.volunteer_activism),
               label: 'Services',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.monitor_heart_outlined),
-              selectedIcon: Icon(Icons.monitor_heart),
-              label: 'Monitoring',
             ),
             NavigationDestination(
               icon: Icon(Icons.handshake_outlined),

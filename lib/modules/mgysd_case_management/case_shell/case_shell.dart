@@ -9,3 +9,9 @@ export '../home/assessment/mgysd_assessment_workspace.dart';
 export '../home/services/mgysd_services_workspace.dart';
 
 export '../home/monitoring/mgysd_monitoring_workspace.dart';
+
+export '../home/referral/mgysd_referral_workspace.dart';
+
+export '../home/closure/mgysd_closure_workspace.dart';
+
+export '../monitoring/pages/mgysd_household_monitoring_list_page.dart';
