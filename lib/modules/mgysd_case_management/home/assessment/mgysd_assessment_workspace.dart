@@ -52,6 +52,7 @@ class _AssessmentHousehold {
     required this.enrollmentDate,
     required this.enrolled,
     required this.investigationCount,
+    required this.clientCategory,
     required this.members,
   });
 
@@ -63,14 +64,17 @@ class _AssessmentHousehold {
   final String enrollmentDate;
   final bool enrolled;
   final int investigationCount;
+  final String clientCategory;
   final List<_HouseholdMember> members;
 
+  bool get isChild => clientCategory.trim().toUpperCase() == 'CHILD';
   String get status => enrolled ? 'ENROLLED' : 'ASSESSED';
   String get searchableText => [
         fileNumber,
         clientName,
         location,
         status,
+        clientCategory,
         ...members.map((e) => '${e.name} ${e.role} ${e.sex}'),
       ].join(' ').toLowerCase();
 }
@@ -354,6 +358,11 @@ class _MgysdAssessmentWorkspaceState
             enrolled: enrolled,
             investigationCount:
                 await _investigationCount(db, householdTei),
+            clientCategory: _first(primaryAttrs, [
+              MgysdDhis2Uids.attClientCategory,
+              'clientType',
+              'clientCategory',
+            ]),
             members: members,
           ),
         );
@@ -517,9 +526,25 @@ class _MgysdAssessmentWorkspaceState
     );
   }
 
+  void _showPrimeroMessage() {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('Child Cases will be managed in Primero'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
   Future<void> _openInvestigationList(
     _AssessmentHousehold item,
   ) async {
+    if (item.isChild) {
+      _showPrimeroMessage();
+      return;
+    }
+
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -546,6 +571,11 @@ class _MgysdAssessmentWorkspaceState
   }
 
   Future<void> _openInvestigation(_AssessmentHousehold item) async {
+    if (item.isChild) {
+      _showPrimeroMessage();
+      return;
+    }
+
     final mgysdCase = _asCase(item);
 
     await Navigator.push(
@@ -649,7 +679,9 @@ class _MgysdAssessmentWorkspaceState
   }
 
   Widget _householdCard(_AssessmentHousehold item) {
-    final statusColor = item.enrolled ? Colors.green : Colors.orange;
+    final statusColor = item.isChild
+        ? Colors.amber.shade800
+        : (item.enrolled ? Colors.green : Colors.orange);
 
     return Container(
       margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
@@ -693,10 +725,13 @@ class _MgysdAssessmentWorkspaceState
             mainAxisSize: MainAxisSize.min,
             children: [
               if (item.enrolled)
-                TextButton(
-                  onPressed: () => _openInvestigationList(item),
+                TextButton.icon(
+                  onPressed: item.isChild
+                      ? _showPrimeroMessage
+                      : () => _openInvestigationList(item),
                   style: TextButton.styleFrom(
-                    foregroundColor: widget.color,
+                    foregroundColor:
+                        item.isChild ? Colors.amber.shade900 : widget.color,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 6,
                       vertical: 4,
@@ -708,7 +743,11 @@ class _MgysdAssessmentWorkspaceState
                       fontSize: 11.8,
                     ),
                   ),
-                  child: const Text('Investigations'),
+                  icon: Icon(
+                    item.isChild ? Icons.lock_outline : Icons.manage_search_outlined,
+                    size: 15,
+                  ),
+                  label: const Text('Investigations'),
                 ),
               const SizedBox(width: 2),
               const Icon(
@@ -748,7 +787,9 @@ class _MgysdAssessmentWorkspaceState
                       '${item.members.length} member${item.members.length == 1 ? '' : 's'}',
                       Colors.blueGrey,
                     ),
-                    if (item.enrolled)
+                    if (item.isChild)
+                      _pill('Child • Primero', Colors.amber.shade900),
+                    if (item.enrolled && !item.isChild)
                       _pill(
                         item.investigationCount == 0
                             ? 'Investigation pending'
@@ -763,6 +804,40 @@ class _MgysdAssessmentWorkspaceState
             ),
           ),
           children: [
+            if (item.isChild) ...[
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Colors.amber.shade800.withOpacity(0.28),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.lock_outline,
+                      color: Colors.amber.shade900,
+                      size: 21,
+                    ),
+                    const SizedBox(width: 9),
+                    const Expanded(
+                      child: Text(
+                        'Child Cases will be managed in Primero',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             if (item.members.isNotEmpty) ...[
               const Align(
                 alignment: Alignment.centerLeft,
