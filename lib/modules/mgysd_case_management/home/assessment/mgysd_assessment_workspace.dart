@@ -11,9 +11,11 @@ class MgysdAssessmentWorkspace extends StatefulWidget {
   const MgysdAssessmentWorkspace({
     Key? key,
     required this.color,
+    this.refreshToken = 0,
   }) : super(key: key);
 
   final Color color;
+  final int refreshToken;
 
   @override
   State<MgysdAssessmentWorkspace> createState() =>
@@ -86,6 +88,14 @@ class _MgysdAssessmentWorkspaceState
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant MgysdAssessmentWorkspace oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshToken != widget.refreshToken) {
+      _load();
+    }
   }
 
   @override

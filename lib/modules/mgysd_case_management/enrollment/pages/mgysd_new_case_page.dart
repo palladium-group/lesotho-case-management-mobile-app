@@ -1609,8 +1609,14 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       'mgysd_report_intake_link',
       {
         'id': _newId(),
+        // Keep both the current and legacy column names so every local
+        // workspace can resolve the link immediately after intake is saved.
+        'reportEventId': reportEventId,
         'reportEvent': reportEventId,
+        'teiId': teiId,
         'tei': teiId,
+        'householdTei': teiId,
+        'enrollmentId': enrollmentId,
         'enrollment': enrollmentId,
         'createdAt': DateTime.now().toIso8601String(),
       },
@@ -2094,7 +2100,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             : 'Household assessed. Risk is No/Low, so it was not enrolled for case management.',
       );
 
-      if (mounted) Navigator.pop(context);
+      if (mounted) Navigator.pop(context, true);
     } catch (e) {
       AppUtil.showToastMessage(message: 'Failed to save case: $e');
     } finally {
