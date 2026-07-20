@@ -20,6 +20,7 @@ class _MgysdCaseManagementHomeState extends State<MgysdCaseManagementHome> {
   static const Color _fallbackBlue = Color(0xFF0D47A1);
 
   int _selectedIndex = 0;
+  int _refreshToken = 0;
 
   Color _primaryColor(BuildContext context) {
     return Provider.of<InterventionCardState>(context, listen: false)
@@ -33,8 +34,14 @@ class _MgysdCaseManagementHomeState extends State<MgysdCaseManagementHome> {
     final Color color = _primaryColor(context);
 
     final List<Widget> pages = <Widget>[
-      MgysdReportingWorkspace(color: color),
-      MgysdAssessmentWorkspace(color: color),
+      MgysdReportingWorkspace(
+        color: color,
+        refreshToken: _refreshToken,
+      ),
+      MgysdAssessmentWorkspace(
+        color: color,
+        refreshToken: _refreshToken,
+      ),
       MgysdServicesWorkspace(color: color),
       MgysdReferralWorkspace(color: color),
       MgysdClosureWorkspace(color: color),
@@ -77,7 +84,10 @@ class _MgysdCaseManagementHomeState extends State<MgysdCaseManagementHome> {
         child: NavigationBar(
           selectedIndex: _selectedIndex,
           onDestinationSelected: (int index) {
-            setState(() => _selectedIndex = index);
+            setState(() {
+              _selectedIndex = index;
+              _refreshToken++;
+            });
           },
           destinations: const <NavigationDestination>[
             NavigationDestination(

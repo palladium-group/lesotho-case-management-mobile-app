@@ -11,9 +11,11 @@ class MgysdReportingWorkspace extends StatefulWidget {
   const MgysdReportingWorkspace({
     Key? key,
     required this.color,
+    this.refreshToken = 0,
   }) : super(key: key);
 
   final Color color;
+  final int refreshToken;
 
   @override
   State<MgysdReportingWorkspace> createState() =>
@@ -100,6 +102,14 @@ class _MgysdReportingWorkspaceState
   }
 
   @override
+  void didUpdateWidget(covariant MgysdReportingWorkspace oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshToken != widget.refreshToken) {
+      _load();
+    }
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
@@ -160,10 +170,26 @@ class _MgysdReportingWorkspaceState
     }
 
     try {
+      final columns = await db.rawQuery(
+        'PRAGMA table_info(mgysd_report_intake_link)',
+      );
+      final names = columns
+          .map((row) => (row['name'] ?? '').toString())
+          .toSet();
+
+      final reportColumn = names.contains('reportEventId')
+          ? 'reportEventId'
+          : names.contains('reportEvent')
+              ? 'reportEvent'
+              : '';
+
+      if (reportColumn.isEmpty) return const {};
+
       final rows = await db.query(
         'mgysd_report_intake_link',
-        where: 'reportEventId = ?',
+        where: '$reportColumn = ?',
         whereArgs: [reportEventId],
+        orderBy: names.contains('createdAt') ? 'createdAt DESC' : null,
         limit: 1,
       );
       if (rows.isEmpty) return const {};
@@ -286,13 +312,15 @@ class _MgysdReportingWorkspaceState
                         '')
                     .toString(),
             linkedTei: (link['teiId'] ??
+                    link['tei'] ??
                     link['householdTei'] ??
                     link['trackedEntityInstance'] ??
                     '')
                 .toString(),
-            linkedEnrollment:
-                (link['enrollmentId'] ?? link['enrollment'] ?? '')
-                    .toString(),
+            linkedEnrollment: (link['enrollmentId'] ??
+                    link['enrollment'] ??
+                    '')
+                .toString(),
           ),
         );
       }
@@ -329,7 +357,7 @@ class _MgysdReportingWorkspaceState
   }
 
   Future<void> _openIntake(_ReportedCaseItem item) async {
-    await Navigator.push(
+    final saved = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (_) => MgysdNewCasePage(
@@ -344,6 +372,31 @@ class _MgysdReportingWorkspaceState
         ),
       ),
     );
+
+    if (saved == true && mounted) {
+      // Give instant visual feedback while the database is re-read.
+      final updated = _items.map((current) {
+        if (current.eventId != item.eventId) return current;
+        return _ReportedCaseItem(
+          eventId: current.eventId,
+          eventDate: current.eventDate,
+          syncStatus: current.syncStatus,
+          firstName: current.firstName,
+          lastName: current.lastName,
+          phone: current.phone,
+          sex: current.sex,
+          district: current.district,
+          concern: current.concern,
+          incidentDate: current.incidentDate,
+          incidentLocation: current.incidentLocation,
+          description: current.description,
+          linkedTei: 'saved',
+          linkedEnrollment: 'saved',
+        );
+      }).toList();
+      setState(() => _items = updated);
+      _applyFilters();
+    }
 
     await _load();
   }
@@ -677,26 +730,25 @@ class _MgysdReportingWorkspaceState
                 ),
                 child: const Text('View report'),
               ),
-              if (!item.hasIntake) ...[
-                const SizedBox(width: 18),
-                TextButton(
-                  onPressed: () => _openIntake(item),
-                  style: TextButton.styleFrom(
-                    foregroundColor: widget.color,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 6,
-                    ),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    textStyle: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 12.2,
-                    ),
+              const SizedBox(width: 18),
+              TextButton(
+                onPressed: item.hasIntake ? null : () => _openIntake(item),
+                style: TextButton.styleFrom(
+                  foregroundColor: widget.color,
+                  disabledForegroundColor: Colors.green,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 6,
                   ),
-                  child: const Text('Open intake'),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  textStyle: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12.2,
+                  ),
                 ),
-              ],
+                child: Text(item.hasIntake ? 'Intake completed' : 'Open intake'),
+              ),
             ],
           ),
         ],
