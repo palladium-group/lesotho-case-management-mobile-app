@@ -1605,19 +1605,62 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required String teiId,
     required String enrollmentId,
   }) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS mgysd_report_intake_link (
+        id TEXT PRIMARY KEY,
+        reportEvent TEXT,
+        tei TEXT,
+        enrollment TEXT,
+        createdAt TEXT
+      )
+    ''');
+
+    final tableInfo = await db.rawQuery(
+      'PRAGMA table_info(mgysd_report_intake_link)',
+    );
+    final columns = tableInfo
+        .map((row) => '${row['name'] ?? ''}')
+        .where((name) => name.isNotEmpty)
+        .toSet();
+
+    Future<void> addColumn(String name) async {
+      if (columns.contains(name)) return;
+      await db.execute(
+        'ALTER TABLE mgysd_report_intake_link ADD COLUMN $name TEXT',
+      );
+      columns.add(name);
+    }
+
+    for (final name in <String>[
+      'reportEvent',
+      'reportEventId',
+      'tei',
+      'teiId',
+      'householdTei',
+      'enrollment',
+      'enrollmentId',
+      'createdAt',
+    ]) {
+      await addColumn(name);
+    }
+
+    await db.delete(
+      'mgysd_report_intake_link',
+      where: 'reportEvent = ? OR reportEventId = ?',
+      whereArgs: <Object?>[reportEventId, reportEventId],
+    );
+
     await db.insert(
       'mgysd_report_intake_link',
-      {
+      <String, Object?>{
         'id': _newId(),
-        // Keep both the current and legacy column names so every local
-        // workspace can resolve the link immediately after intake is saved.
-        'reportEventId': reportEventId,
         'reportEvent': reportEventId,
-        'teiId': teiId,
+        'reportEventId': reportEventId,
         'tei': teiId,
+        'teiId': teiId,
         'householdTei': teiId,
-        'enrollmentId': enrollmentId,
         'enrollment': enrollmentId,
+        'enrollmentId': enrollmentId,
         'createdAt': DateTime.now().toIso8601String(),
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
@@ -1913,6 +1956,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         _selectedCommunityCouncilName.trim(),
         _villageController.text.trim(),
         'risk:$_riskLevel',
+        widget.reportedEventId == null
+            ? ''
+            : 'reportEvent:${widget.reportedEventId}',
       ].where((e) => e.isNotEmpty).join(' | ');
 
       await _saveEnrollmentOffline(
@@ -4480,17 +4526,43 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                   ),
                   const SizedBox(height: 12),
                   const SizedBox(height: 16),
-                  EntryFormSaveButton(
-                    marginLeft: 20.0,
-                    marginRight: 20.0,
-                    label: _saving ? 'Saving...' : 'Save Intake and Initial Risk Assessment',
-                    svgIconPath: 'assets/icons/save-icon.svg',
-                    svgIconHeight: 16.0,
-                    svgIconWidth: 16.0,
-                    labelColor: Colors.white,
-                    buttonColor: primary,
-                    fontSize: 15.0,
-                    onPressButton: _saving ? () {} : _saveCase,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _saving ? null : _saveCase,
+                        icon: _saving
+                            ? const SizedBox(
+                                width: 17,
+                                height: 17,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.save_outlined),
+                        label: Text(
+                          _saving
+                              ? 'Saving...'
+                              : 'Save Intake and Initial Risk Assessment',
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primary,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: primary.withOpacity(0.65),
+                          disabledForegroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 15),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
