@@ -165,40 +165,72 @@ class _MgysdReportingWorkspaceState
     Database db,
     String reportEventId,
   ) async {
-    if (!await _tableExists(db, 'mgysd_report_intake_link')) {
-      return const {};
+    if (await _tableExists(db, 'mgysd_report_intake_link')) {
+      try {
+        final columns = await db.rawQuery(
+          'PRAGMA table_info(mgysd_report_intake_link)',
+        );
+        final names = columns
+            .map((row) => (row['name'] ?? '').toString())
+            .where((name) => name.isNotEmpty)
+            .toSet();
+
+        final reportColumns = <String>[
+          if (names.contains('reportEvent')) 'reportEvent',
+          if (names.contains('reportEventId')) 'reportEventId',
+        ];
+
+        if (reportColumns.isNotEmpty) {
+          final where = reportColumns.map((name) => '$name = ?').join(' OR ');
+          final rows = await db.query(
+            'mgysd_report_intake_link',
+            where: where,
+            whereArgs: List<Object?>.filled(
+              reportColumns.length,
+              reportEventId,
+            ),
+            orderBy: names.contains('createdAt') ? 'createdAt DESC' : null,
+            limit: 1,
+          );
+
+          if (rows.isNotEmpty) {
+            return rows.first.map(
+              (key, value) => MapEntry(key, (value ?? '').toString()),
+            );
+          }
+        }
+      } catch (_) {}
     }
 
-    try {
-      final columns = await db.rawQuery(
-        'PRAGMA table_info(mgysd_report_intake_link)',
-      );
-      final names = columns
-          .map((row) => (row['name'] ?? '').toString())
-          .toSet();
+    if (await _tableExists(db, 'enrollment')) {
+      try {
+        final rows = await db.query(
+          'enrollment',
+          where: 'searchableValue LIKE ?',
+          whereArgs: <Object?>['%reportEvent:$reportEventId%'],
+          orderBy: 'enrollmentDate DESC',
+          limit: 1,
+        );
 
-      final reportColumn = names.contains('reportEventId')
-          ? 'reportEventId'
-          : names.contains('reportEvent')
-              ? 'reportEvent'
-              : '';
-
-      if (reportColumn.isEmpty) return const {};
-
-      final rows = await db.query(
-        'mgysd_report_intake_link',
-        where: '$reportColumn = ?',
-        whereArgs: [reportEventId],
-        orderBy: names.contains('createdAt') ? 'createdAt DESC' : null,
-        limit: 1,
-      );
-      if (rows.isEmpty) return const {};
-      return rows.first.map(
-        (key, value) => MapEntry(key, (value ?? '').toString()),
-      );
-    } catch (_) {
-      return const {};
+        if (rows.isNotEmpty) {
+          final row = rows.first;
+          final tei = (row['trackedEntityInstance'] ?? '').toString();
+          final enrollment =
+              (row['enrollment'] ?? row['id'] ?? '').toString();
+          if (tei.isNotEmpty || enrollment.isNotEmpty) {
+            return <String, String>{
+              'tei': tei,
+              'teiId': tei,
+              'householdTei': tei,
+              'enrollment': enrollment,
+              'enrollmentId': enrollment,
+            };
+          }
+        }
+      } catch (_) {}
     }
+
+    return const <String, String>{};
   }
 
   Future<void> _load() async {
@@ -398,7 +430,21 @@ class _MgysdReportingWorkspaceState
       _applyFilters();
     }
 
-    await _load();
+    if (saved == true) {
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      await _load();
+      if (mounted) {
+        final stillPending = _items.any(
+          (current) => current.eventId == item.eventId && !current.hasIntake,
+        );
+        if (stillPending) {
+          await Future<void>.delayed(const Duration(milliseconds: 350));
+          await _load();
+        }
+      }
+    } else {
+      await _load();
+    }
   }
 
   void _showDetails(_ReportedCaseItem item) {
