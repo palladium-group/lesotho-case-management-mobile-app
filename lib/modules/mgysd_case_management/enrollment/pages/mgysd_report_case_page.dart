@@ -20,9 +20,10 @@ class MgysdRecordCasePage extends StatefulWidget {
   }) : super(key: key);
 
   final Color color;
-  final String? reportEventId;
 
-  bool get isEditing => (reportEventId ?? '').trim().isNotEmpty;
+  // When provided, the page loads the existing report for this event id and
+  // saves back into the same event instead of creating a new one.
+  final String? reportEventId;
 
   @override
   State<MgysdRecordCasePage> createState() => _MgysdRecordCasePageState();
@@ -326,6 +327,7 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
   bool _submitting = false;
   bool _loadingLocationTree = true;
   bool _countryPickerBusy = false;
+  bool _loadingExistingReport = false;
 
   final List<OrganisationUnit> _districts = [];
   final List<OrganisationUnit> _communityCouncils = [];
@@ -466,22 +468,11 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
   ];
 
   // Updated concernFields order:
-  // 1) Date incident happened (deWhenHappened)
-  // 2) Location (deIncidentLocation)
-  // 3) Concern reason (multi-select)
-  // 4) Incident description
+  // 1) Concern reason (multi-select)
+  // 2) Incident description
+  // 3) Date incident happened (deWhenHappened)
+  // 4) Location (deIncidentLocation)
   List<MgysdFormFieldDef> get concernFields => const [
-    MgysdFormFieldDef(
-      id: deWhenHappened,
-      label: 'Date incident happened',
-      type: MgysdFieldType.date,
-    ),
-    MgysdFormFieldDef(
-      id: deIncidentLocation,
-      label: 'Location of incident',
-      type: MgysdFieldType.textShort,
-      maxLen: 120,
-    ),
     MgysdFormFieldDef(
       id: deConcernReason,
       label: 'Concern reason',
@@ -513,6 +504,17 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       label: 'Describe the incident that has made you concerned',
       type: MgysdFieldType.textLong,
       requiredField: true,
+    ),
+    MgysdFormFieldDef(
+      id: deWhenHappened,
+      label: 'Date incident happened',
+      type: MgysdFieldType.date,
+    ),
+    MgysdFormFieldDef(
+      id: deIncidentLocation,
+      label: 'Location of incident',
+      type: MgysdFieldType.textShort,
+      maxLen: 120,
     ),
   ];
 
@@ -678,164 +680,6 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     MgysdOption(code: 'Other', label: 'Other'),
   ];
 
-
-  Future<void> _loadExistingReport() async {
-    final eventId = (widget.reportEventId ?? '').trim();
-    if (eventId.isEmpty) {
-      _addClient();
-      return;
-    }
-
-    try {
-      final db = await _db();
-      final rows = await db.query(
-        'event_data_value',
-        where: 'event = ?',
-        whereArgs: [eventId],
-      );
-
-      final values = <String, String>{};
-      for (final row in rows) {
-        final key = (row['dataElement'] ?? '').toString();
-        if (key.isEmpty) continue;
-        values[key] = (row['value'] ?? '').toString();
-      }
-
-      Map<String, dynamic> payload = <String, dynamic>{};
-      final payloadText =
-          (values[MgysdDhis2Uids.deReportPayloadJson] ?? '').trim();
-      if (payloadText.isNotEmpty) {
-        try {
-          final decoded = jsonDecode(payloadText);
-          if (decoded is Map) {
-            payload = Map<String, dynamic>.from(decoded);
-          }
-        } catch (_) {}
-      }
-
-      final reporter = payload['reporter'] is Map
-          ? Map<String, dynamic>.from(payload['reporter'] as Map)
-          : <String, dynamic>{};
-      final concerns = payload['concerns'] is Map
-          ? Map<String, dynamic>.from(payload['concerns'] as Map)
-          : <String, dynamic>{};
-      final phoneCountries = payload['reporterPhoneCountries'] is Map
-          ? Map<String, dynamic>.from(
-              payload['reporterPhoneCountries'] as Map,
-            )
-          : <String, dynamic>{};
-
-      for (final field in [...aboutReporterFields, ...concernFields]) {
-        final source = _isAboutReporterField(field.id) ? reporter : concerns;
-        _values[field.id] =
-            (source[field.id] ?? values[field.id] ?? '').toString();
-      }
-
-      _phoneCountryCodes[deReporterPhone] =
-          (phoneCountries[deReporterPhone] ?? 'LS').toString();
-      _phoneCountryCodes[deReporterAltPhone] =
-          (phoneCountries[deReporterAltPhone] ?? 'LS').toString();
-
-      _reporterPhoneControllers[deReporterPhone]?.text =
-          (_values[deReporterPhone] ?? '').trim();
-      _reporterPhoneControllers[deReporterAltPhone]?.text =
-          (_values[deReporterAltPhone] ?? '').trim();
-
-      _selectedConcernReasons
-        ..clear()
-        ..addAll(
-          (_values[deConcernReason] ?? '')
-              .split(',')
-              .map((value) => value.trim())
-              .where((value) => value.isNotEmpty),
-        );
-      _concernOtherController.text =
-          (_values[deConcernReasonOther] ?? '').trim();
-
-      for (final client in _clients) {
-        client.dispose();
-      }
-      _clients.clear();
-
-      final clients = payload['clients'];
-      if (clients is List) {
-        for (final raw in clients) {
-          if (raw is! Map) continue;
-          final value = Map<String, dynamic>.from(raw);
-          _clients.add(
-            MgysdClientEntry(
-              localId: AppUtil.getUid(),
-              firstName: (value['firstName'] ?? '').toString(),
-              lastName: (value['lastName'] ?? '').toString(),
-              age: (value['age'] ?? '').toString(),
-              phone: (value['phoneRaw'] ?? value['phone'] ?? '').toString(),
-              alternatePhone: (
-                value['alternatePhoneRaw'] ??
-                value['alternatePhone'] ??
-                ''
-              ).toString(),
-              district: (value['district'] ?? '').toString(),
-              communityCouncil:
-                  (value['communityCouncil'] ?? '').toString(),
-              physicalAddress:
-                  (value['physicalAddress'] ??
-                          value['howToContactClient'] ??
-                          '')
-                      .toString(),
-              relationshipOther:
-                  (value['relationshipToClientOther'] ?? '').toString(),
-              sex: (value['sex'] ?? '').toString(),
-              contactNumberType:
-                  (value['contactNumberType'] ?? '').toString(),
-              phoneCountryCode:
-                  (value['phoneCountryCode'] ?? 'LS').toString(),
-              alternatePhoneCountryCode:
-                  (value['alternatePhoneCountryCode'] ?? 'LS').toString(),
-              relationshipToClient:
-                  (value['relationshipToClient'] ?? '').toString(),
-              districtOrgUnit:
-                  (value['districtOrgUnit'] ?? '').toString(),
-              communityCouncilOrgUnit:
-                  (value['communityCouncilOrgUnit'] ?? '').toString(),
-            ),
-          );
-        }
-      }
-      if (_clients.isEmpty) _addClient();
-
-      for (final person in _peopleInvolved) {
-        person.dispose();
-      }
-      _peopleInvolved.clear();
-
-      final people = payload['peopleInvolved'];
-      if (people is List) {
-        for (final raw in people) {
-          if (raw is! Map) continue;
-          final value = Map<String, dynamic>.from(raw);
-          _peopleInvolved.add(
-            MgysdPersonInvolvedEntry(
-              localId: AppUtil.getUid(),
-              firstName: (value['firstName'] ?? '').toString(),
-              lastName: (value['lastName'] ?? '').toString(),
-              roleOther:
-                  (value['roleOrRelationshipOther'] ?? '').toString(),
-              roleOrRelationship:
-                  (value['roleOrRelationship'] ?? '').toString(),
-            ),
-          );
-        }
-      }
-
-      if (mounted) setState(() {});
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not load report for editing: $e')),
-      );
-    }
-  }
-
   @override
   void initState() {
     super.initState();
@@ -867,8 +711,10 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     }
 
     _loadLocationTree();
-    if (widget.isEditing) {
-      _loadExistingReport();
+
+    final editingEventId = (widget.reportEventId ?? '').trim();
+    if (editingEventId.isNotEmpty) {
+      _loadExistingReport(editingEventId);
     } else {
       _addClient();
     }
@@ -999,6 +845,182 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       setState(() {
         _loadingLocationTree = false;
       });
+    }
+  }
+
+  Future<Map<String, String>> _fetchEventDataValues(
+      Database db,
+      String eventId,
+      ) async {
+    final values = <String, String>{};
+    try {
+      final rows = await db.query(
+        'event_data_value',
+        where: 'event = ?',
+        whereArgs: [eventId],
+      );
+      for (final row in rows) {
+        final key = (row['dataElement'] ?? '').toString();
+        if (key.isEmpty) continue;
+        values[key] = (row['value'] ?? '').toString();
+      }
+    } catch (_) {}
+    return values;
+  }
+
+  List<Map<String, dynamic>> _decodeJsonList(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+      }
+    } catch (_) {}
+    return const [];
+  }
+
+  MgysdClientEntry _clientFromJson(Map<String, dynamic> json) {
+    String s(String key) => (json[key] ?? '').toString();
+    final phone = s('phoneRaw').isNotEmpty ? s('phoneRaw') : s('phone');
+    final alternatePhone = s('alternatePhoneRaw').isNotEmpty
+        ? s('alternatePhoneRaw')
+        : s('alternatePhone');
+
+    return MgysdClientEntry(
+      localId: DateTime.now().microsecondsSinceEpoch.toString(),
+      firstName: s('firstName'),
+      lastName: s('lastName'),
+      age: s('age'),
+      phone: phone,
+      alternatePhone: alternatePhone,
+      district: s('district'),
+      communityCouncil: s('communityCouncil'),
+      physicalAddress: s('physicalAddress'),
+      relationshipOther: s('relationshipToClientOther'),
+      sex: s('sex'),
+      contactNumberType: s('contactNumberType'),
+      phoneCountryCode:
+      s('phoneCountryCode').isNotEmpty ? s('phoneCountryCode') : 'LS',
+      alternatePhoneCountryCode: s('alternatePhoneCountryCode').isNotEmpty
+          ? s('alternatePhoneCountryCode')
+          : 'LS',
+      relationshipToClient: s('relationshipToClient'),
+      districtOrgUnit: s('districtOrgUnit'),
+      communityCouncilOrgUnit: s('communityCouncilOrgUnit'),
+    );
+  }
+
+  MgysdPersonInvolvedEntry _personInvolvedFromJson(Map<String, dynamic> json) {
+    String s(String key) => (json[key] ?? '').toString();
+    return MgysdPersonInvolvedEntry(
+      localId: DateTime.now().microsecondsSinceEpoch.toString(),
+      firstName: s('firstName'),
+      lastName: s('lastName'),
+      roleOther: s('roleOrRelationshipOther'),
+      roleOrRelationship: s('roleOrRelationship'),
+    );
+  }
+
+  // Loads a previously saved report (event) back into the form so the user
+  // can edit and re-save it, instead of starting from a blank report.
+  Future<void> _loadExistingReport(String eventId) async {
+    setState(() => _loadingExistingReport = true);
+
+    try {
+      final db = await _db();
+      final savedValues = await _fetchEventDataValues(db, eventId);
+
+      for (final f in [...aboutReporterFields, ...concernFields]) {
+        final saved = savedValues[f.id];
+        if (saved != null) {
+          _values[f.id] = saved;
+        }
+      }
+
+      _reporterPhoneControllers[deReporterPhone]?.text =
+          (_values[deReporterPhone] ?? '').trim();
+      _reporterPhoneControllers[deReporterAltPhone]?.text =
+          (_values[deReporterAltPhone] ?? '').trim();
+
+      _selectedConcernReasons
+        ..clear()
+        ..addAll(
+          (_values[deConcernReason] ?? '')
+              .split(',')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty),
+        );
+      _concernOtherController.text =
+          (_values[deConcernReasonOther] ?? '').trim();
+
+      Map<String, dynamic> payload = {};
+      final payloadRaw =
+      (savedValues[MgysdDhis2Uids.deReportPayloadJson] ?? '').trim();
+      if (payloadRaw.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(payloadRaw);
+          if (decoded is Map<String, dynamic>) payload = decoded;
+        } catch (_) {}
+      }
+
+      final phoneCountries = payload['reporterPhoneCountries'];
+      if (phoneCountries is Map) {
+        final rpc = (phoneCountries[deReporterPhone] ?? '').toString();
+        final apc = (phoneCountries[deReporterAltPhone] ?? '').toString();
+        if (rpc.isNotEmpty) _phoneCountryCodes[deReporterPhone] = rpc;
+        if (apc.isNotEmpty) _phoneCountryCodes[deReporterAltPhone] = apc;
+      }
+
+      var clientsJson = _decodeJsonList(savedValues[deClientsJson]);
+      if (clientsJson.isEmpty && payload['clients'] is List) {
+        clientsJson = (payload['clients'] as List)
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+      }
+
+      var peopleJson = _decodeJsonList(savedValues[dePeopleInvolvedJson]);
+      if (peopleJson.isEmpty && payload['peopleInvolved'] is List) {
+        peopleJson = (payload['peopleInvolved'] as List)
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+      }
+
+      final loadedClients = clientsJson.map(_clientFromJson).toList();
+      final loadedPeople = peopleJson.map(_personInvolvedFromJson).toList();
+
+      if (!mounted) return;
+      setState(() {
+        for (final client in _clients) {
+          client.dispose();
+        }
+        _clients
+          ..clear()
+          ..addAll(loadedClients);
+
+        for (final person in _peopleInvolved) {
+          person.dispose();
+        }
+        _peopleInvolved
+          ..clear()
+          ..addAll(loadedPeople);
+      });
+
+      if (_clients.isEmpty) _addClient();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not load the saved report: $e')),
+      );
+      if (_clients.isEmpty) _addClient();
+    } finally {
+      if (mounted) {
+        setState(() => _loadingExistingReport = false);
+      }
     }
   }
 
@@ -2283,6 +2305,9 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       final age = byId(deReporterAge);
       if (dob != null && age != null) addRow(dob, age);
 
+      final sex = byId(deReporterSex);
+      if (sex != null) addField(sex);
+
       final p1 = byId(deReporterPhone);
       final p2 = byId(deReporterAltPhone);
       if (p1 != null && p2 != null) addRow(p1, p2);
@@ -3049,9 +3074,9 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       };
 
       final db = await _db();
-      final eventId = widget.isEditing
-          ? widget.reportEventId!.trim()
-          : _newEventId();
+      final editingEventId = (widget.reportEventId ?? '').trim();
+      final eventId =
+      editingEventId.isNotEmpty ? editingEventId : _newEventId();
       final eventDate = (concernsMap[deWhenHappened] ?? '').trim().isNotEmpty
           ? concernsMap[deWhenHappened]!.trim()
           : _today();
@@ -3153,10 +3178,16 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Report saved offline as event')),
+        SnackBar(
+          content: Text(
+            editingEventId.isNotEmpty
+                ? 'Report updated'
+                : 'Report saved offline as event',
+          ),
+        ),
       );
 
-      Navigator.pop(context);
+      Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3238,10 +3269,25 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       );
     }
 
+    final isEditing = (widget.reportEventId ?? '').trim().isNotEmpty;
+
+    if (_loadingExistingReport) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text(
+            'Edit Report',
+            style: TextStyle(color: Colors.white),
+          ),
+          backgroundColor: widget.color,
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.isEditing ? 'Edit Reported Case' : 'Report a Case',
+          isEditing ? 'Edit Report' : 'Report a Case',
           style: const TextStyle(color: Colors.white),
         ),
         backgroundColor: widget.color,
@@ -3332,10 +3378,8 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                       )
                           : Text(
-                        widget.isEditing
-                            ? 'Update Report Offline'
-                            : 'Save Report Offline',
-                        style: TextStyle(
+                        isEditing ? 'Update Report' : 'Save Report Offline',
+                        style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w800,
                         ),
