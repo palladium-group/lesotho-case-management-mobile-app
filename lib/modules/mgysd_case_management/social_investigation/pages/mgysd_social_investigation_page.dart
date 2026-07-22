@@ -3544,7 +3544,10 @@ class _MgysdSocialInvestigationPageState
   }
 
   Future<void> _save(String status) async {
-    if (!_formKey.currentState!.validate()) return;
+    final isDraft = status == 'DRAFT';
+
+    // Drafts can be incomplete. Full validation runs only on submission.
+    if (!isDraft && !(_formKey.currentState?.validate() ?? false)) return;
     if (_eventOwnerTei.isEmpty) {
       _showSnack('Household/client TEI not found. Please refresh the case and try again.');
       return;
@@ -3553,7 +3556,7 @@ class _MgysdSocialInvestigationPageState
       _showSnack('Case org unit not found. Please check the intake case.');
       return;
     }
-    if (_incidentPattern.isEmpty) {
+    if (!isDraft && _incidentPattern.isEmpty) {
       _showSnack('Please select whether the concern is specific or ongoing.');
       return;
     }
@@ -6053,7 +6056,7 @@ class _MgysdSocialInvestigationPageState
     return Row(children: [
       Expanded(child: OutlinedButton(onPressed: _saving ? null : () => _save('DRAFT'), style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14), side: BorderSide(color: widget.color), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13))), child: const Text('Save Draft'))),
       const SizedBox(width: 12),
-      Expanded(child: ElevatedButton(onPressed: _saving ? null : () => _save('COMPLETED'), style: ElevatedButton.styleFrom(backgroundColor: widget.color, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13))), child: Text(_saving ? 'Saving...' : 'Mark Complete'))),
+      Expanded(child: ElevatedButton(onPressed: _saving ? null : () => _save('COMPLETED'), style: ElevatedButton.styleFrom(backgroundColor: widget.color, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13))), child: Text(_saving ? 'Saving...' : 'Submit Investigation'))),
     ]);
   }
 

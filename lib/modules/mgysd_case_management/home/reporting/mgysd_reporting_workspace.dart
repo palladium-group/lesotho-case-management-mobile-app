@@ -38,6 +38,7 @@ class _ReportedCaseItem {
     required this.description,
     required this.linkedTei,
     required this.linkedEnrollment,
+    this.reportPayload = const <String, dynamic>{},
   });
 
   final String eventId;
@@ -54,6 +55,7 @@ class _ReportedCaseItem {
   final String description;
   final String linkedTei;
   final String linkedEnrollment;
+  final Map<String, dynamic> reportPayload;
 
   String get displayName {
     final name = '$firstName $lastName'.trim();
@@ -353,6 +355,7 @@ class _MgysdReportingWorkspaceState
                     link['enrollment'] ??
                     '')
                 .toString(),
+            reportPayload: payload,
           ),
         );
       }
@@ -424,6 +427,7 @@ class _MgysdReportingWorkspaceState
           description: current.description,
           linkedTei: 'saved',
           linkedEnrollment: 'saved',
+          reportPayload: current.reportPayload,
         );
       }).toList();
       setState(() => _items = updated);
@@ -445,6 +449,506 @@ class _MgysdReportingWorkspaceState
     } else {
       await _load();
     }
+  }
+
+
+
+  Future<void> _editIntake(_ReportedCaseItem item) async {
+    if (!item.hasIntake) {
+      await _openIntake(item);
+      return;
+    }
+
+    final updated = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MgysdNewCasePage(
+          color: widget.color,
+          reportedEventId: item.eventId,
+          existingHouseholdTei: item.linkedTei,
+          existingAssessedEnrollment: item.linkedEnrollment,
+        ),
+      ),
+    );
+    if (updated == true) await _load();
+  }
+
+  Future<Map<String, String>> _teiAttributes(String teiId) async {
+    final db = await _db();
+    final values = <String, String>{};
+    try {
+      final rows = await db.query(
+        'tracked_entity_instance_attribute',
+        where: 'trackedEntityInstance = ?',
+        whereArgs: [teiId],
+      );
+      for (final row in rows) {
+        final key = (row['attribute'] ?? '').toString();
+        if (key.isEmpty) continue;
+        values[key] = (row['value'] ?? '').toString();
+      }
+    } catch (_) {}
+    return values;
+  }
+
+  bool _isRiskAttribute(String key) {
+    final upper = key.toUpperCase();
+    return upper.contains('RISK') ||
+        key == MgysdDhis2Uids.attRiskLevel ||
+        key == MgysdDhis2Uids.attRiskReason ||
+        key == MgysdDhis2Uids.attRiskImmediateReferrals ||
+        key == MgysdDhis2Uids.attRiskNextSteps ||
+        key == MgysdDhis2Uids.attRiskAdditionalNotes;
+  }
+
+  String _friendlyIntakeLabel(String key) {
+    const labels = <String, String>{
+      'ATTR_HH_FILE_NUMBER': 'Household file number',
+      'district': 'District',
+      'communityCouncil': 'Community Council',
+      'village': 'Village',
+      'clientType': 'Client type',
+      'clientCategory': 'Client category',
+    };
+
+    if (labels.containsKey(key)) return labels[key]!;
+    var value = _reportLabel(key);
+    value = value
+        .replaceFirst(RegExp(r'^Att ', caseSensitive: false), '')
+        .replaceFirst(RegExp(r'^Attr ', caseSensitive: false), '')
+        .replaceFirst(RegExp(r'^Mgysd ', caseSensitive: false), '')
+        .replaceFirst(RegExp(r'^Risk Assessment ', caseSensitive: false), '');
+    return value;
+  }
+
+  String _displayStoredValue(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty) return '';
+
+    if ((value.startsWith('[') && value.endsWith(']')) ||
+        (value.startsWith('{') && value.endsWith('}'))) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is List) {
+          return decoded
+              .map((item) {
+                if (item is Map) {
+                  return item.values
+                      .map((part) => part.toString().trim())
+                      .where((part) => part.isNotEmpty)
+                      .join(' — ');
+                }
+                return item.toString().trim();
+              })
+              .where((item) => item.isNotEmpty)
+              .join(', ');
+        }
+        if (decoded is Map) {
+          return decoded.entries
+              .map((entry) =>
+                  '${_reportLabel(entry.key.toString())}: ${entry.value}')
+              .join(', ');
+        }
+      } catch (_) {}
+    }
+
+    switch (value.toUpperCase()) {
+      case 'YES':
+      case 'TRUE':
+        return 'Yes';
+      case 'NO':
+      case 'FALSE':
+        return 'No';
+      default:
+        return value;
+    }
+  }
+
+  String _intakeSectionFor(String key) {
+    final upper = key.toUpperCase();
+
+    if (_isRiskAttribute(key)) return 'Initial Risk Assessment';
+
+    if (upper.contains('HOUSEHOLD') ||
+        upper.contains('HH_') ||
+        upper.contains('DISTRICT') ||
+        upper.contains('COMMUNITY') ||
+        upper.contains('VILLAGE') ||
+        upper.contains('ADDRESS') ||
+        upper.contains('FILE_NUMBER')) {
+      return 'Household Information';
+    }
+
+    if (upper.contains('SCHOOL') ||
+        upper.contains('EDUCATION') ||
+        upper.contains('GRADE') ||
+        upper.contains('EMPLOY')) {
+      return 'Education and Employment';
+    }
+
+    if (upper.contains('DISABILITY') ||
+        upper.contains('ASSISTIVE') ||
+        upper.contains('REHABILITATION') ||
+        upper.contains('SELF_CARE')) {
+      return 'Disability and Support';
+    }
+
+    if (upper.contains('FATHER') ||
+        upper.contains('MOTHER') ||
+        upper.contains('CAREGIVER') ||
+        upper.contains('NEXT_OF_KIN') ||
+        upper.contains('RELATIONSHIP')) {
+      return 'Family and Caregivers';
+    }
+
+    return 'Client Information';
+  }
+
+  Widget _viewerHeader({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [widget.color, const Color(0xFF1976D2)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 25,
+            backgroundColor: Colors.white.withOpacity(0.16),
+            child: Icon(icon, color: Colors.white, size: 27),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 19,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w600,
+                    height: 1.25,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _viewerSection(
+    String title,
+    List<MapEntry<String, String>> entries,
+  ) {
+    if (entries.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(top: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.blueGrey.withOpacity(0.12)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+            decoration: BoxDecoration(
+              color: widget.color.withOpacity(0.055),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(18),
+              ),
+            ),
+            child: Text(
+              title,
+              style: TextStyle(
+                color: widget.color,
+                fontWeight: FontWeight.w900,
+                fontSize: 13.5,
+              ),
+            ),
+          ),
+          ...entries.map((entry) {
+            final value = _displayStoredValue(entry.value);
+            return Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                    color: Colors.blueGrey.withOpacity(0.08),
+                  ),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _friendlyIntakeLabel(entry.key),
+                    style: const TextStyle(
+                      color: Colors.blueGrey,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11.4,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _viewSavedIntake(
+    _ReportedCaseItem item, {
+    required bool riskOnly,
+  }) async {
+    final householdValues = await _teiAttributes(item.linkedTei);
+    final db = await _db();
+    var clientValues = <String, String>{};
+
+    try {
+      final rows = await db.query(
+        'mgysd_household_member',
+        columns: ['memberTei'],
+        where: 'householdTei = ? AND isPrimaryClient = ?',
+        whereArgs: [item.linkedTei, 1],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) {
+        clientValues = await _teiAttributes(
+          (rows.first['memberTei'] ?? '').toString(),
+        );
+      }
+    } catch (_) {}
+
+    final combined = <String, String>{
+      ...householdValues,
+      ...clientValues,
+    };
+
+    final filtered = combined.entries
+        .where((entry) =>
+            riskOnly ? _isRiskAttribute(entry.key) : !_isRiskAttribute(entry.key))
+        .where((entry) => _displayStoredValue(entry.value).isNotEmpty)
+        .toList()
+      ..sort(
+        (a, b) => _friendlyIntakeLabel(a.key)
+            .compareTo(_friendlyIntakeLabel(b.key)),
+      );
+
+    final grouped = <String, List<MapEntry<String, String>>>{};
+    for (final entry in filtered) {
+      final section = riskOnly
+          ? 'Assessment Details'
+          : _intakeSectionFor(entry.key);
+      grouped.putIfAbsent(section, () => []).add(entry);
+    }
+
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.88,
+        minChildSize: 0.55,
+        maxChildSize: 0.96,
+        builder: (context, controller) => Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFFF4F7FC),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 44,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.blueGrey.withOpacity(0.25),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+              Expanded(
+                child: ListView(
+                  controller: controller,
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+                  children: [
+                    _viewerHeader(
+                      icon: riskOnly
+                          ? Icons.health_and_safety_outlined
+                          : Icons.assignment_ind_outlined,
+                      title: riskOnly
+                          ? 'Initial Risk Assessment'
+                          : 'Intake',
+                      subtitle: item.displayName,
+                    ),
+                    if (filtered.isEmpty)
+                      Container(
+                        margin: const EdgeInsets.only(top: 14),
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: const Text(
+                          'No saved information was found.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.blueGrey,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      )
+                    else
+                      ...grouped.entries.map(
+                        (section) =>
+                            _viewerSection(section.key, section.value),
+                      ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _editIntake(item);
+                      },
+                      icon: const Icon(Icons.edit_outlined),
+                      label: Text(
+                        riskOnly
+                            ? 'Edit Initial Risk Assessment'
+                            : 'Edit Intake',
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: widget.color,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editReport(_ReportedCaseItem item) async {
+    final updated = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MgysdRecordCasePage(
+          color: widget.color,
+          reportEventId: item.eventId,
+        ),
+      ),
+    );
+
+    if (updated == true) {
+      await _load();
+    }
+  }
+
+  String _reportLabel(String key) {
+    final value = key
+        .replaceAll(RegExp(r'[_\-]+'), ' ')
+        .replaceAllMapped(
+          RegExp(r'([a-z0-9])([A-Z])'),
+          (match) => '${match.group(1)} ${match.group(2)}',
+        )
+        .trim();
+    if (value.isEmpty) return key;
+    return value
+        .split(RegExp(r'\s+'))
+        .map((part) => part.isEmpty
+            ? part
+            : '${part[0].toUpperCase()}${part.substring(1)}')
+        .join(' ');
+  }
+
+  String _reportValue(dynamic value) {
+    if (value == null) return '';
+    if (value is bool) return value ? 'Yes' : 'No';
+    if (value is List) {
+      return value
+          .where((item) => item is! Map && item is! List)
+          .map(_reportValue)
+          .where((item) => item.trim().isNotEmpty)
+          .join(', ');
+    }
+    if (value is Map) return '';
+    return value.toString().trim();
+  }
+
+  List<Widget> _reportPayloadWidgets(
+    dynamic value, {
+    String prefix = '',
+  }) {
+    final widgets = <Widget>[];
+
+    if (value is Map) {
+      for (final entry in value.entries) {
+        final label = _reportLabel(entry.key.toString());
+        final fullLabel = prefix.isEmpty ? label : '$prefix — $label';
+        if (entry.value is Map || entry.value is List) {
+          widgets.addAll(
+            _reportPayloadWidgets(entry.value, prefix: fullLabel),
+          );
+        } else {
+          final display = _reportValue(entry.value);
+          if (display.isNotEmpty) widgets.add(_detail(fullLabel, display));
+        }
+      }
+    } else if (value is List) {
+      for (var index = 0; index < value.length; index++) {
+        final item = value[index];
+        final label = prefix.isEmpty
+            ? 'Item ${index + 1}'
+            : '$prefix ${index + 1}';
+        if (item is Map || item is List) {
+          widgets.addAll(_reportPayloadWidgets(item, prefix: label));
+        } else {
+          final display = _reportValue(item);
+          if (display.isNotEmpty) widgets.add(_detail(label, display));
+        }
+      }
+    }
+
+    return widgets;
   }
 
   void _showDetails(_ReportedCaseItem item) {
@@ -479,50 +983,76 @@ class _MgysdReportingWorkspaceState
                       ),
                     ),
                   ),
-                  const SizedBox(height: 18),
-                  Text(
-                    item.displayName,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                    ),
+                  const SizedBox(height: 16),
+                  _viewerHeader(
+                    icon: Icons.description_outlined,
+                    title: 'Reported Case',
+                    subtitle: item.displayName,
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    item.intakeLabel,
-                    style: TextStyle(
-                      color: item.hasIntake ? Colors.green : Colors.orange,
-                      fontWeight: FontWeight.w900,
-                    ),
+                  const SizedBox(height: 14),
+                  _viewerSection(
+                    'Report Summary',
+                    <MapEntry<String, String>>[
+                      MapEntry('Reported date', item.eventDate),
+                      MapEntry('Phone', item.phone),
+                      MapEntry('Sex', item.sex),
+                      MapEntry('District', item.district),
+                      MapEntry('Concern', item.concern),
+                      MapEntry('Incident date', item.incidentDate),
+                      MapEntry('Incident location', item.incidentLocation),
+                      MapEntry('Description', item.description),
+                    ].where((entry) => entry.value.trim().isNotEmpty).toList(),
                   ),
-                  const SizedBox(height: 18),
-                  _detail('Reported date', item.eventDate),
-                  _detail('Phone', item.phone),
-                  _detail('Sex', item.sex),
-                  _detail('District', item.district),
-                  _detail('Concern', item.concern),
-                  _detail('Incident date', item.incidentDate),
-                  _detail('Incident location', item.incidentLocation),
-                  _detail('Description', item.description),
-                  _detail(
-                    'Synchronization',
-                    item.isSynced ? 'Synced' : 'Waiting to sync',
+                  if (item.reportPayload.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    ..._reportPayloadWidgets(item.reportPayload),
+                  ],
+                  _viewerSection(
+                    'Record Status',
+                    <MapEntry<String, String>>[
+                      MapEntry('Intake status', item.intakeLabel),
+                      MapEntry(
+                        'Synchronization',
+                        item.isSynced ? 'Synced' : 'Waiting to sync',
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
-                  if (!item.hasIntake)
-                    ElevatedButton.icon(
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _editReport(item);
+                    },
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Edit Report'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: widget.color,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                  if (!item.hasIntake) ...[
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
                       onPressed: () {
                         Navigator.pop(context);
                         _openIntake(item);
                       },
                       icon: const Icon(Icons.assignment_ind_outlined),
                       label: const Text('Open Intake'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: widget.color,
-                        foregroundColor: Colors.white,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: widget.color,
+                        side: BorderSide(color: widget.color),
                         padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                       ),
                     ),
+                  ],
                 ],
               ),
             );
@@ -685,7 +1215,6 @@ class _MgysdReportingWorkspaceState
 
     return Container(
       margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -698,105 +1227,207 @@ class _MgysdReportingWorkspaceState
           ),
         ],
       ),
-      child: Column(
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CircleAvatar(
-                radius: 23,
-                backgroundColor: statusColor.withOpacity(0.11),
-                child: Icon(
-                  item.hasIntake
-                      ? Icons.assignment_turned_in_outlined
-                      : Icons.campaign_outlined,
-                  color: statusColor,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: false,
+          tilePadding: const EdgeInsets.fromLTRB(14, 8, 12, 8),
+          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          leading: CircleAvatar(
+            radius: 23,
+            backgroundColor: statusColor.withOpacity(0.11),
+            child: Icon(
+              item.hasIntake
+                  ? Icons.assignment_turned_in_outlined
+                  : Icons.campaign_outlined,
+              color: statusColor,
+            ),
+          ),
+          title: Text(
+            item.displayName,
+            style: const TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 15.5,
+            ),
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 5),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  [
+                    if (item.concern.isNotEmpty) item.concern,
+                    if (item.district.isNotEmpty) item.district,
+                  ].join(' • '),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.blueGrey,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12.2,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                const SizedBox(height: 7),
+                Wrap(
+                  spacing: 7,
+                  runSpacing: 7,
                   children: [
-                    Text(
-                      item.displayName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 15.5,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      [
-                        if (item.concern.isNotEmpty) item.concern,
-                        if (item.district.isNotEmpty) item.district,
-                      ].join(' • '),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.blueGrey,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12.2,
-                      ),
-                    ),
-                    const SizedBox(height: 7),
-                    Wrap(
-                      spacing: 7,
-                      runSpacing: 7,
-                      children: [
-                        _pill(item.intakeLabel, statusColor),
-                        _pill(
-                          item.isSynced ? 'Synced' : 'Unsynced',
-                          item.isSynced ? Colors.blueGrey : Colors.deepOrange,
-                        ),
-                      ],
+                    _pill(item.intakeLabel, statusColor),
+                    _pill(
+                      item.isSynced ? 'Synced' : 'Unsynced',
+                      item.isSynced ? Colors.blueGrey : Colors.deepOrange,
                     ),
                   ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 11),
-          Row(
-            children: [
-              TextButton(
-                onPressed: () => _showDetails(item),
-                style: TextButton.styleFrom(
-                  foregroundColor: widget.color,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 6,
-                  ),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  textStyle: const TextStyle(
+          children: [
+            _caseActionSection(
+              icon: Icons.description_outlined,
+              title: 'Report',
+              status: 'Reported case details',
+              onView: () => _showDetails(item),
+              onEdit: () => _editReport(item),
+            ),
+            const SizedBox(height: 8),
+            _caseActionSection(
+              icon: Icons.assignment_ind_outlined,
+              title: 'Intake',
+              status: item.hasIntake ? 'Completed' : 'Not started',
+              onView: item.hasIntake
+                  ? () => _viewSavedIntake(item, riskOnly: false)
+                  : null,
+              onEdit: item.hasIntake
+                  ? () => _editIntake(item)
+                  : () => _openIntake(item),
+              editLabel: item.hasIntake ? 'Edit' : 'Open',
+            ),
+            const SizedBox(height: 8),
+            _caseActionSection(
+              icon: Icons.health_and_safety_outlined,
+              title: 'Initial Risk Assessment',
+              status: item.hasIntake ? 'Completed' : 'Available after Intake',
+              onView: item.hasIntake
+                  ? () => _viewSavedIntake(item, riskOnly: true)
+                  : null,
+              onEdit: item.hasIntake ? () => _editIntake(item) : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _caseActionSection({
+    required IconData icon,
+    required String title,
+    required String status,
+    required VoidCallback? onView,
+    required VoidCallback? onEdit,
+    String editLabel = 'Edit',
+  }) {
+    final enabled = onView != null || onEdit != null;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 11, 10, 11),
+      decoration: BoxDecoration(
+        color: enabled
+            ? widget.color.withOpacity(0.04)
+            : Colors.blueGrey.withOpacity(0.035),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: enabled
+              ? widget.color.withOpacity(0.12)
+              : Colors.blueGrey.withOpacity(0.09),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: enabled
+                  ? widget.color.withOpacity(0.10)
+                  : Colors.blueGrey.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Icon(
+              icon,
+              color: enabled ? widget.color : Colors.blueGrey.shade300,
+              size: 21,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
                     fontWeight: FontWeight.w900,
-                    fontSize: 12.2,
+                    fontSize: 12.7,
                   ),
                 ),
-                child: const Text('View report'),
-              ),
-              const SizedBox(width: 18),
-              TextButton(
-                onPressed: item.hasIntake ? null : () => _openIntake(item),
-                style: TextButton.styleFrom(
-                  foregroundColor: widget.color,
-                  disabledForegroundColor: Colors.green,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 6,
-                  ),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  textStyle: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 12.2,
+                const SizedBox(height: 2),
+                Text(
+                  status,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.blueGrey,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 10.2,
                   ),
                 ),
-                child: Text(item.hasIntake ? 'Intake completed' : 'Open intake'),
-              ),
-            ],
+              ],
+            ),
           ),
+          const SizedBox(width: 8),
+          if (onView != null)
+            TextButton(
+              onPressed: onView,
+              style: TextButton.styleFrom(
+                foregroundColor: widget.color,
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 7,
+                ),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              child: const Text('View'),
+            ),
+          if (onEdit != null)
+            TextButton(
+              onPressed: onEdit,
+              style: TextButton.styleFrom(
+                foregroundColor: widget.color,
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 7,
+                ),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              child: Text(editLabel),
+            ),
         ],
       ),
     );

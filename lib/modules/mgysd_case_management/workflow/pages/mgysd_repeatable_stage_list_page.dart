@@ -247,8 +247,10 @@ class _MgysdRepeatableStageListPageState
     if (raw == 'COMPLETED' || raw == 'DONE' || raw == 'COMPLETE') {
       return 'COMPLETED';
     }
-    if (raw == 'DRAFT' ||
-        raw == 'ACTIVE' ||
+    if (raw == 'DRAFT') {
+      return 'DRAFT';
+    }
+    if (raw == 'ACTIVE' ||
         raw == 'IN_PROGRESS' ||
         raw == 'IN PROGRESS' ||
         raw == 'STARTED') {
@@ -262,8 +264,9 @@ class _MgysdRepeatableStageListPageState
     switch (status.toUpperCase()) {
       case 'COMPLETED':
         return 'Completed';
-      case 'IN_PROGRESS':
       case 'DRAFT':
+        return 'Draft';
+      case 'IN_PROGRESS':
       case 'ACTIVE':
         return 'In progress';
       case 'SUPERSEDED':

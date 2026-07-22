@@ -26,6 +26,8 @@ class MgysdNewCasePage extends StatefulWidget {
     this.prefillClientPhone,
     this.prefillCaseType,
     this.prefillIncidentDate,
+    this.existingHouseholdTei,
+    this.existingAssessedEnrollment,
   }) : super(key: key);
 
   final Color color;
@@ -35,6 +37,12 @@ class MgysdNewCasePage extends StatefulWidget {
   final String? prefillClientPhone;
   final String? prefillCaseType;
   final String? prefillIncidentDate;
+  final String? existingHouseholdTei;
+  final String? existingAssessedEnrollment;
+
+  bool get isEditing =>
+      (existingHouseholdTei ?? '').trim().isNotEmpty &&
+      (existingAssessedEnrollment ?? '').trim().isNotEmpty;
 
   @override
   State<MgysdNewCasePage> createState() => _MgysdNewCasePageState();
@@ -284,6 +292,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   DateTime? _selectedDob;
   bool _saving = false;
   bool _loadingOrgUnits = false;
+  bool _loadingExistingCase = false;
 
   List<OrganisationUnit> _districtOrgUnits = [];
   List<OrganisationUnit> _communityCouncilOrgUnits = [];
@@ -936,6 +945,252 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
 
   int? get _clientAge => int.tryParse(_clientAgeController.text.trim());
 
+
+  Future<Map<String, String>> _loadAttributes(
+    Database db,
+    String teiId,
+  ) async {
+    final values = <String, String>{};
+    try {
+      final rows = await db.query(
+        'tracked_entity_instance_attribute',
+        where: 'trackedEntityInstance = ?',
+        whereArgs: [teiId],
+      );
+      for (final row in rows) {
+        final key = (row['attribute'] ?? '').toString();
+        if (key.isEmpty) continue;
+        values[key] = (row['value'] ?? '').toString();
+      }
+    } catch (_) {}
+    return values;
+  }
+
+  Future<String> _loadPrimaryClientTei(
+    Database db,
+    String householdTei,
+  ) async {
+    try {
+      final rows = await db.query(
+        'mgysd_household_member',
+        columns: ['memberTei'],
+        where: 'householdTei = ? AND isPrimaryClient = ?',
+        whereArgs: [householdTei, 1],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) {
+        return (rows.first['memberTei'] ?? '').toString().trim();
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  void _setJsonSet(Set<String> target, String raw) {
+    target.clear();
+    if (raw.trim().isEmpty) return;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        target.addAll(decoded.map((value) => value.toString()));
+        return;
+      }
+    } catch (_) {}
+    target.addAll(
+      raw.split(',').map((value) => value.trim()).where((value) => value.isNotEmpty),
+    );
+  }
+
+  Future<void> _loadExistingCase() async {
+    final householdTei = (widget.existingHouseholdTei ?? '').trim();
+    if (householdTei.isEmpty) return;
+
+    setState(() => _loadingExistingCase = true);
+    try {
+      final db = await _db();
+      final household = await _loadAttributes(db, householdTei);
+      final clientTei = await _loadPrimaryClientTei(db, householdTei);
+      final client = clientTei.isEmpty
+          ? <String, String>{}
+          : await _loadAttributes(db, clientTei);
+
+      _fileNumberController.text = household[attHouseholdFileNumber] ?? '';
+      _districtController.text = household[attHouseholdDistrict] ?? '';
+      _communityCouncilController.text =
+          household[attHouseholdCommunityCouncil] ?? '';
+      _villageController.text = household[attHouseholdVillage] ?? '';
+      _physicalAddressController.text = household[attHouseholdAddress] ?? '';
+
+      _selectedDistrictName = _districtController.text.trim();
+      _selectedCommunityCouncilName = _communityCouncilController.text.trim();
+
+      _reasonOtherController.text =
+          household[attReasonForEnrolmentOther] ?? '';
+      _setJsonSet(
+        _selectedReasonOptions,
+        household[attReasonForEnrolment] ?? '',
+      );
+
+      _clientFirstNameController.text = client[attFirstName] ?? '';
+      _clientSurnameController.text = client[attLastName] ?? '';
+      _clientDobController.text = client[attDob] ?? '';
+      _clientAgeController.text = client[attAge] ?? '';
+      _phoneController.text = client[attPhone] ?? '';
+      _alternativePhoneController.text = client[attAlternativePhone] ?? '';
+      _identityNumberController.text = client[attIdentityNumber] ?? '';
+      _clientCategory = client[attClientCategory] ?? '';
+      _isDisabled = client[attIsDisabled] ?? '';
+      _sex = client[attSex] ?? '';
+      _nationality = client[attNationality] ?? '';
+      _homeLanguage = client[attHomeLanguage] ?? '';
+      _isClientInSchool = client[attIsClientInSchool] ?? '';
+      _grade = client[attGrade] ?? '';
+      _schoolAttendanceStatus = client[attSchoolAttendanceStatus] ?? '';
+      _isAdultEmployed = client[attIsAdultEmployed] ?? '';
+      _schoolNameController.text = client[attSchoolName] ?? '';
+      _employerNameController.text = client[attEmployerName] ?? '';
+
+      _riskAssessmentDateController.text =
+          household[attRiskAssessmentDate] ??
+          client[attRiskAssessmentDate] ??
+          '';
+      _riskSocialWorkerController.text =
+          household[attRiskAssessmentSocialWorker] ??
+          client[attRiskAssessmentSocialWorker] ??
+          '';
+      _riskReportSource =
+          household[attRiskAssessmentReportSource] ??
+          client[attRiskAssessmentReportSource] ??
+          '';
+      _riskHasActionTaken =
+          household[attRiskAssessmentHasActionTaken] ??
+          client[attRiskAssessmentHasActionTaken] ??
+          '';
+      _riskNoActionReason =
+          household[attRiskAssessmentNoActionReason] ??
+          client[attRiskAssessmentNoActionReason] ??
+          '';
+      _riskFamilyBackground =
+          household[attRiskFamilyBackground] ??
+          client[attRiskFamilyBackground] ??
+          '';
+      _riskFamilyBackgroundNotesController.text =
+          household[attRiskFamilyBackgroundNotes] ??
+          client[attRiskFamilyBackgroundNotes] ??
+          '';
+      _riskCaregiverWellbeing =
+          household[attRiskCaregiverWellbeing] ??
+          client[attRiskCaregiverWellbeing] ??
+          '';
+      _riskCaregiverWellbeingNotesController.text =
+          household[attRiskCaregiverWellbeingNotes] ??
+          client[attRiskCaregiverWellbeingNotes] ??
+          '';
+      _riskExtendedFamilyRelationships =
+          household[attRiskExtendedFamilyRelationships] ??
+          client[attRiskExtendedFamilyRelationships] ??
+          '';
+      _riskExtendedFamilyNotesController.text =
+          household[attRiskExtendedFamilyNotes] ??
+          client[attRiskExtendedFamilyNotes] ??
+          '';
+      _riskClientRelationships =
+          household[attRiskClientRelationships] ??
+          client[attRiskClientRelationships] ??
+          '';
+      _riskClientRelationshipsNotesController.text =
+          household[attRiskClientRelationshipsNotes] ??
+          client[attRiskClientRelationshipsNotes] ??
+          '';
+      _riskLivingCircumstances =
+          household[attRiskLivingCircumstances] ??
+          client[attRiskLivingCircumstances] ??
+          '';
+      _riskLivingCircumstancesNotesController.text =
+          household[attRiskLivingCircumstancesNotes] ??
+          client[attRiskLivingCircumstancesNotes] ??
+          '';
+      _riskHousing =
+          household[attRiskHousing] ?? client[attRiskHousing] ?? '';
+      _riskHousingNotesController.text =
+          household[attRiskHousingNotes] ??
+          client[attRiskHousingNotes] ??
+          '';
+      _riskPhysicalHealth =
+          household[attRiskPhysicalHealth] ??
+          client[attRiskPhysicalHealth] ??
+          '';
+      _riskPhysicalHealthNotesController.text =
+          household[attRiskPhysicalHealthNotes] ??
+          client[attRiskPhysicalHealthNotes] ??
+          '';
+      _riskNutrition =
+          household[attRiskNutrition] ?? client[attRiskNutrition] ?? '';
+      _riskNutritionNotesController.text =
+          household[attRiskNutritionNotes] ??
+          client[attRiskNutritionNotes] ??
+          '';
+      _riskEmotionalHealth =
+          household[attRiskEmotionalHealth] ??
+          client[attRiskEmotionalHealth] ??
+          '';
+      _riskEmotionalHealthNotesController.text =
+          household[attRiskEmotionalHealthNotes] ??
+          client[attRiskEmotionalHealthNotes] ??
+          '';
+      _riskSupervision =
+          household[attRiskSupervision] ??
+          client[attRiskSupervision] ??
+          '';
+      _riskSupervisionNotesController.text =
+          household[attRiskSupervisionNotes] ??
+          client[attRiskSupervisionNotes] ??
+          '';
+      _riskEducation =
+          household[attRiskEducation] ?? client[attRiskEducation] ?? '';
+      _riskEducationNotesController.text =
+          household[attRiskEducationNotes] ??
+          client[attRiskEducationNotes] ??
+          '';
+      _riskLevel =
+          household[attRiskLevel] ?? client[attRiskLevel] ?? '';
+      _riskReasonController.text =
+          household[attRiskReason] ?? client[attRiskReason] ?? '';
+      _riskImmediateReferralsController.text =
+          household[attRiskImmediateReferrals] ??
+          client[attRiskImmediateReferrals] ??
+          '';
+      _riskAdditionalNotesController.text =
+          household[attRiskAdditionalNotes] ??
+          client[attRiskAdditionalNotes] ??
+          '';
+
+      _setJsonSet(
+        _riskEmergencyActionsTaken,
+        household[attRiskAssessmentEmergencyActionsTaken] ??
+            client[attRiskAssessmentEmergencyActionsTaken] ??
+            '',
+      );
+      _setJsonSet(
+        _riskServicesAccessed,
+        household[attRiskAssessmentServicesAccessed] ??
+            client[attRiskAssessmentServicesAccessed] ??
+            '',
+      );
+      _setJsonSet(
+        _riskNextSteps,
+        household[attRiskNextSteps] ?? client[attRiskNextSteps] ?? '',
+      );
+
+      if (mounted) setState(() {});
+    } catch (e) {
+      AppUtil.showToastMessage(
+        message: 'Failed to load saved Intake: $e',
+      );
+    } finally {
+      if (mounted) setState(() => _loadingExistingCase = false);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -951,6 +1206,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _addContactedPhoneNumber();
     _addServiceProvided();
     _loadLocationTree();
+    if (widget.isEditing) {
+      _loadExistingCase();
+    }
   }
 
   @override
@@ -1723,15 +1981,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     return memberTeiId;
   }
 
-  bool _shouldEnrollForCaseManagement() {
-    final value = _riskLevel.trim().toUpperCase().replaceAll(RegExp(r'[^A-Z]'), '');
-    if (value.isEmpty) return false;
-
-    // Only a clear No Risk assessment remains in the assessed-only program.
-    // Low, Medium and High Risk cases continue into the enrolled household case program.
-    return value != 'NORISK';
-  }
-
   Future<void> _saveCase() async {
     final isValid = _formKey.currentState?.validate() ?? false;
     if (!isValid) return;
@@ -1769,12 +2018,22 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     try {
       final db = await _db();
 
-      final householdTeiId = _newDhis2Uid();
-      final clientTeiId = _newDhis2Uid();
-      final assessedHouseholdEnrollmentId = _newDhis2Uid();
-      final enrolledHouseholdEnrollmentId = _newDhis2Uid();
-      final clientFamilyEnrollmentId = _newDhis2Uid();
-      final shouldEnrollForCaseManagement = _shouldEnrollForCaseManagement();
+      final householdTeiId = widget.isEditing
+          ? widget.existingHouseholdTei!.trim()
+          : _newDhis2Uid();
+      final assessedHouseholdEnrollmentId = widget.isEditing
+          ? widget.existingAssessedEnrollment!.trim()
+          : _newDhis2Uid();
+      final existingPrimaryClientTei = widget.isEditing
+          ? await _loadPrimaryClientTei(db, householdTeiId)
+          : '';
+      final clientTeiId = existingPrimaryClientTei.isNotEmpty
+          ? existingPrimaryClientTei
+          : _newDhis2Uid();
+
+      // Intake always stops in the Assessed Households programme.
+      // Risk level must never create Enrolled Household or member enrolments.
+      const shouldEnrollForCaseManagement = false;
       final orgUnit = _selectedCommunityCouncilId.trim();
 
       if (orgUnit.isEmpty) {
@@ -1970,24 +2229,41 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         searchableValue: householdSearchableValue,
       );
 
-      if (shouldEnrollForCaseManagement) {
-        await _saveEnrollmentOffline(
-          db: db,
-          enrollmentId: enrolledHouseholdEnrollmentId,
-          teiId: householdTeiId,
-          programId: mgysdEnrolledHouseholdsProgramId,
-          orgUnit: orgUnit,
-          searchableValue: householdSearchableValue,
+      // Enforce the Intake boundary even when editing older records that were
+      // incorrectly enrolled by previous versions.
+      await db.delete(
+        'enrollment',
+        where: 'trackedEntityInstance = ? AND program = ?',
+        whereArgs: [householdTeiId, mgysdEnrolledHouseholdsProgramId],
+      );
+      try {
+        final linkedMembers = await db.query(
+          'mgysd_household_member',
+          columns: ['memberTei'],
+          where: 'householdTei = ?',
+          whereArgs: [householdTeiId],
         );
+        for (final linkedMember in linkedMembers) {
+          final memberTei =
+              (linkedMember['memberTei'] ?? '').toString().trim();
+          if (memberTei.isEmpty) continue;
+          await db.delete(
+            'enrollment',
+            where: 'trackedEntityInstance = ? AND program = ?',
+            whereArgs: [memberTei, mgysdFamilyMembersProgramId],
+          );
+        }
+      } catch (_) {}
 
-        await _saveEnrollmentOffline(
-          db: db,
-          enrollmentId: clientFamilyEnrollmentId,
-          teiId: clientTeiId,
-          programId: mgysdFamilyMembersProgramId,
-          orgUnit: orgUnit,
-          searchableValue: searchableValue,
+      if (widget.isEditing) {
+        // Edit mode is update-only. The existing Household TEI, primary Client
+        // TEI and Assessed Household enrollment have already been updated above.
+        // Do not create relationships, household-member records or person TEIs.
+        AppUtil.showToastMessage(
+          message: 'Intake and Initial Risk Assessment updated.',
         );
+        if (mounted) Navigator.pop(context, true);
+        return;
       }
 
       await _saveRelationshipOffline(
@@ -2021,7 +2297,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           householdTeiId: householdTeiId,
           orgUnit: orgUnit,
           memberRole: 'FATHER',
-          enrollInFamilyMembersProgram: shouldEnrollForCaseManagement,
+          enrollInFamilyMembersProgram: false,
           attrs: {
             attFirstName: _fatherFirstNameController.text,
             attLastName: _fatherSurnameController.text,
@@ -2043,7 +2319,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           householdTeiId: householdTeiId,
           orgUnit: orgUnit,
           memberRole: 'MOTHER',
-          enrollInFamilyMembersProgram: shouldEnrollForCaseManagement,
+          enrollInFamilyMembersProgram: false,
           attrs: {
             attFirstName: _motherFirstNameController.text,
             attLastName: _motherSurnameController.text,
@@ -2065,7 +2341,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           householdTeiId: householdTeiId,
           orgUnit: orgUnit,
           memberRole: 'CAREGIVER',
-          enrollInFamilyMembersProgram: shouldEnrollForCaseManagement,
+          enrollInFamilyMembersProgram: false,
           attrs: {
             attFirstName: caregiver.nameController.text,
             attLastName: caregiver.surnameController.text,
@@ -2084,7 +2360,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           householdTeiId: householdTeiId,
           orgUnit: orgUnit,
           memberRole: nextOfKin.relationship.isEmpty ? 'NEXT_OF_KIN' : nextOfKin.relationship,
-          enrollInFamilyMembersProgram: shouldEnrollForCaseManagement,
+          enrollInFamilyMembersProgram: false,
           attrs: {
             attFirstName: nextOfKin.firstNameController.text,
             attLastName: nextOfKin.surnameController.text,
@@ -2101,7 +2377,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           householdTeiId: householdTeiId,
           orgUnit: orgUnit,
           memberRole: 'PERSONAL_ASSISTANT',
-          enrollInFamilyMembersProgram: shouldEnrollForCaseManagement,
+          enrollInFamilyMembersProgram: false,
           attrs: {
             attFirstName: _personalAssistantNameController.text,
             attLastName: _personalAssistantSurnameController.text,
@@ -2123,7 +2399,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           memberRole: member.relationshipToClient.isEmpty
               ? 'HOUSEHOLD_MEMBER'
               : member.relationshipToClient,
-          enrollInFamilyMembersProgram: shouldEnrollForCaseManagement,
+          enrollInFamilyMembersProgram: false,
           attrs: {
             attFirstName: member.firstNameController.text,
             attLastName: member.surnameController.text,
@@ -2141,9 +2417,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       }
 
       AppUtil.showToastMessage(
-        message: shouldEnrollForCaseManagement
-            ? 'Household assessed and enrolled for case management.'
-            : 'Household assessed. Risk is No/Low, so it was not enrolled for case management.',
+        message: widget.isEditing
+            ? 'Intake and Initial Risk Assessment updated.'
+            : 'Household saved in MGYSD Assessed Households.',
       );
 
       if (mounted) Navigator.pop(context, true);
@@ -4531,7 +4807,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                     child: SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: _saving ? null : _saveCase,
+                        onPressed: (_saving || _loadingExistingCase) ? null : _saveCase,
                         icon: _saving
                             ? const SizedBox(
                                 width: 17,
@@ -4545,7 +4821,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                         label: Text(
                           _saving
                               ? 'Saving...'
-                              : 'Save Intake and Initial Risk Assessment',
+                              : widget.isEditing
+                                  ? 'Update Intake and Initial Risk Assessment'
+                                  : 'Save Intake and Initial Risk Assessment',
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: primary,
