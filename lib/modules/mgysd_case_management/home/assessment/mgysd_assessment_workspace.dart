@@ -289,13 +289,12 @@ class _MgysdAssessmentWorkspaceState
         return;
       }
 
+      // Investigation begins from the Assessed Households programme only.
+      // Risk level does not control visibility or access.
       final rows = await db.query(
         'enrollment',
-        where: 'program IN (?, ?)',
-        whereArgs: [
-          MgysdDhis2Uids.assessedHouseholdsProgram,
-          MgysdDhis2Uids.enrolledHouseholdsProgram,
-        ],
+        where: 'program = ?',
+        whereArgs: [MgysdDhis2Uids.assessedHouseholdsProgram],
         orderBy: 'enrollmentDate DESC',
       );
 
@@ -305,13 +304,7 @@ class _MgysdAssessmentWorkspaceState
         final householdTei =
             (row['trackedEntityInstance'] ?? '').toString().trim();
         if (householdTei.isEmpty) continue;
-
-        final program = (row['program'] ?? '').toString();
-        final existing = byHousehold[householdTei];
-        if (existing == null ||
-            program == MgysdDhis2Uids.enrolledHouseholdsProgram) {
-          byHousehold[householdTei] = row;
-        }
+        byHousehold.putIfAbsent(householdTei, () => row);
       }
 
       final result = <_AssessmentHousehold>[];
@@ -324,8 +317,7 @@ class _MgysdAssessmentWorkspaceState
         final primaryAttrs =
             primaryTei == null ? <String, String>{} : await _attributes(db, primaryTei);
         final members = await _members(db, householdTei);
-        final enrolled = (row['program'] ?? '').toString() ==
-            MgysdDhis2Uids.enrolledHouseholdsProgram;
+        const enrolled = false;
 
         final fileNumber = _first(householdAttrs, [
           MgysdDhis2Uids.attHouseholdFileNumber,
@@ -594,27 +586,6 @@ class _MgysdAssessmentWorkspaceState
     await _load();
   }
 
-  Future<void> _reassess(_AssessmentHousehold item) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => MgysdNewCasePage(
-          color: widget.color,
-          prefillClientFirstName:
-              item.clientName.split(' ').isEmpty
-                  ? ''
-                  : item.clientName.split(' ').first,
-          prefillClientLastName:
-              item.clientName.split(' ').length > 1
-                  ? item.clientName.split(' ').skip(1).join(' ')
-                  : '',
-        ),
-      ),
-    );
-
-    await _load();
-  }
-
   Widget _memberTile(_HouseholdMember member) {
     final details = [
       if (member.role.isNotEmpty) member.role,
@@ -724,31 +695,34 @@ class _MgysdAssessmentWorkspaceState
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (item.enrolled)
-                TextButton.icon(
-                  onPressed: item.isChild
-                      ? _showPrimeroMessage
-                      : () => _openInvestigationList(item),
-                  style: TextButton.styleFrom(
-                    foregroundColor:
-                        item.isChild ? Colors.amber.shade900 : widget.color,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 4,
-                    ),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    textStyle: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 11.8,
-                    ),
+              TextButton.icon(
+                onPressed: item.isChild
+                    ? _showPrimeroMessage
+                    : () => _openInvestigationList(item),
+                style: TextButton.styleFrom(
+                  foregroundColor:
+                      item.isChild ? Colors.amber.shade900 : widget.color,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 4,
                   ),
-                  icon: Icon(
-                    item.isChild ? Icons.lock_outline : Icons.manage_search_outlined,
-                    size: 15,
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  textStyle: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 11.8,
                   ),
-                  label: const Text('Investigations'),
                 ),
+                icon: Icon(
+                  item.isChild
+                      ? Icons.lock_outline
+                      : Icons.manage_search_outlined,
+                  size: 15,
+                ),
+                label: Text(
+                  item.isChild ? 'Primero' : 'Investigation',
+                ),
+              ),
               const SizedBox(width: 2),
               const Icon(
                 Icons.keyboard_arrow_down,
@@ -780,7 +754,7 @@ class _MgysdAssessmentWorkspaceState
                   runSpacing: 7,
                   children: [
                     _pill(
-                      item.enrolled ? 'Enrolled' : 'Assessed only',
+                      'Assessed only',
                       statusColor,
                     ),
                     _pill(
@@ -789,7 +763,7 @@ class _MgysdAssessmentWorkspaceState
                     ),
                     if (item.isChild)
                       _pill('Child • Primero', Colors.amber.shade900),
-                    if (item.enrolled && !item.isChild)
+                    if (!item.isChild)
                       _pill(
                         item.investigationCount == 0
                             ? 'Investigation pending'
@@ -870,24 +844,6 @@ class _MgysdAssessmentWorkspaceState
                   ),
                 ),
               ),
-            if (!item.enrolled)
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () => _reassess(item),
-                  icon: const Icon(Icons.replay_outlined),
-                  label: const Text('Reassess Household'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: widget.color,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 13),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
@@ -914,8 +870,7 @@ class _MgysdAssessmentWorkspaceState
 
   @override
   Widget build(BuildContext context) {
-    final enrolled = _items.where((item) => item.enrolled).length;
-    final assessed = _items.length - enrolled;
+    final assessed = _items.length;
 
     return RefreshIndicator(
       color: widget.color,
@@ -954,7 +909,7 @@ class _MgysdAssessmentWorkspaceState
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '$enrolled enrolled • $assessed assessed only',
+                          '$assessed assessed household${assessed == 1 ? '' : 's'}',
                           style: const TextStyle(
                             color: Colors.white70,
                             fontWeight: FontWeight.w600,

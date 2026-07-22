@@ -16,9 +16,13 @@ class MgysdRecordCasePage extends StatefulWidget {
   const MgysdRecordCasePage({
     Key? key,
     required this.color,
+    this.reportEventId,
   }) : super(key: key);
 
   final Color color;
+  final String? reportEventId;
+
+  bool get isEditing => (reportEventId ?? '').trim().isNotEmpty;
 
   @override
   State<MgysdRecordCasePage> createState() => _MgysdRecordCasePageState();
@@ -674,6 +678,164 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     MgysdOption(code: 'Other', label: 'Other'),
   ];
 
+
+  Future<void> _loadExistingReport() async {
+    final eventId = (widget.reportEventId ?? '').trim();
+    if (eventId.isEmpty) {
+      _addClient();
+      return;
+    }
+
+    try {
+      final db = await _db();
+      final rows = await db.query(
+        'event_data_value',
+        where: 'event = ?',
+        whereArgs: [eventId],
+      );
+
+      final values = <String, String>{};
+      for (final row in rows) {
+        final key = (row['dataElement'] ?? '').toString();
+        if (key.isEmpty) continue;
+        values[key] = (row['value'] ?? '').toString();
+      }
+
+      Map<String, dynamic> payload = <String, dynamic>{};
+      final payloadText =
+          (values[MgysdDhis2Uids.deReportPayloadJson] ?? '').trim();
+      if (payloadText.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(payloadText);
+          if (decoded is Map) {
+            payload = Map<String, dynamic>.from(decoded);
+          }
+        } catch (_) {}
+      }
+
+      final reporter = payload['reporter'] is Map
+          ? Map<String, dynamic>.from(payload['reporter'] as Map)
+          : <String, dynamic>{};
+      final concerns = payload['concerns'] is Map
+          ? Map<String, dynamic>.from(payload['concerns'] as Map)
+          : <String, dynamic>{};
+      final phoneCountries = payload['reporterPhoneCountries'] is Map
+          ? Map<String, dynamic>.from(
+              payload['reporterPhoneCountries'] as Map,
+            )
+          : <String, dynamic>{};
+
+      for (final field in [...aboutReporterFields, ...concernFields]) {
+        final source = _isAboutReporterField(field.id) ? reporter : concerns;
+        _values[field.id] =
+            (source[field.id] ?? values[field.id] ?? '').toString();
+      }
+
+      _phoneCountryCodes[deReporterPhone] =
+          (phoneCountries[deReporterPhone] ?? 'LS').toString();
+      _phoneCountryCodes[deReporterAltPhone] =
+          (phoneCountries[deReporterAltPhone] ?? 'LS').toString();
+
+      _reporterPhoneControllers[deReporterPhone]?.text =
+          (_values[deReporterPhone] ?? '').trim();
+      _reporterPhoneControllers[deReporterAltPhone]?.text =
+          (_values[deReporterAltPhone] ?? '').trim();
+
+      _selectedConcernReasons
+        ..clear()
+        ..addAll(
+          (_values[deConcernReason] ?? '')
+              .split(',')
+              .map((value) => value.trim())
+              .where((value) => value.isNotEmpty),
+        );
+      _concernOtherController.text =
+          (_values[deConcernReasonOther] ?? '').trim();
+
+      for (final client in _clients) {
+        client.dispose();
+      }
+      _clients.clear();
+
+      final clients = payload['clients'];
+      if (clients is List) {
+        for (final raw in clients) {
+          if (raw is! Map) continue;
+          final value = Map<String, dynamic>.from(raw);
+          _clients.add(
+            MgysdClientEntry(
+              localId: AppUtil.getUid(),
+              firstName: (value['firstName'] ?? '').toString(),
+              lastName: (value['lastName'] ?? '').toString(),
+              age: (value['age'] ?? '').toString(),
+              phone: (value['phoneRaw'] ?? value['phone'] ?? '').toString(),
+              alternatePhone: (
+                value['alternatePhoneRaw'] ??
+                value['alternatePhone'] ??
+                ''
+              ).toString(),
+              district: (value['district'] ?? '').toString(),
+              communityCouncil:
+                  (value['communityCouncil'] ?? '').toString(),
+              physicalAddress:
+                  (value['physicalAddress'] ??
+                          value['howToContactClient'] ??
+                          '')
+                      .toString(),
+              relationshipOther:
+                  (value['relationshipToClientOther'] ?? '').toString(),
+              sex: (value['sex'] ?? '').toString(),
+              contactNumberType:
+                  (value['contactNumberType'] ?? '').toString(),
+              phoneCountryCode:
+                  (value['phoneCountryCode'] ?? 'LS').toString(),
+              alternatePhoneCountryCode:
+                  (value['alternatePhoneCountryCode'] ?? 'LS').toString(),
+              relationshipToClient:
+                  (value['relationshipToClient'] ?? '').toString(),
+              districtOrgUnit:
+                  (value['districtOrgUnit'] ?? '').toString(),
+              communityCouncilOrgUnit:
+                  (value['communityCouncilOrgUnit'] ?? '').toString(),
+            ),
+          );
+        }
+      }
+      if (_clients.isEmpty) _addClient();
+
+      for (final person in _peopleInvolved) {
+        person.dispose();
+      }
+      _peopleInvolved.clear();
+
+      final people = payload['peopleInvolved'];
+      if (people is List) {
+        for (final raw in people) {
+          if (raw is! Map) continue;
+          final value = Map<String, dynamic>.from(raw);
+          _peopleInvolved.add(
+            MgysdPersonInvolvedEntry(
+              localId: AppUtil.getUid(),
+              firstName: (value['firstName'] ?? '').toString(),
+              lastName: (value['lastName'] ?? '').toString(),
+              roleOther:
+                  (value['roleOrRelationshipOther'] ?? '').toString(),
+              roleOrRelationship:
+                  (value['roleOrRelationship'] ?? '').toString(),
+            ),
+          );
+        }
+      }
+
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not load report for editing: $e')),
+      );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -704,8 +866,12 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       _concernOtherController.text = otherSaved;
     }
 
-    _addClient();
     _loadLocationTree();
+    if (widget.isEditing) {
+      _loadExistingReport();
+    } else {
+      _addClient();
+    }
   }
 
   @override
@@ -2883,7 +3049,9 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       };
 
       final db = await _db();
-      final eventId = _newEventId();
+      final eventId = widget.isEditing
+          ? widget.reportEventId!.trim()
+          : _newEventId();
       final eventDate = (concernsMap[deWhenHappened] ?? '').trim().isNotEmpty
           ? concernsMap[deWhenHappened]!.trim()
           : _today();
@@ -3072,9 +3240,9 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Report a Case',
-          style: TextStyle(color: Colors.white),
+        title: Text(
+          widget.isEditing ? 'Edit Reported Case' : 'Report a Case',
+          style: const TextStyle(color: Colors.white),
         ),
         backgroundColor: widget.color,
       ),
@@ -3163,8 +3331,10 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
                         width: 18,
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                       )
-                          : const Text(
-                        'Save Report Offline',
+                          : Text(
+                        widget.isEditing
+                            ? 'Update Report Offline'
+                            : 'Save Report Offline',
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w800,
