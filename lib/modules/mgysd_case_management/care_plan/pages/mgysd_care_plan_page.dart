@@ -170,6 +170,7 @@ class _DisagreementEntry {
 class _PlanParticipantEntry {
   final TextEditingController firstNameController = TextEditingController();
   final TextEditingController lastNameController = TextEditingController();
+  final TextEditingController roleOtherController = TextEditingController();
   String role = '';
 
   _PlanParticipantEntry();
@@ -178,6 +179,7 @@ class _PlanParticipantEntry {
     final entry = _PlanParticipantEntry();
     entry.firstNameController.text = (json['firstName'] ?? '').toString();
     entry.lastNameController.text = (json['lastName'] ?? '').toString();
+    entry.roleOtherController.text = (json['roleOther'] ?? '').toString();
     entry.role = (json['role'] ?? '').toString();
     return entry;
   }
@@ -187,24 +189,33 @@ class _PlanParticipantEntry {
       'firstName': firstNameController.text.trim(),
       'lastName': lastNameController.text.trim(),
       'role': role.trim(),
+      'roleOther': roleOtherController.text.trim(),
     };
+  }
+
+  bool get requiresRoleSpecification {
+    return role == 'Family member' || role == 'Other';
   }
 
   bool get hasValue {
     return firstNameController.text.trim().isNotEmpty ||
         lastNameController.text.trim().isNotEmpty ||
-        role.trim().isNotEmpty;
+        role.trim().isNotEmpty ||
+        roleOtherController.text.trim().isNotEmpty;
   }
 
   bool get isComplete {
     return firstNameController.text.trim().isNotEmpty &&
         lastNameController.text.trim().isNotEmpty &&
-        role.trim().isNotEmpty;
+        role.trim().isNotEmpty &&
+        (!requiresRoleSpecification ||
+            roleOtherController.text.trim().isNotEmpty);
   }
 
   void dispose() {
     firstNameController.dispose();
     lastNameController.dispose();
+    roleOtherController.dispose();
   }
 }
 
@@ -859,9 +870,16 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       final entry = _planParticipants[i];
 
       if (!entry.isComplete) {
-        _showSnack(
-          'Please complete First name, Last name, and Role for Person ${i + 1}.',
-        );
+        if (entry.requiresRoleSpecification &&
+            entry.roleOtherController.text.trim().isEmpty) {
+          _showSnack(
+            'Please specify the relationship to client for Person ${i + 1}.',
+          );
+        } else {
+          _showSnack(
+            'Please complete First name, Last name, and Role for Person ${i + 1}.',
+          );
+        }
         return false;
       }
     }
@@ -1676,14 +1694,26 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
   }
 
   Widget _personsInvolvedInPlanSection() {
-    const roleOptions = ['Mother', 'Father', 'Daughter'];
+    const roleOptions = [
+      'Mother',
+      'Father',
+      'Daughter',
+      'Sibling',
+      'Family member',
+      'Neighbour',
+      'Teacher',
+      'Nurse',
+      'Chief',
+      'Caregiver/Personal assistant',
+      'Other',
+    ];
 
     return _card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _sectionTitle(
-            title: 'Persons involved in making the plan',
+            title: 'People involved in making the plan',
             subtitle: 'Record people who participated in making this care plan.',
             icon: Icons.people_alt_outlined,
           ),
@@ -1694,6 +1724,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
               final entry = entryMap.value;
               final safeRole =
               roleOptions.contains(entry.role) ? entry.role : null;
+              final showRoleOther = entry.requiresRoleSpecification;
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 14),
@@ -1792,6 +1823,9 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
                           : (value) {
                         setState(() {
                           entry.role = value ?? '';
+                          if (!entry.requiresRoleSpecification) {
+                            entry.roleOtherController.clear();
+                          }
                         });
                       },
                       decoration: InputDecoration(
@@ -1817,6 +1851,45 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
                         fillColor: Colors.white,
                       ),
                     ),
+                    if (showRoleOther) ...[
+                      const SizedBox(height: 10),
+                      TextFormField(
+                        controller: entry.roleOtherController,
+                        readOnly: _viewOnly,
+                        textCapitalization: TextCapitalization.words,
+                        maxLength: 80,
+                        buildCounter: (
+                            context, {
+                              required currentLength,
+                              required isFocused,
+                              maxLength,
+                            }) {
+                          return null;
+                        },
+                        decoration: InputDecoration(
+                          label: RichText(
+                            text: const TextSpan(
+                              text: 'Specify relationship to client ',
+                              style: TextStyle(
+                                color: Colors.black87,
+                                fontSize: 16,
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: '*',
+                                  style: TextStyle(color: Colors.red),
+                                ),
+                              ],
+                            ),
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          filled: true,
+                          fillColor: Colors.white,
+                        ),
+                      ),
+                    ],
                     if (!_viewOnly) ...[
                       const SizedBox(height: 8),
                       Align(
