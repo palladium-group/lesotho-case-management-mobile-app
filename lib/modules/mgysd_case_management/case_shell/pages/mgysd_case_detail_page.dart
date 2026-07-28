@@ -5,7 +5,6 @@ import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/models/mg
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/workflow/pages/mgysd_repeatable_stage_list_page.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/service_provision/pages/mgysd_service_provision_page.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:lncmis_mobile_app/modules/mgysd_case_management/case_closure/pages/mgysd_case_closure_page.dart';
 
 class MgysdCaseDetailPage extends StatefulWidget {
   const MgysdCaseDetailPage({
@@ -166,7 +165,6 @@ class _MgysdCaseDetailPageState extends State<MgysdCaseDetailPage> {
   static const String tableSocialInvestigation = 'mgysd_social_investigation';
   static const String tableReferral = 'mgysd_referral';
   static const String tableMonitoring = 'mgysd_monitoring';
-  static const String tableCaseClosure = 'mgysd_case_closure';
 
   static const String attFirstName = MgysdDhis2Uids.attFirstName;
   static const String attLastName = MgysdDhis2Uids.attLastName;
@@ -772,17 +770,6 @@ class _MgysdCaseDetailPageState extends State<MgysdCaseDetailPage> {
         tei: householdTei,
         enrollment: householdEnrollment,
       ),
-      await _workflowSummary(
-        db: db,
-        title: 'Case Closure',
-        subtitle: 'Formal closure of the household case',
-        icon: Icons.folder_off_outlined,
-        tableName: tableCaseClosure,
-        stageKey: 'case_closure',
-        programStage: '',
-        tei: householdTei,
-        enrollment: householdEnrollment,
-      ),
     ];
 
     return _CaseDetailData(
@@ -973,6 +960,62 @@ class _MgysdCaseDetailPageState extends State<MgysdCaseDetailPage> {
     if (label == 'Review active plans') return Colors.redAccent;
     if (label == 'Follow-up needed') return Colors.amber.shade800;
     return Colors.green;
+  }
+
+  List<String> _caseInsights(_CaseDetailData data) {
+    final insights = <String>[];
+
+    final social = data.workflowSteps.firstWhere(
+          (e) => e.stageKey == 'social_investigation',
+      orElse: () => data.workflowSteps.first,
+    );
+    final monitoring = data.workflowSteps.firstWhere(
+          (e) => e.stageKey == 'monitoring',
+      orElse: () => data.workflowSteps.first,
+    );
+    final referral = data.workflowSteps.firstWhere(
+          (e) => e.stageKey == 'referral',
+      orElse: () => data.workflowSteps.first,
+    );
+
+    if (data.householdProgramStatus != 'ENROLLED') {
+      insights.add(
+        'This household is assessed only. Enrolment starts when risk is above No/Low.',
+      );
+    } else if (social.count == 0) {
+      insights.add(
+        'Start with Social Investigation. The linked Care Plan will be opened from that investigation record.',
+      );
+    }
+
+    if (social.count > 0 && data.activeCarePlans == 0) {
+      insights.add(
+        'A Social Investigation exists but no active Care Plan is available. Open the investigation and check its linked Care Plan.',
+      );
+    }
+    if (data.activeCarePlans > 1) {
+      insights.add(
+        'More than one active Care Plan is detected. Only the latest plan should remain active for service provision.',
+      );
+    }
+    if (referral.count == 0) {
+      insights.add('No referrals have been recorded for this household case.');
+    }
+    if (monitoring.count == 0) {
+      insights.add('No monitoring visit has been recorded yet.');
+    }
+    if (data.householdMembers.length <= 1) {
+      insights.add('Household linkage may be incomplete. Review household members.');
+    }
+    if (data.householdMembers.any((m) => m.disability.trim().isNotEmpty)) {
+      insights.add('Household includes disability-related support needs.');
+    }
+
+    if (insights.isEmpty) {
+      insights.add('Case has active workflow records and household linkage.');
+    }
+
+    return insights.take(3).toList();
   }
 
   Widget _card({required Widget child, EdgeInsets? padding}) {
@@ -1307,6 +1350,58 @@ class _MgysdCaseDetailPageState extends State<MgysdCaseDetailPage> {
     );
   }
 
+  Widget _insightsCard(_CaseDetailData data) {
+    final insights = _caseInsights(data);
+
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle(
+            'Case Focus',
+            'Important prompts to guide the next case-management action.',
+          ),
+          const SizedBox(height: 12),
+          Column(
+            children: insights.map((insight) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(15),
+                  border: Border.all(color: Colors.amber.withOpacity(0.14)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.lightbulb_outline,
+                      color: Colors.amber,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        insight,
+                        style: const TextStyle(
+                          color: Colors.black87,
+                          fontSize: 13,
+                          height: 1.3,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _workflowTile(
       _CaseDetailData data,
       _WorkflowStepSummary step,
@@ -1446,9 +1541,89 @@ class _MgysdCaseDetailPageState extends State<MgysdCaseDetailPage> {
   }
 
   Widget _buildCaseDetails(_CaseDetailData data) {
+    final social = data.workflowSteps.firstWhere(
+          (step) => step.stageKey == 'social_investigation',
+    );
+    final referrals = data.workflowSteps.firstWhere(
+          (step) => step.stageKey == 'referral',
+    );
+    final monitoring = data.workflowSteps.firstWhere(
+          (step) => step.stageKey == 'monitoring',
+    );
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        _heroCard(data),
+        _insightsCard(data),
+        _card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionTitle(
+                'Household Case Snapshot',
+                'A quick operational view of this household case.',
+              ),
+              const SizedBox(height: 13),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _softPill(
+                    label: 'Household members',
+                    value: '${data.householdMembers.length}',
+                    icon: Icons.groups_outlined,
+                    color: widget.color,
+                  ),
+                  const SizedBox(width: 10),
+                  _softPill(
+                    label: 'Investigations',
+                    value: '${social.count}',
+                    icon: Icons.fact_check_outlined,
+                    color: Colors.indigo,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _softPill(
+                    label: 'Care Plans',
+                    value: '${data.carePlans}',
+                    icon: Icons.assignment_outlined,
+                    color: Colors.deepPurple,
+                  ),
+                  const SizedBox(width: 10),
+                  _softPill(
+                    label: 'Monitoring',
+                    value: '${monitoring.count}',
+                    icon: Icons.monitor_heart_outlined,
+                    color: Colors.teal,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _softPill(
+                    label: 'Referrals',
+                    value: '${referrals.count}',
+                    icon: Icons.handshake_outlined,
+                    color: Colors.deepOrange,
+                  ),
+                  const SizedBox(width: 10),
+                  _softPill(
+                    label: 'Active Plans',
+                    value: '${data.activeCarePlans}',
+                    icon: Icons.play_circle_outline,
+                    color: Colors.green,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
         _card(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1983,3 +2158,4 @@ class _MgysdCaseDetailPageState extends State<MgysdCaseDetailPage> {
     );
   }
 }
+
