@@ -1415,6 +1415,33 @@ class _MgysdSocialInvestigationPageState
   final TextEditingController _supervisorFirstNameController = TextEditingController();
   final TextEditingController _supervisorSurnameController = TextEditingController();
   final TextEditingController _supervisorPhoneController = TextEditingController();
+  final TextEditingController _supervisorRemarksController = TextEditingController();
+  final TextEditingController _supervisorReviewDateController = TextEditingController();
+  String _investigationOutcome = '';
+  String _supervisorDecision = '';
+
+  static const List<String> _investigationOutcomeOptions = [
+    'CONTINUE_INVESTIGATION',
+    'REFER_ONLY',
+    'NOT_ELIGIBLE',
+    'ELIGIBLE',
+  ];
+  static const Map<String, String> _investigationOutcomeLabels = {
+    'CONTINUE_INVESTIGATION': 'Continue Investigation',
+    'REFER_ONLY': 'Refer Only',
+    'NOT_ELIGIBLE': 'Not Eligible',
+    'ELIGIBLE': 'Eligible',
+  };
+  static const List<String> _supervisorDecisionOptions = [
+    'APPROVE',
+    'RETURN_FOR_REVISION',
+    'REJECT',
+  ];
+  static const Map<String, String> _supervisorDecisionLabels = {
+    'APPROVE': 'Approve',
+    'RETURN_FOR_REVISION': 'Return for Revision',
+    'REJECT': 'Reject',
+  };
 
   final List<_PersonSummary> _familyMembers = [];
 
@@ -2201,6 +2228,7 @@ class _MgysdSocialInvestigationPageState
     _parentCaseId = widget.mgysdCase.id.split('__').first;
     _eventId = _resolveEventId(widget.mgysdCase.id);
     _eventDateController.text = _today();
+    _supervisorReviewDateController.text = _today();
     _loadData();
   }
 
@@ -2218,6 +2246,8 @@ class _MgysdSocialInvestigationPageState
     _supervisorFirstNameController.dispose();
     _supervisorSurnameController.dispose();
     _supervisorPhoneController.dispose();
+    _supervisorRemarksController.dispose();
+    _supervisorReviewDateController.dispose();
     for (final member in _familyMembers) { member.dispose(); }
     _specificIncidentDateController.dispose();
     _ongoingStartDateController.dispose();
@@ -2799,6 +2829,16 @@ class _MgysdSocialInvestigationPageState
     _supervisorSurnameController.text = _text(part1['supervisorSurname']);
     _supervisorPhoneController.text = _text(part1['supervisorPhone']);
 
+    final supervisorReview =
+        (payload['supervisorReview'] ?? {}) as Map<String, dynamic>;
+    _investigationOutcome = _text(supervisorReview['investigationOutcome']);
+    _supervisorDecision = _text(supervisorReview['decision']);
+    _supervisorRemarksController.text = _text(supervisorReview['remarks']);
+    _supervisorReviewDateController.text =
+        _text(supervisorReview['reviewDate']).isEmpty
+            ? _today()
+            : _text(supervisorReview['reviewDate']);
+
     final part2 = (payload['part2'] ?? {}) as Map<String, dynamic>;
     _incidentPattern = _text(part2['incidentPattern']);
     _specificIncidentDateController.text = _text(part2['specificIncidentDate']);
@@ -3352,6 +3392,15 @@ class _MgysdSocialInvestigationPageState
         },
         'clientAndFamilySummary': _familyMembers.map((member) => member.toJson()).toList(),
       },
+      'supervisorReview': {
+        'investigationOutcome': _investigationOutcome,
+        'decision': _supervisorDecision,
+        'remarks': _supervisorRemarksController.text.trim(),
+        'reviewDate': _supervisorReviewDateController.text.trim(),
+        'approvedForEnrollment':
+            _investigationOutcome == 'ELIGIBLE' &&
+            _supervisorDecision == 'APPROVE',
+      },
       'part2': {
         'incidentPattern': _incidentPattern,
         'specificIncidentDate': _specificIncidentDateController.text.trim(),
@@ -3497,7 +3546,11 @@ class _MgysdSocialInvestigationPageState
   }
 
   Future<void> _ensureCarePlanForSocialInvestigation(Database db, String status) async {
-    if (status != 'COMPLETED') return;
+    if (status != 'COMPLETED' ||
+        _investigationOutcome != 'ELIGIBLE' ||
+        _supervisorDecision != 'APPROVE') {
+      return;
+    }
 
     await _ensureCarePlanLinkColumns(db);
 
@@ -3543,6 +3596,63 @@ class _MgysdSocialInvestigationPageState
     );
   }
 
+  Future<void> _enrollApprovedEligibleHousehold(Database db) async {
+    if (_investigationOutcome != 'ELIGIBLE' ||
+        _supervisorDecision != 'APPROVE') {
+      return;
+    }
+
+    final householdTei = _householdTei.trim();
+    final orgUnit = _caseOrgUnit.trim();
+    if (householdTei.isEmpty || orgUnit.isEmpty) {
+      throw StateError(
+        'Household TEI or organisation unit is missing for enrollment.',
+      );
+    }
+
+    final existing = await db.query(
+      'enrollment',
+      columns: ['enrollment'],
+      where: 'trackedEntityInstance = ? AND program = ?',
+      whereArgs: [
+        householdTei,
+        MgysdDhis2Uids.enrolledHouseholdsProgram,
+      ],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) return;
+
+    final now = DateTime.now();
+    final date =
+        '${now.year.toString().padLeft(4, '0')}-'
+        '${now.month.toString().padLeft(2, '0')}-'
+        '${now.day.toString().padLeft(2, '0')}';
+    final searchableValue = [
+      _householdFileNumberController.text.trim(),
+      _householdDistrictController.text.trim(),
+      _householdCommunityCouncilController.text.trim(),
+      _householdVillageController.text.trim(),
+      'Approved eligible',
+    ].where((value) => value.isNotEmpty).join(' | ');
+
+    await db.insert(
+      'enrollment',
+      {
+        'id': AppUtil.getUid(),
+        'enrollment': AppUtil.getUid(),
+        'enrollmentDate': date,
+        'incidentDate': date,
+        'program': MgysdDhis2Uids.enrolledHouseholdsProgram,
+        'orgUnit': orgUnit,
+        'trackedEntityInstance': householdTei,
+        'status': 'ACTIVE',
+        'searchableValue': searchableValue,
+        'syncStatus': 'not-synced',
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
   Future<void> _save(String status) async {
     final isDraft = status == 'DRAFT';
 
@@ -3558,6 +3668,24 @@ class _MgysdSocialInvestigationPageState
     }
     if (!isDraft && _incidentPattern.isEmpty) {
       _showSnack('Please select whether the concern is specific or ongoing.');
+      return;
+    }
+    if (!isDraft && _investigationOutcome.isEmpty) {
+      _showSnack('Please select the investigation outcome.');
+      return;
+    }
+    if (!isDraft && _supervisorDecision.isEmpty) {
+      _showSnack('Please select the supervisor decision.');
+      return;
+    }
+    if (!isDraft && _supervisorRemarksController.text.trim().isEmpty) {
+      _showSnack('Supervisor remarks are required before submission.');
+      return;
+    }
+    if (!isDraft &&
+        (_supervisorFirstNameController.text.trim().isEmpty ||
+            _supervisorSurnameController.text.trim().isEmpty)) {
+      _showSnack('Supervisor name and surname are required.');
       return;
     }
     setState(() => _saving = true);
@@ -3585,11 +3713,23 @@ class _MgysdSocialInvestigationPageState
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
 
+      if (status == 'COMPLETED') {
+        await _enrollApprovedEligibleHousehold(db);
+      }
       await _ensureCarePlanForSocialInvestigation(db, status);
 
       if (!mounted) return;
       setState(() => _savedStatus = status);
-      _showSnack(status == 'COMPLETED' ? 'Social Investigation completed.' : 'Social Investigation saved as draft.');
+      final enrolled = status == 'COMPLETED' &&
+          _investigationOutcome == 'ELIGIBLE' &&
+          _supervisorDecision == 'APPROVE';
+      _showSnack(
+        status == 'COMPLETED'
+            ? (enrolled
+                ? 'Investigation approved. Household enrolled successfully.'
+                : 'Social Investigation submitted successfully.')
+            : 'Social Investigation saved as draft.',
+      );
       Navigator.pop(context, true);
     } catch (e) {
       _showSnack('Failed to save Social Investigation: $e');
@@ -6052,6 +6192,75 @@ class _MgysdSocialInvestigationPageState
     );
   }
 
+  Widget _supervisorReviewSection() {
+    return _surface(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle(
+            'Eligibility and Supervisor Review',
+            'Enrollment occurs only when the investigation outcome is Eligible and the supervisor decision is Approve.',
+          ),
+          _dropdown(
+            label: 'Investigation Outcome',
+            value: _investigationOutcome,
+            options: _investigationOutcomeOptions,
+            labels: _investigationOutcomeLabels,
+            requiredField: true,
+            onChanged: (value) => setState(() {
+              _investigationOutcome = value;
+            }),
+          ),
+          _dropdown(
+            label: 'Supervisor Decision',
+            value: _supervisorDecision,
+            options: _supervisorDecisionOptions,
+            labels: _supervisorDecisionLabels,
+            requiredField: true,
+            onChanged: (value) => setState(() {
+              _supervisorDecision = value;
+            }),
+          ),
+          _input(
+            _supervisorReviewDateController,
+            'Supervisor Review Date',
+            readOnly: true,
+            onTap: () => _pickDate(_supervisorReviewDateController),
+          ),
+          _input(
+            _supervisorRemarksController,
+            'Supervisor Remarks',
+            maxLines: 5,
+            validator: (value) => (value ?? '').trim().isEmpty
+                ? 'Supervisor remarks are required'
+                : null,
+          ),
+          if (_investigationOutcome == 'ELIGIBLE' &&
+              _supervisorDecision == 'APPROVE')
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(top: 4),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(13),
+                border: Border.all(
+                  color: Colors.green.withValues(alpha: 0.22),
+                ),
+              ),
+              child: const Text(
+                'Submitting will enroll this household into MGYSD Enrolled Households.',
+                style: TextStyle(
+                  color: Colors.green,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _actions() {
     return Row(children: [
       Expanded(child: OutlinedButton(onPressed: _saving ? null : () => _save('DRAFT'), style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14), side: BorderSide(color: widget.color), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13))), child: const Text('Save Draft'))),
@@ -6100,6 +6309,13 @@ class _MgysdSocialInvestigationPageState
               subtitle: 'External informants, case conferences and court reports.',
               icon: Icons.library_books_outlined,
               child: _part4(),
+            ),
+            _collapsiblePart(
+              id: 'supervisorReview',
+              title: 'Eligibility and Supervisor Review',
+              subtitle: 'Outcome, supervisor remarks and final approval decision.',
+              icon: Icons.verified_user_outlined,
+              child: _supervisorReviewSection(),
             ),
             _actions(),
             const SizedBox(height: 26),
