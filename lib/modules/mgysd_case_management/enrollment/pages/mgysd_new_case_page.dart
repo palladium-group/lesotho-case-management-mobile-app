@@ -832,7 +832,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         _Opt('ABUSE_PHYSICAL', 'Physical abuse'),
         _Opt('ABUSE_EMOTIONAL', 'Emotional abuse'),
         _Opt('ABUSE_SEXUAL', 'Sexual abuse'),
-        _Opt('ABUSE_RAPE', 'Rape'),
         _Opt('ABUSE_INCEST', 'Incest'),
         _Opt('DOMESTIC_VIOLENCE', 'Domestic violence'),
         _Opt('HUMAN_TRAFFICKING', 'Human trafficking / Trafficking in Persons'),
@@ -3130,8 +3129,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               ),
               _Input(
                 controller: _riskSocialWorkerController,
-                label: 'Social Worker',
-                hint: 'Name of social worker',
+                label: 'Case Worker',
+                hint: 'Name of case worker',
               ),
             ),
             const SizedBox(height: 10),
