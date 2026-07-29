@@ -1,3 +1,0 @@
-# Api
-
-Comprehensive documentation section.
