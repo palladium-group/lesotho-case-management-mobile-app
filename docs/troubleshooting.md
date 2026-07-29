@@ -1,2 +1,0 @@
-# Troubleshooting
-Common operational issues.

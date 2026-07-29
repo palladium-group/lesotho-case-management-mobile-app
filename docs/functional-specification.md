@@ -1,3 +1,3 @@
-# Architecture
+# Functional Specification
 
 Comprehensive documentation section.

@@ -1,2 +1,3 @@
 # Security
-RBAC, audit logging, TLS.
+
+Comprehensive documentation section.

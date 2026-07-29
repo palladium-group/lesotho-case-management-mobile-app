@@ -34,6 +34,7 @@ class MgysdDhis2Uids {
   // ---------------------------------------------------------------------------
   static const String initialRiskAssessmentStage = 'MGYSD_PS_INITIAL_RISK_ASSESSMENT_UID';
   static const String socialInvestigationStage = 'MGYSD_PS_SOCIAL_INVESTIGATION_UID';
+  static const String enrolledsocialInvestigationStage = 'MGYSD_PS_SOCIAL_INVESTIGATION_UID';
   static const String carePlanStage = 'MGYSD_PS_CARE_PLAN_UID';
   static const String referralStage = 'MGYSD_PS_REFERRAL_UID';
   static const String monitoringStage = 'MGYSD_PS_MONITORING_UID';
@@ -67,6 +68,7 @@ class MgysdDhis2Uids {
   static const String deClientsJson = 'DE_CLIENTS_JSON';
   static const String dePeopleInvolvedJson = 'DE_PEOPLE_INVOLVED_JSON';
   static const String deReportPayloadJson = 'MGYSD_REPORT_PAYLOAD_JSON';
+
 
   static const String deConcernReason = 'UJIrqEgPMn1';
   static const String deConcernReasonOther = 'UJIrqEgPMn1_OTHER';

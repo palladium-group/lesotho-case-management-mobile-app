@@ -1,9 +1,26 @@
-# NCMIS
+# NCMIS Enterprise Documentation
 
-Enterprise documentation for the National Case Management Information System.
+This repository contains the enterprise documentation for the National Case Management Information System (NCMIS).
 
-## Workflow
-Reporting -> Intake -> Initial Risk Assessment -> MGYSD Assessed Households -> Social Investigation -> Supervisor Review -> Eligible + Approved -> MGYSD Enrolled Households -> Care Plan -> Monitoring -> Closure.
+## Enterprise Documentation
+- Executive Summary
+- Business Requirements
+- Functional Specification
+- Technical Architecture
+- Data Model
+- API Documentation
+- Security
+- Deployment
+- Operations
+- Offline Synchronization
+- Developer Guide
+- User Guide
+- Administrator Guide
+- Testing
+- Government Handover
 
-## Rule
-No enrollment occurs during Intake. Enrollment into MGYSD Enrolled Households occurs only after Eligible outcome and Supervisor Approval.
+## Critical Business Rule
+
+A household is enrolled into **MGYSD Enrolled Households** only when:
+- Investigation Outcome = Eligible
+- Supervisor Decision = Approve
