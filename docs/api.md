@@ -1,2 +1,3 @@
-# API
-DHIS2 integration overview.
+# Api
+
+Comprehensive documentation section.

@@ -1,2 +1,3 @@
 # Offline Sync
-Queue-based synchronization.
+
+Comprehensive documentation section.

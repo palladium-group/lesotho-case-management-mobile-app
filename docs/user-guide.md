@@ -1,3 +1,3 @@
-# Architecture
+# User Guide
 
 Comprehensive documentation section.

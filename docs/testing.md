@@ -1,3 +1,3 @@
-# Architecture
+# Testing
 
 Comprehensive documentation section.

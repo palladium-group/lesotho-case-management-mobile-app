@@ -1,3 +1,3 @@
-# Architecture
+# Handover
 
 Comprehensive documentation section.

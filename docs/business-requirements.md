@@ -1,3 +1,3 @@
-# Architecture
+# Business Requirements
 
 Comprehensive documentation section.
