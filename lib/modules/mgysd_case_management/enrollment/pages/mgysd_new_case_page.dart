@@ -788,6 +788,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _Opt('BLINDNESS', 'Blindness'),
     _Opt('SPEECH_IMPAIRMENT', 'Speech impairment'),
     _Opt('MOBILITY_IMPAIRMENT', 'Mobility impairment'),
+    _Opt('VISUAL_IMPAIRMENT', 'Visual impairment'),
+    _Opt('ALBINISM', 'Albinism'),
+    _Opt('DEAF', 'Deaf'),
     _Opt('OTHER', 'Other'),
   ];
 
@@ -829,7 +832,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         _Opt('ABUSE_PHYSICAL', 'Physical abuse'),
         _Opt('ABUSE_EMOTIONAL', 'Emotional abuse'),
         _Opt('ABUSE_SEXUAL', 'Sexual abuse'),
-        _Opt('ABUSE_RAPE', 'Rape'),
         _Opt('ABUSE_INCEST', 'Incest'),
         _Opt('DOMESTIC_VIOLENCE', 'Domestic violence'),
         _Opt('HUMAN_TRAFFICKING', 'Human trafficking / Trafficking in Persons'),
@@ -3127,8 +3129,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               ),
               _Input(
                 controller: _riskSocialWorkerController,
-                label: 'Social Worker',
-                hint: 'Name of social worker',
+                label: 'Case Worker',
+                hint: 'Name of case worker',
               ),
             ),
             const SizedBox(height: 10),
@@ -3284,7 +3286,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             ),
             _yesNoGatedMultiSelect(
               title: 'Disability diagnosis',
-              subtitle: 'Have you ever been diagnosed with any form of disability? e.g. hearing loss, blindness, speech impairment, mobility impairment.',
+              subtitle: 'Any form of disability? e.g. hearing loss, blindness, speech impairment, mobility impairment, vision impairment, albinism, deaf.',
               gateValue: _hasDisabilityDiagnosis,
               onGateChanged: (v) => setState(() {
                 _hasDisabilityDiagnosis = v ?? '';

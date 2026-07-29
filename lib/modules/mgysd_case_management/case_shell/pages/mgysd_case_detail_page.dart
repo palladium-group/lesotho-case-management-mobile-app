@@ -5,7 +5,6 @@ import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/models/mg
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/workflow/pages/mgysd_repeatable_stage_list_page.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/service_provision/pages/mgysd_service_provision_page.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:lncmis_mobile_app/modules/mgysd_case_management/case_closure/pages/mgysd_case_closure_page.dart';
 
 class MgysdCaseDetailPage extends StatefulWidget {
   const MgysdCaseDetailPage({
@@ -166,7 +165,6 @@ class _MgysdCaseDetailPageState extends State<MgysdCaseDetailPage> {
   static const String tableSocialInvestigation = 'mgysd_social_investigation';
   static const String tableReferral = 'mgysd_referral';
   static const String tableMonitoring = 'mgysd_monitoring';
-  static const String tableCaseClosure = 'mgysd_case_closure';
 
   static const String attFirstName = MgysdDhis2Uids.attFirstName;
   static const String attLastName = MgysdDhis2Uids.attLastName;
@@ -769,17 +767,6 @@ class _MgysdCaseDetailPageState extends State<MgysdCaseDetailPage> {
         tableName: tableMonitoring,
         stageKey: 'monitoring',
         programStage: psMonitoring,
-        tei: householdTei,
-        enrollment: householdEnrollment,
-      ),
-      await _workflowSummary(
-        db: db,
-        title: 'Case Closure',
-        subtitle: 'Formal closure of the household case',
-        icon: Icons.folder_off_outlined,
-        tableName: tableCaseClosure,
-        stageKey: 'case_closure',
-        programStage: '',
         tei: householdTei,
         enrollment: householdEnrollment,
       ),
