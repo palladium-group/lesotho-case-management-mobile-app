@@ -170,6 +170,7 @@ class _DisagreementEntry {
 class _PlanParticipantEntry {
   final TextEditingController firstNameController = TextEditingController();
   final TextEditingController lastNameController = TextEditingController();
+  final TextEditingController roleOtherController = TextEditingController();
   String role = '';
 
   _PlanParticipantEntry();
@@ -178,6 +179,7 @@ class _PlanParticipantEntry {
     final entry = _PlanParticipantEntry();
     entry.firstNameController.text = (json['firstName'] ?? '').toString();
     entry.lastNameController.text = (json['lastName'] ?? '').toString();
+    entry.roleOtherController.text = (json['roleOther'] ?? '').toString();
     entry.role = (json['role'] ?? '').toString();
     return entry;
   }
@@ -187,24 +189,33 @@ class _PlanParticipantEntry {
       'firstName': firstNameController.text.trim(),
       'lastName': lastNameController.text.trim(),
       'role': role.trim(),
+      'roleOther': roleOtherController.text.trim(),
     };
+  }
+
+  bool get requiresRoleSpecification {
+    return role == 'Family member' || role == 'Other';
   }
 
   bool get hasValue {
     return firstNameController.text.trim().isNotEmpty ||
         lastNameController.text.trim().isNotEmpty ||
-        role.trim().isNotEmpty;
+        role.trim().isNotEmpty ||
+        roleOtherController.text.trim().isNotEmpty;
   }
 
   bool get isComplete {
     return firstNameController.text.trim().isNotEmpty &&
         lastNameController.text.trim().isNotEmpty &&
-        role.trim().isNotEmpty;
+        role.trim().isNotEmpty &&
+        (!requiresRoleSpecification ||
+            roleOtherController.text.trim().isNotEmpty);
   }
 
   void dispose() {
     firstNameController.dispose();
     lastNameController.dispose();
+    roleOtherController.dispose();
   }
 }
 
@@ -217,14 +228,13 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
 
   final Map<String, TextEditingController> _goalControllers = {};
   final Map<String, String> _selectedSubjectIds = {};
+  final Set<String> _expandedGoalTerms = {};
 
   final TextEditingController _agreedPlanActionController =
   TextEditingController();
 
   final List<_PlanParticipantEntry> _planParticipants = [];
-  final List<_DisagreementEntry> _disagreementEntries = [
-    _DisagreementEntry(),
-  ];
+  final List<_DisagreementEntry> _disagreementEntries = [];
 
   List<_GoalSubject> _subjects = [];
   List<_CareGoal> _allGoals = [];
@@ -234,10 +244,12 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
 
   static const String goalGroupClient = 'CLIENT';
   static const String goalGroupSocialWorker = 'SOCIAL_WORKER';
+  static const String goalGroupCaregiver = 'CAREGIVER';
 
   static const List<String> goalGroups = [
     goalGroupClient,
     goalGroupSocialWorker,
+    goalGroupCaregiver,
   ];
 
   static const List<String> goalTerms = [
@@ -859,9 +871,16 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       final entry = _planParticipants[i];
 
       if (!entry.isComplete) {
-        _showSnack(
-          'Please complete First name, Last name, and Role for Person ${i + 1}.',
-        );
+        if (entry.requiresRoleSpecification &&
+            entry.roleOtherController.text.trim().isEmpty) {
+          _showSnack(
+            'Please specify the relationship to client for Person ${i + 1}.',
+          );
+        } else {
+          _showSnack(
+            'Please complete First name, Last name, and Role for Person ${i + 1}.',
+          );
+        }
         return false;
       }
     }
@@ -923,6 +942,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       'disagreementDetails': _disagreementDetailsPayload(),
       'clientGoals': _payloadForGoalGroup(goalGroupClient),
       'socialWorkerGoals': _payloadForGoalGroup(goalGroupSocialWorker),
+      'caregiverGoals': _payloadForGoalGroup(goalGroupCaregiver),
       'updatedAt': nowIso,
     };
 
@@ -1126,6 +1146,14 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       }
     }
 
+    if (goalGroup == goalGroupCaregiver) {
+      for (final subject in _subjects) {
+        if (roleContains(subject, ['CAREGIVER', 'PERSONAL ASSISTANT'])) {
+          return subject.id;
+        }
+      }
+    }
+
     return _subjects.first.id;
   }
 
@@ -1242,7 +1270,6 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
 
   void _removeDisagreementEntry(int index) {
     if (_viewOnly) return;
-    if (_disagreementEntries.length <= 1) return;
 
     setState(() {
       final removed = _disagreementEntries.removeAt(index);
@@ -1542,6 +1569,8 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
         return 'Client’s goals';
       case goalGroupSocialWorker:
         return 'Social worker goals';
+      case goalGroupCaregiver:
+        return 'Caregiver goals';
       default:
         return goalGroup;
     }
@@ -1553,6 +1582,8 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
         return 'Goals agreed with or directly related to the client.';
       case goalGroupSocialWorker:
         return 'Goals and actions planned by the social worker.';
+      case goalGroupCaregiver:
+        return 'Goals and actions agreed with the caregiver.';
       default:
         return '';
     }
@@ -1564,6 +1595,8 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
         return Icons.person_outline;
       case goalGroupSocialWorker:
         return Icons.badge_outlined;
+      case goalGroupCaregiver:
+        return Icons.volunteer_activism_outlined;
       default:
         return Icons.track_changes_outlined;
     }
@@ -1574,40 +1607,72 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     required String term,
   }) {
     final goals = _goalsByGroupAndTerm(goalGroup, term);
+    final expansionKey = '$goalGroup:$term';
+    final isExpanded = _expandedGoalTerms.contains(expansionKey);
 
     return _card(
       color: const Color(0xFFFBFCFE),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _sectionTitle(
-            title: _termTitle(term),
-            subtitle: _termSubtitle(term),
-            icon: term == 'SHORT_TERM'
-                ? Icons.flash_on_outlined
-                : term == 'MEDIUM_TERM'
-                ? Icons.trending_up_outlined
-                : Icons.flag_outlined,
-          ),
-          const SizedBox(height: 12),
-          _goalInputCard(goalGroup: goalGroup, term: term),
-          if (goals.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(13),
-              decoration: BoxDecoration(
-                color: Colors.blueGrey.withOpacity(0.045),
-                borderRadius: BorderRadius.circular(14),
+          InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () {
+              setState(() {
+                if (isExpanded) {
+                  _expandedGoalTerms.remove(expansionKey);
+                } else {
+                  _expandedGoalTerms.add(expansionKey);
+                }
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _sectionTitle(
+                      title: _termTitle(term),
+                      subtitle: _termSubtitle(term),
+                      icon: term == 'SHORT_TERM'
+                          ? Icons.flash_on_outlined
+                          : term == 'MEDIUM_TERM'
+                          ? Icons.trending_up_outlined
+                          : Icons.flag_outlined,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    isExpanded
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    color: widget.color,
+                  ),
+                ],
               ),
-              child: const Text(
-                'No goals added yet.',
-                style: TextStyle(color: Colors.blueGrey),
-              ),
-            )
-          else
-            Column(
-              children: goals.map(_goalTile).toList(),
             ),
+          ),
+          if (isExpanded) ...[
+            const SizedBox(height: 12),
+            _goalInputCard(goalGroup: goalGroup, term: term),
+            if (goals.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(13),
+                decoration: BoxDecoration(
+                  color: Colors.blueGrey.withOpacity(0.045),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Text(
+                  'No goals added yet.',
+                  style: TextStyle(color: Colors.blueGrey),
+                ),
+              )
+            else
+              Column(
+                children: goals.map(_goalTile).toList(),
+              ),
+          ],
         ],
       ),
     );
@@ -1676,14 +1741,26 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
   }
 
   Widget _personsInvolvedInPlanSection() {
-    const roleOptions = ['Mother', 'Father', 'Daughter'];
+    const roleOptions = [
+      'Mother',
+      'Father',
+      'Daughter',
+      'Sibling',
+      'Family member',
+      'Neighbour',
+      'Teacher',
+      'Nurse',
+      'Chief',
+      'Caregiver/Personal assistant',
+      'Other',
+    ];
 
     return _card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _sectionTitle(
-            title: 'Persons involved in making the plan',
+            title: 'People involved in making the plan',
             subtitle: 'Record people who participated in making this care plan.',
             icon: Icons.people_alt_outlined,
           ),
@@ -1694,6 +1771,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
               final entry = entryMap.value;
               final safeRole =
               roleOptions.contains(entry.role) ? entry.role : null;
+              final showRoleOther = entry.requiresRoleSpecification;
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 14),
@@ -1792,6 +1870,9 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
                           : (value) {
                         setState(() {
                           entry.role = value ?? '';
+                          if (!entry.requiresRoleSpecification) {
+                            entry.roleOtherController.clear();
+                          }
                         });
                       },
                       decoration: InputDecoration(
@@ -1817,6 +1898,45 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
                         fillColor: Colors.white,
                       ),
                     ),
+                    if (showRoleOther) ...[
+                      const SizedBox(height: 10),
+                      TextFormField(
+                        controller: entry.roleOtherController,
+                        readOnly: _viewOnly,
+                        textCapitalization: TextCapitalization.words,
+                        maxLength: 80,
+                        buildCounter: (
+                            context, {
+                              required currentLength,
+                              required isFocused,
+                              maxLength,
+                            }) {
+                          return null;
+                        },
+                        decoration: InputDecoration(
+                          label: RichText(
+                            text: const TextSpan(
+                              text: 'Specify relationship to client ',
+                              style: TextStyle(
+                                color: Colors.black87,
+                                fontSize: 16,
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: '*',
+                                  style: TextStyle(color: Colors.red),
+                                ),
+                              ],
+                            ),
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          filled: true,
+                          fillColor: Colors.white,
+                        ),
+                      ),
+                    ],
                     if (!_viewOnly) ...[
                       const SizedBox(height: 8),
                       Align(
@@ -1936,7 +2056,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
                       fillColor: Colors.white,
                     ),
                   ),
-                  if (!_viewOnly && _disagreementEntries.length > 1) ...[
+                  if (!_viewOnly) ...[
                     const SizedBox(height: 8),
                     Align(
                       alignment: Alignment.centerRight,
@@ -2239,6 +2359,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
               else ...[
                 _goalGroupSection(goalGroupClient),
                 _goalGroupSection(goalGroupSocialWorker),
+                _goalGroupSection(goalGroupCaregiver),
                 _agreedPlanActionSection(),
                 _personsInvolvedInPlanSection(),
                 _disagreementDetailsSection(),
