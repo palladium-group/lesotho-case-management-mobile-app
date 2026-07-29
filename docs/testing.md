@@ -1,3 +1,0 @@
-# Testing
-
-Comprehensive documentation section.

@@ -1,3 +1,0 @@
-# Deployment
-
-Comprehensive documentation section.
