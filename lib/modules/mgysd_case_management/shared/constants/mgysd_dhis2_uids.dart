@@ -4,7 +4,7 @@ class MgysdDhis2Uids {
   // Replace these placeholders with real DHIS2 program UIDs.
   // ---------------------------------------------------------------------------
   static const String reportedCasesEventProgram = 'TbR7dOCu5XK';
-  static const String reportedCasesProgramStage = 'MGYSD_REPORT_STAGE_UID';
+  static const String reportedCasesProgramStage = 'TybrOV3Isgz';
 
   // UAT household-program model.
   // All households with completed Intake + Initial Risk are enrolled here.
@@ -32,14 +32,48 @@ class MgysdDhis2Uids {
   // ---------------------------------------------------------------------------
   // CASE MANAGEMENT PROGRAM STAGES
   // ---------------------------------------------------------------------------
-  static const String initialRiskAssessmentStage = 'MGYSD_PS_INITIAL_RISK_ASSESSMENT_UID';
-  static const String socialInvestigationStage = 'MGYSD_PS_SOCIAL_INVESTIGATION_UID';
-  static const String enrolledsocialInvestigationStage = 'MGYSD_PS_SOCIAL_INVESTIGATION_UID';
-  static const String carePlanStage = 'MGYSD_PS_CARE_PLAN_UID';
-  static const String referralStage = 'MGYSD_PS_REFERRAL_UID';
-  static const String monitoringStage = 'MGYSD_PS_MONITORING_UID';
-  static const String familyServiceProvisionStage = 'MGYSD_FAMILY_PS_SERVICE_PROVISION_UID';
-  static const String familyReferralStage = 'MGYSD_FAMILY_PS_REFERRAL_UID';
+  static const String initialRiskAssessmentStage = 'Yd9HAhIUdZT';
+  static const String socialInvestigationStage = 'KoYx0zLUSC7';
+  static const String enrolledsocialInvestigationStage = 'MGYSD_ENROLLED_PS_SOCIAL_INVESTIGATION_UID';
+  static const String carePlanStage = 'jvfi6JnZPxU';
+  static const String referralStage = 'uijeGa1d3ZW';
+  static const String monitoringStage = 'MGYSD_ENROLLED_PS_MONITORING_UID';
+  static const String familyServiceProvisionStage = 'JusjUjRXKCN';
+  static const String familyReferralStage = 'lRLikYWFv5u';
+  static const String familyCarePlanStage = 'cmdutyjEbKj';
+  static const String familyCaseClosureStage = 'knCYcUv7MOP';
+  static const String enrolledServiceProvisionStage = 'zz2Le52Wx0w';
+  static const String enrolledCaseClosureStage = 'JvJ3YxzV9GT';
+
+  /// Programs that must participate in MGYSD synchronization. The logged-in
+  /// user must still have DHIS2 sharing/access to each program.
+  static const List<String> synchronizationPrograms = <String>[
+    reportedCasesEventProgram,
+    assessedHouseholdsProgram,
+    enrolledHouseholdsProgram,
+    familyMemberTrackerProgram,
+  ];
+
+  static const List<String> trackerSynchronizationPrograms = <String>[
+    assessedHouseholdsProgram,
+    enrolledHouseholdsProgram,
+    familyMemberTrackerProgram,
+  ];
+
+  static const List<String> eventSynchronizationPrograms = <String>[
+    reportedCasesEventProgram,
+    assessedHouseholdsProgram,
+    enrolledHouseholdsProgram,
+    familyMemberTrackerProgram,
+  ];
+
+  /// Metadata items expected by the mobile workflow but absent from the
+  /// supplied metadata export. They remain explicit placeholders so that the
+  /// validator and event uploader never silently bind to the wrong stage.
+  static const List<String> unresolvedMetadataUids = <String>[
+    enrolledsocialInvestigationStage,
+    monitoringStage,
+  ];
 
   // ---------------------------------------------------------------------------
   // REPORTED CASE EVENT PROGRAM DATA ELEMENTS
@@ -74,7 +108,7 @@ class MgysdDhis2Uids {
   static const String deConcernReasonOther = 'UJIrqEgPMn1_OTHER';
   static const String deIncidentDescription = 'rOo1QAaJ23F';
   static const String deWhenHappened = 'UImPhy5oOOq';
-  static const String deIncidentLocation = 'DE_INCIDENT_LOCATION';
+  static const String deIncidentLocation = 'mEUV26PcDKZ';
 
   static const String deFirstClientFirstName = 'wOIx1Tism5p';
   static const String deFirstClientLastName = 'mclj3oLRpiv';
@@ -122,19 +156,19 @@ class MgysdDhis2Uids {
   static const String attIsAdultEmployed = 'jfjsu5QL6Ce';
   static const String attEmployerName = 'RIKBsXclI3i';
 
-  static const String attNextOfKinFirstName = 'ATTR_NOK_FIRST_NAME';
-  static const String attNextOfKinSurname = 'ATTR_NOK_SURNAME';
+  static const String attNextOfKinFirstName = 'jneawlWhqnx';
+  static const String attNextOfKinSurname = 'vWlFqdiLjG2';
   static const String attNextOfKinPhone = 'ATTR_NOK_PHONE';
-  static const String attNextOfKinPhysicalAddress = 'ATTR_NOK_PHYSICAL_ADDRESS';
-  static const String attNextOfKinRelationship = 'ATTR_NOK_RELATIONSHIP';
+  static const String attNextOfKinPhysicalAddress = 'd5DcZpk66V1';
+  static const String attNextOfKinRelationship = 'z1vIT95rl44';
   static const String attNextOfKinRelationshipOther = 'ATTR_NOK_RELATIONSHIP_OTHER';
 
   // Case-specific parent status attributes remain on the CLIENT TEI.
-  static const String attFatherAlive = 'ATTR_FATHER_ALIVE';
+  static const String attFatherAlive = 'Tt2wTRrTiIP';
   static const String attFatherLivingWithChild = 'ATTR_FATHER_LIVING_WITH_CHILD';
   static const String attFatherWhyNotLiving = 'ATTR_FATHER_WHY_NOT_LIVING';
 
-  static const String attMotherAlive = 'ATTR_MOTHER_ALIVE';
+  static const String attMotherAlive = 'TjjN3rriKRW';
   static const String attMotherLivingWithChild = 'ATTR_MOTHER_LIVING_WITH_CHILD';
   static const String attMotherWhyNotLiving = 'ATTR_MOTHER_WHY_NOT_LIVING';
 

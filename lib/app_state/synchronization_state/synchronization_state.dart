@@ -414,16 +414,14 @@ class SynchronizationState with ChangeNotifier {
     _dataDownloadStopped = false;
     updateDataDownloadStatus(true);
 
-    int count = 0;
-    int totalCount = 0;
-
     try {
       String? lastSyncDate = await PreferenceProvider.getPreferenceValue(
-          lastDataDownloadDatePreferenceKey);
+        lastDataDownloadDatePreferenceKey,
+      );
       lastSyncDate =
           lastSyncDate ?? AppUtil.formattedDateTimeIntoString(DateTime(2020));
 
-      CurrentUser? currentUser = await (UserService().getCurrentUser());
+      final CurrentUser? currentUser = await UserService().getCurrentUser();
       if (currentUser == null) {
         updateDataDownloadStatus(false);
         AppUtil.showToastMessage(message: 'No active user session');
@@ -436,20 +434,78 @@ class SynchronizationState with ChangeNotifier {
         currentUser.programs,
         currentUser.userOrgUnitIds,
       );
-      refreshBeneficiaryCounts();
 
-      AppUtil.showToastMessage(
-          message: 'Data has been successfully downloaded');
+      final List<String> trackerProgramIds =
+          _synchronizationService.trackerPrograms;
+      final List<String> eventProgramIds =
+          _synchronizationService.eventPrograms;
+      final List<String> orgUnitIds = (_synchronizationService.orgUnitIds ?? [])
+          .map((orgUnit) => orgUnit.toString())
+          .where((orgUnit) => orgUnit.trim().isNotEmpty)
+          .toList();
+
+      final int totalProfiles = trackerProgramIds.length * orgUnitIds.length;
+      final int totalEvents = eventProgramIds.length * orgUnitIds.length;
+      final int totalOperations = totalProfiles + totalEvents;
+      if (totalOperations == 0) {
+        updateDataDownloadStatus(false);
+        AppUtil.showToastMessage(
+          message: 'No programs or organisation units configured for download',
+        );
+        return;
+      }
+
+      int completedProfiles = 0;
+      for (final String orgUnitId in orgUnitIds) {
+        for (final String programId in trackerProgramIds) {
+          if (_dataDownloadStopped) return;
+          await _synchronizationService.getAndSaveTrackedInstanceFromServer(
+            programId,
+            orgUnitId,
+            lastSyncDate,
+          );
+          completedProfiles++;
+          profileDataDownloadProgress =
+              _clamp01(completedProfiles / totalProfiles);
+          overallDownloadProgress = _clamp01(
+            completedProfiles / totalOperations,
+          );
+          notifyListeners();
+        }
+      }
+
+      int completedEvents = 0;
+      for (final String orgUnitId in orgUnitIds) {
+        for (final String programId in eventProgramIds) {
+          if (_dataDownloadStopped) return;
+          await _synchronizationService.getAndSaveEventsFromServer(
+            programId,
+            orgUnitId,
+            lastSyncDate,
+          );
+          completedEvents++;
+          eventsDataDownloadProgress =
+              _clamp01(completedEvents / totalEvents);
+          overallDownloadProgress = _clamp01(
+            (totalProfiles + completedEvents) / totalOperations,
+          );
+          notifyListeners();
+        }
+      }
+
+      await refreshBeneficiaryCounts();
       setStatusMessageForAvailableDataFromServer('');
-
-      lastSyncDate = AppUtil.formattedDateTimeIntoString(DateTime.now());
       await PreferenceProvider.setPreferenceValue(
-          lastDataDownloadDatePreferenceKey, lastSyncDate);
+        lastDataDownloadDatePreferenceKey,
+        AppUtil.formattedDateTimeIntoString(DateTime.now()),
+      );
+      AppUtil.showToastMessage(message: 'Data has been successfully downloaded');
     } catch (e) {
       _dataDownloadProcess = [];
       await _logError('startDataDownloadActivity', e);
-      updateDataDownloadStatus(false);
       AppUtil.showToastMessage(message: 'Error downloading data');
+    } finally {
+      updateDataDownloadStatus(false);
     }
   }
 
