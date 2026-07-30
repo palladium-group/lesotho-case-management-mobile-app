@@ -13,6 +13,7 @@ import 'package:lncmis_mobile_app/core/services/organisation_unit_service.dart';
 import 'package:lncmis_mobile_app/models/organisation_unit.dart';
 import 'package:lncmis_mobile_app/core/utils/app_util.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
+import 'package:lncmis_mobile_app/modules/mgysd_case_management/workflow/helpers/mgysd_program_stage_event_helper.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -1764,7 +1765,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required String value,
   }) async {
     final v = value.trim();
-    if (v.isEmpty) return;
+    if (v.isEmpty || attribute.startsWith('ATTR_') || attribute.length != 11) return;
     await db.insert(
       'tracked_entity_instance_attribute',
       {
@@ -2229,6 +2230,66 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         programId: mgysdAssessedHouseholdsProgramId,
         orgUnit: orgUnit,
         searchableValue: householdSearchableValue,
+      );
+
+      // Initial Risk Assessment is a tracker EVENT, not a TEI attribute set.
+      // Preserve one event per assessed-household enrollment and update it on edit.
+      String initialRiskEventId = '';
+      final existingRiskEvents = await db.query(
+        'events',
+        columns: ['event'],
+        where: 'trackedEntityInstance = ? AND programStage = ?',
+        whereArgs: [householdTeiId, MgysdDhis2Uids.initialRiskAssessmentStage],
+        orderBy: 'eventDate DESC',
+        limit: 1,
+      );
+      if (existingRiskEvents.isNotEmpty) {
+        initialRiskEventId = (existingRiskEvents.first['event'] ?? '').toString();
+      }
+      if (initialRiskEventId.isEmpty) initialRiskEventId = _newDhis2Uid();
+
+      await MgysdProgramStageEventHelper.saveProgramStageEvent(
+        db: db,
+        eventId: initialRiskEventId,
+        status: 'COMPLETED',
+        eventDate: _riskAssessmentDateController.text.trim().isEmpty
+            ? DateTime.now().toIso8601String().substring(0, 10)
+            : _riskAssessmentDateController.text.trim(),
+        orgUnit: orgUnit,
+        program: MgysdDhis2Uids.assessedHouseholdsProgram,
+        programStage: MgysdDhis2Uids.initialRiskAssessmentStage,
+        trackedEntityInstance: householdTeiId,
+        enrollment: assessedHouseholdEnrollmentId,
+        dataValues: {
+          MgysdDhis2Uids.deRiskSocialWorker: _riskSocialWorkerController.text,
+          MgysdDhis2Uids.deRiskFamilyBackground: _riskFamilyBackground,
+          MgysdDhis2Uids.deRiskFamilyBackgroundNotes: _riskFamilyBackgroundNotesController.text,
+          MgysdDhis2Uids.deRiskExtendedFamilyRelationships: _riskExtendedFamilyRelationships,
+          MgysdDhis2Uids.deRiskExtendedFamilyNotes: _riskExtendedFamilyNotesController.text,
+          MgysdDhis2Uids.deRiskClientRelationships: _riskClientRelationships,
+          MgysdDhis2Uids.deRiskClientRelationshipsNotes: _riskClientRelationshipsNotesController.text,
+          MgysdDhis2Uids.deRiskLivingCircumstances: _riskLivingCircumstances,
+          MgysdDhis2Uids.deRiskLivingCircumstancesNotes: _riskLivingCircumstancesNotesController.text,
+          MgysdDhis2Uids.deRiskHousing: _riskHousing,
+          MgysdDhis2Uids.deRiskHousingNotes: _riskHousingNotesController.text,
+          MgysdDhis2Uids.deRiskPhysicalHealth: _riskPhysicalHealth,
+          MgysdDhis2Uids.deRiskPhysicalHealthNotes: _riskPhysicalHealthNotesController.text,
+          MgysdDhis2Uids.deRiskNutrition: _riskNutrition,
+          MgysdDhis2Uids.deRiskNutritionNotes: _riskNutritionNotesController.text,
+          MgysdDhis2Uids.deRiskEmotionalHealth: _riskEmotionalHealth,
+          MgysdDhis2Uids.deRiskEmotionalHealthNotes: _riskEmotionalHealthNotesController.text,
+          MgysdDhis2Uids.deRiskSupervision: _riskSupervision,
+          MgysdDhis2Uids.deRiskSupervisionNotes: _riskSupervisionNotesController.text,
+          MgysdDhis2Uids.deRiskEducation: _riskEducation,
+          MgysdDhis2Uids.deRiskEducationNotes: _riskEducationNotesController.text,
+          MgysdDhis2Uids.deRiskLevel: _riskLevel,
+          MgysdDhis2Uids.deRiskReason: _riskReasonController.text,
+          MgysdDhis2Uids.deRiskImmediateReferrals: _riskImmediateReferralsController.text,
+          MgysdDhis2Uids.deRiskSelfCare: _riskCaregiverWellbeing,
+          MgysdDhis2Uids.deRiskDisabilityDiagnosis: _isDisabled,
+          MgysdDhis2Uids.deRiskAssistiveDevices: _riskServicesAccessed.join(', '),
+          MgysdDhis2Uids.deRiskRehabilitationServices: _riskEmergencyActionsTaken.join(', '),
+        },
       );
 
       // Enforce the Intake boundary even when editing older records that were

@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:lncmis_mobile_app/core/offline_db/offline_db_provider.dart';
+import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
 import 'package:lncmis_mobile_app/core/utils/app_util.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/workflow/helpers/mgysd_program_stage_event_helper.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/models/mgysd_case.dart';
@@ -950,6 +951,20 @@ class _MgysdServiceProvisionPageState extends State<MgysdServiceProvisionPage> {
         eventId: eventId,
         status: 'COMPLETED',
         eventDate: date,
+        program: _isHouseholdTarget
+            ? MgysdDhis2Uids.enrolledHouseholdsProgram
+            : MgysdDhis2Uids.familyMemberTrackerProgram,
+        programStage: _isHouseholdTarget
+            ? MgysdDhis2Uids.enrolledServiceProvisionStage
+            : MgysdDhis2Uids.familyServiceProvisionStage,
+        trackedEntityInstance: _targetTei,
+        dataValues: {
+          MgysdDhis2Uids.deServiceProvided: serviceProvided,
+          MgysdDhis2Uids.deServiceProvider: provider,
+          MgysdDhis2Uids.deServiceOutcome: outcome,
+          MgysdDhis2Uids.deServiceGoalStatus: goalStatus,
+          MgysdDhis2Uids.deServiceGoalStatusNotes: notes,
+        },
       );
 
       final payload = {
