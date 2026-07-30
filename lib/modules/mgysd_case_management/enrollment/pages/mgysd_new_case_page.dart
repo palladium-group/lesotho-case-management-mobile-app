@@ -537,38 +537,38 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   static const String relHouseholdHasMember = MgysdDhis2Uids.householdHasMemberRelationshipType;
 
   static const List<_Opt> clientCategoryOptions = [
-    _Opt('CHILD', 'Child'),
-    _Opt('ADULT_ELDERLY_PERSON', 'Adult / Elderly Person'),
+    _Opt('Child', 'Child'),
+    _Opt('Adult', 'Adult / Elderly Person'),
   ];
 
   static const List<_Opt> yesNoOptions = [
-    _Opt('YES', 'Yes'),
-    _Opt('NO', 'No'),
+    _Opt('Yes', 'Yes'),
+    _Opt('No', 'No'),
   ];
 
   static const List<_Opt> yesNoUnknownOptions = [
-    _Opt('YES', 'Yes'),
-    _Opt('NO', 'No'),
-    _Opt('UNKNOWN', 'Unknown'),
+    _Opt('Yes', 'Yes'),
+    _Opt('No', 'No'),
+    _Opt('Unknown', 'Unknown'),
   ];
 
   static const List<_Opt> sexOptions = [
-    _Opt('MALE', 'Male'),
-    _Opt('FEMALE', 'Female'),
+    _Opt('Male', 'Male'),
+    _Opt('Female', 'Female'),
   ];
 
   static const List<_Opt> nationalityOptions = [
-    _Opt('MOSOTHO', 'Mosotho'),
-    _Opt('SOUTH_AFRICAN', 'South African'),
-    _Opt('ZIMBABWEAN', 'Zimbabwean'),
-    _Opt('OTHER', 'Other'),
+    _Opt('Mosotho', 'Mosotho'),
+    _Opt('South African', 'South African'),
+    _Opt('Zimbabwean', 'Zimbabwean'),
+    _Opt('Other', 'Other'),
   ];
 
   static const List<_Opt> homeLanguageOptions = [
-    _Opt('SESOTHO', 'Sesotho'),
-    _Opt('ENGLISH', 'English'),
-    _Opt('XHOSA', 'Xhosa'),
-    _Opt('OTHER', 'Other'),
+    _Opt('Sesotho', 'Sesotho'),
+    _Opt('English', 'English'),
+    _Opt('Xhosa', 'Xhosa'),
+    _Opt('Other', 'Other'),
   ];
 
   static const List<_Opt> gradeOptions = [
@@ -587,11 +587,11 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   ];
 
   static const List<_Opt> schoolLevelOptions = [
-    _Opt('PRE_SCHOOL', 'Pre-School'),
-    _Opt('PRIMARY', 'Primary'),
-    _Opt('SECONDARY', 'Secondary'),
-    _Opt('HIGH_SCHOOL', 'High School'),
-    _Opt('TERTIARY', 'Tertiary'),
+    _Opt('Pre-School', 'Pre-School'),
+    _Opt('Primary', 'Primary'),
+    _Opt('Secondary', 'Secondary'),
+    _Opt('High School', 'High School'),
+    _Opt('Tertiary', 'Tertiary'),
   ];
 
   static const List<_Opt> primaryGradeOptions = [
@@ -616,15 +616,15 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   ];
 
   static const List<_Opt> notInSchoolStatusOptions = [
-    _Opt('NEVER_ATTENDED', 'Never attended school'),
-    _Opt('NO_LONGER_IN_SCHOOL', 'No longer in school'),
+    _Opt('Never attended school', 'Never attended school'),
+    _Opt('No longer in school', 'No longer in school'),
   ];
 
   static const List<_Opt> highestLevelAchievedOptions = [
-    _Opt('PRIMARY', 'Primary'),
-    _Opt('SECONDARY', 'Secondary'),
-    _Opt('HIGH_SCHOOL', 'High School'),
-    _Opt('TERTIARY', 'Tertiary'),
+    _Opt('Primary', 'Primary'),
+    _Opt('Secondary', 'Secondary'),
+    _Opt('High School', 'High School'),
+    _Opt('Tertiary', 'Tertiary'),
   ];
 
   static const List<_Opt> inSchoolAttendanceOptions = [
@@ -768,10 +768,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   ];
 
   static const List<_Opt> riskLevelOptions = [
-    _Opt('NO_RISK', 'No Risk'),
-    _Opt('LOW', 'Low Risk'),
-    _Opt('MEDIUM', 'Medium Risk'),
-    _Opt('HIGH', 'High Risk'),
+    _Opt('NO RISK', 'No Risk'),
+    _Opt('LOW RISK', 'Low Risk'),
+    _Opt('MEDIUM RISK', 'Medium Risk'),
+    _Opt('HIGH RISK', 'High Risk'),
   ];
 
   static const List<_Opt> selfCareDomains = [
@@ -908,21 +908,21 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     'SOCIAL_ASSISTANCE_EDUCATIONAL_AID',
   };
 
-  bool get _isAdultOrElderly => _clientCategory == 'ADULT_ELDERLY_PERSON';
-  bool get _isChild => _clientCategory == 'CHILD';
-  bool get _isDisabledYes => _isDisabled == 'YES';
+  bool get _isAdultOrElderly => _clientCategory == 'Adult';
+  bool get _isChild => _clientCategory == 'Child';
+  bool get _isDisabledYes => _isDisabled == 'Yes';
   bool get _showGuardianOption => _isDisabledYes;
   bool get _disabilityAutoDetected =>
-      _usesAssistiveDevice == 'YES' || _hasDisabilityDiagnosis == 'YES';
+      _usesAssistiveDevice == 'Yes' || _hasDisabilityDiagnosis == 'Yes';
 
   void _syncDisabilityStatus() {
     final diagnosis = _hasDisabilityDiagnosis.trim();
     final device = _usesAssistiveDevice.trim();
 
-    if (diagnosis == 'YES' || device == 'YES') {
-      _isDisabled = 'YES';
-    } else if (diagnosis == 'NO' && device == 'NO') {
-      _isDisabled = 'NO';
+    if (diagnosis == 'Yes' || device == 'Yes') {
+      _isDisabled = 'Yes';
+    } else if (diagnosis == 'No' && device == 'No') {
+      _isDisabled = 'No';
     } else {
       _isDisabled = '';
     }
@@ -1479,7 +1479,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         _selectedDob = picked;
         _clientDobController.text = _formatDate(picked);
         _clientAgeController.text = age.toString();
-        _clientCategory = age < 18 ? 'CHILD' : 'ADULT_ELDERLY_PERSON';
+        _clientCategory = age < 18 ? 'Child' : 'Adult';
         if (!_isAdultOrElderly) {
           _isAdultEmployed = '';
           _employerNameController.clear();
@@ -1564,7 +1564,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       return false;
     }
     if (reason.code == 'TEENAGE_PREGNANCY_YOUNG_MOTHERS') {
-      return _isChild && _sex == 'FEMALE';
+      return _isChild && _sex == 'Female';
     }
     if (reason.code == 'SOCIAL_ASSISTANCE_EDUCATIONAL_AID') {
       final age = _clientAge;
@@ -3085,17 +3085,17 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       members.add(_Opt('CLIENT', 'Client: $clientName'));
     }
 
-    if (_fatherAlive == 'YES') {
+    if (_fatherAlive == 'Yes') {
       final fatherName = '${_fatherFirstNameController.text.trim()} ${_fatherSurnameController.text.trim()}'.trim();
       if (fatherName.isNotEmpty) {
-        members.add(_Opt('FATHER', 'Father: $fatherName'));
+        members.add(_Opt('Father', 'Father: $fatherName'));
       }
     }
 
-    if (_motherAlive == 'YES') {
+    if (_motherAlive == 'Yes') {
       final motherName = '${_motherFirstNameController.text.trim()} ${_motherSurnameController.text.trim()}'.trim();
       if (motherName.isNotEmpty) {
-        members.add(_Opt('MOTHER', 'Mother: $motherName'));
+        members.add(_Opt('Mother', 'Mother: $motherName'));
       }
     }
 
@@ -3565,7 +3565,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             requiredField: true,
             onChanged: (v) => onAliveChanged(v ?? ''),
           ),
-          if (aliveValue == 'YES') ...[
+          if (aliveValue == 'Yes') ...[
             const SizedBox(height: 10),
             _row2(
               _Input(
@@ -3600,7 +3600,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               requiredField: true,
               onChanged: (v) => onLivingWithChildChanged(v ?? ''),
             ),
-            if (livingWithChildValue != 'YES' &&
+            if (livingWithChildValue != 'Yes' &&
                 livingWithChildValue.trim().isNotEmpty) ...[
               const SizedBox(height: 10),
               _Input(
@@ -3924,7 +3924,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 onAliveChanged: (value) {
                   setState(() {
                     _fatherAlive = value;
-                    if (_fatherAlive != 'YES') {
+                    if (_fatherAlive != 'Yes') {
                       _fatherFirstNameController.clear();
                       _fatherSurnameController.clear();
                       _fatherDobController.clear();
@@ -3943,7 +3943,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 onLivingWithChildChanged: (value) {
                   setState(() {
                     _fatherLivingWithChild = value;
-                    if (_fatherLivingWithChild == 'YES') {
+                    if (_fatherLivingWithChild == 'Yes') {
                       _fatherWhyNotLivingController.clear();
                       _fatherPhoneController.clear();
                     }
@@ -3958,7 +3958,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 onAliveChanged: (value) {
                   setState(() {
                     _motherAlive = value;
-                    if (_motherAlive != 'YES') {
+                    if (_motherAlive != 'Yes') {
                       _motherFirstNameController.clear();
                       _motherSurnameController.clear();
                       _motherDobController.clear();
@@ -3977,7 +3977,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 onLivingWithChildChanged: (value) {
                   setState(() {
                     _motherLivingWithChild = value;
-                    if (_motherLivingWithChild == 'YES') {
+                    if (_motherLivingWithChild == 'Yes') {
                       _motherWhyNotLivingController.clear();
                       _motherPhoneController.clear();
                     }
@@ -4139,13 +4139,13 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               onChanged: (v) {
                 setState(() {
                   member.hasDisability = v ?? '';
-                  if (member.hasDisability != 'YES') {
+                  if (member.hasDisability != 'Yes') {
                     member.disabilitySpecifyController.clear();
                   }
                 });
               },
             ),
-            if (member.hasDisability == 'YES') ...[
+            if (member.hasDisability == 'Yes') ...[
               const SizedBox(height: 10),
               _Input(
                 controller: member.disabilitySpecifyController,
@@ -4676,7 +4676,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                                   });
                                 },
                               ),
-                              if (_isClientInSchool == 'YES') ...[
+                              if (_isClientInSchool == 'Yes') ...[
                                 const SizedBox(height: 10),
                                 _Input(
                                   controller: _schoolNameController,
@@ -4741,7 +4741,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                                           () => _schoolAttendanceStatus = v ?? ''),
                                 ),
                               ],
-                              if (_isClientInSchool == 'NO') ...[
+                              if (_isClientInSchool == 'No') ...[
                                 const SizedBox(height: 10),
                                 _dropdown(
                                   label: 'School attendance Status',
@@ -4797,13 +4797,13 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                                   onChanged: (v) {
                                     setState(() {
                                       _isAdultEmployed = v ?? '';
-                                      if (_isAdultEmployed != 'YES') {
+                                      if (_isAdultEmployed != 'Yes') {
                                         _employerNameController.clear();
                                       }
                                     });
                                   },
                                 ),
-                                if (_isAdultEmployed == 'YES') ...[
+                                if (_isAdultEmployed == 'Yes') ...[
                                   const SizedBox(height: 10),
                                   _Input(
                                     controller: _employerNameController,
