@@ -140,7 +140,7 @@ class _MgysdClosureWorkspaceState extends State<MgysdClosureWorkspace> {
       final rows = await db.rawQuery(
         'SELECT COUNT(*) AS c FROM events '
         'WHERE trackedEntityInstance = ? AND programStage = ?',
-        [householdTei, 'MGYSD_PS_CASE_CLOSURE_UID'],
+        [householdTei, MgysdDhis2Uids.enrolledCaseClosureStage],
       );
       return int.tryParse('${rows.first['c'] ?? 0}') ?? 0;
     } catch (_) {
@@ -252,7 +252,7 @@ class _MgysdClosureWorkspaceState extends State<MgysdClosureWorkspace> {
           stageTitle: 'Case Closure',
           tableName: 'mgysd_case_closure',
           stageKey: 'case_closure',
-          programStage: 'MGYSD_PS_CASE_CLOSURE_UID',
+          programStage: MgysdDhis2Uids.enrolledCaseClosureStage,
           icon: Icons.task_alt_outlined,
           trackedEntityInstance: household.householdTei,
           enrollment: household.enrollmentId,

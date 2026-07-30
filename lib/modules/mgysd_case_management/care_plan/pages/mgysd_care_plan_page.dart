@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:lncmis_mobile_app/core/offline_db/offline_db_provider.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
+import 'package:lncmis_mobile_app/modules/mgysd_case_management/workflow/helpers/mgysd_program_stage_event_helper.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/models/mgysd_case.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -966,6 +967,73 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
         'syncStatus': 'not-synced',
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+
+    final enrollmentRows = await db.query(
+      'enrollment',
+      columns: ['enrollment', 'orgUnit'],
+      where: 'trackedEntityInstance = ? AND program = ?',
+      whereArgs: [householdTei, MgysdDhis2Uids.enrolledHouseholdsProgram],
+      orderBy: 'enrollmentDate DESC',
+      limit: 1,
+    );
+    final enrollmentId = enrollmentRows.isEmpty
+        ? ''
+        : (enrollmentRows.first['enrollment'] ?? '').toString();
+    final orgUnit = enrollmentRows.isEmpty
+        ? ''
+        : (enrollmentRows.first['orgUnit'] ?? '').toString();
+    final clientGoals = _payloadForGoalGroup(goalGroupClient);
+    final workerGoals = _payloadForGoalGroup(goalGroupSocialWorker);
+    final caregiverGoals = _payloadForGoalGroup(goalGroupCaregiver);
+    final disagreements = _disagreementDetailsPayload();
+    String goalText(dynamic source, String term) {
+      if (source is! Map) return '';
+      final key = term == 'LONG_TERM'
+          ? 'longTerm'
+          : term == 'MEDIUM_TERM'
+              ? 'mediumTerm'
+              : 'shortTerm';
+      final goals = source[key];
+      if (goals is! List) return '';
+      return goals
+          .whereType<Map>()
+          .map((g) => (g['description'] ?? g['goal'] ?? '').toString())
+          .where((v) => v.trim().isNotEmpty)
+          .join(' | ');
+    }
+    String disagreementValue(String key) {
+      if (disagreements is! List) return '';
+      return disagreements
+          .whereType<Map>()
+          .map((item) => (item[key] ?? '').toString())
+          .where((v) => v.trim().isNotEmpty)
+          .join(' | ');
+    }
+    await MgysdProgramStageEventHelper.saveProgramStageEvent(
+      db: db,
+      eventId: _carePlanId,
+      status: status,
+      eventDate: nowIso.substring(0, 10),
+      orgUnit: orgUnit,
+      program: MgysdDhis2Uids.enrolledHouseholdsProgram,
+      programStage: MgysdDhis2Uids.carePlanStage,
+      trackedEntityInstance: householdTei,
+      enrollment: enrollmentId,
+      dataValues: {
+        MgysdDhis2Uids.deCareClientLongTermGoals: goalText(clientGoals, 'LONG_TERM'),
+        MgysdDhis2Uids.deCareClientMediumTermGoals: goalText(clientGoals, 'MEDIUM_TERM'),
+        MgysdDhis2Uids.deCareClientShortTermGoals: goalText(clientGoals, 'SHORT_TERM'),
+        MgysdDhis2Uids.deCareSocialWorkerLongTermGoals: goalText(workerGoals, 'LONG_TERM'),
+        MgysdDhis2Uids.deCareSocialWorkerMediumTermGoals: goalText(workerGoals, 'MEDIUM_TERM'),
+        MgysdDhis2Uids.deCareSocialWorkerShortTermGoals: goalText(workerGoals, 'SHORT_TERM'),
+        MgysdDhis2Uids.deCareGuardianLongTermGoals: goalText(caregiverGoals, 'LONG_TERM'),
+        MgysdDhis2Uids.deCareGuardianMediumTermGoals: goalText(caregiverGoals, 'MEDIUM_TERM'),
+        MgysdDhis2Uids.deCareGuardianShortTermGoals: goalText(caregiverGoals, 'SHORT_TERM'),
+        MgysdDhis2Uids.deCareDisagreeFirstName: disagreementValue('firstName'),
+        MgysdDhis2Uids.deCareDisagreeLastName: disagreementValue('lastName'),
+        MgysdDhis2Uids.deCareDisagreeReason: disagreementValue('reason'),
+      },
     );
   }
 

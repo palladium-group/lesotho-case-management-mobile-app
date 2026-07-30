@@ -6,7 +6,7 @@ import 'package:lncmis_mobile_app/core/utils/app_util.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/models/mgysd_case.dart';
 import 'package:sqflite/sqflite.dart';
-
+import 'package:lncmis_mobile_app/modules/mgysd_case_management/workflow/helpers/mgysd_program_stage_event_helper.dart';
 class MgysdSocialInvestigationPage extends StatefulWidget {
   const MgysdSocialInvestigationPage({
     Key? key,
@@ -3502,20 +3502,79 @@ class _MgysdSocialInvestigationPageState
   }
 
   Future<void> _saveProgramStageEventRow({required Database db, required String status, required String eventDate}) async {
-    await db.insert(
-      'events',
-      {
-        'id': _eventId,
-        'event': _eventId,
-        'eventDate': eventDate,
-        'program': MgysdDhis2Uids.assessedHouseholdsProgram,
-        'programStage': MgysdDhis2Uids.socialInvestigationStage,
-        'trackedEntityInstance': _eventOwnerTei,
-        'status': status,
-        'orgUnit': _caseOrgUnit,
-        'syncStatus': 'not-synced',
+    final part3 = (_payload(status)['part3'] ?? {}) as Map<String, dynamic>;
+    Map<String, dynamic> domain(String key) =>
+        (part3[key] ?? const <String, dynamic>{}) as Map<String, dynamic>;
+
+    await MgysdProgramStageEventHelper.saveProgramStageEvent(
+      db: db,
+      eventId: _eventId,
+      status: status,
+      eventDate: eventDate,
+      orgUnit: _caseOrgUnit,
+      program: MgysdDhis2Uids.assessedHouseholdsProgram,
+      programStage: MgysdDhis2Uids.socialInvestigationStage,
+      trackedEntityInstance: _eventOwnerTei,
+      dataValues: {
+        MgysdDhis2Uids.deSiFirstName: _socialWorkerFirstNameController.text,
+        MgysdDhis2Uids.deSiLastName: _socialWorkerSurnameController.text,
+        MgysdDhis2Uids.deSiPhone: _socialWorkerPhoneController.text,
+        MgysdDhis2Uids.deSiIncidentPattern: _incidentPattern,
+        MgysdDhis2Uids.deSiDistrict: _incidentDistrictController.text,
+        MgysdDhis2Uids.deSiCommunityCouncil: _incidentCommunityCouncilController.text,
+        MgysdDhis2Uids.deSiVillage: _incidentVillageController.text,
+        MgysdDhis2Uids.deSiAssessmentChanged: _changedSinceInitialAssessment,
+        MgysdDhis2Uids.deSiChangeReason: _changesSinceInitialReasonController.text,
+        MgysdDhis2Uids.deSiAdditionalObservations: _changesSinceInitialObservationsController.text,
+        't9MyIrxgRSz': domain('physicalHealth')['rating'],
+        'oaDTx4J5EyB': domain('physicalHealth')['observations'],
+        'RCTqBWPBcI9': domain('physicalHealth')['strengths'],
+        'PxvNJZWAcPD': domain('physicalHealth')['challenges'],
+        'fAuuUmTMvYg': domain('emotionalHealth')['rating'],
+        'o78KTEXhQiy': domain('emotionalHealth')['observations'],
+        'YpARuE6Y2Pl': domain('emotionalHealth')['strengths'],
+        'bmdBWMDIXtQ': domain('emotionalHealth')['challenges'],
+        'nf1lUdwfGL7': domain('education')['rating'],
+        'bIByy8RBVnQ': domain('education')['observations'],
+        'b4wSLDq0vhM': domain('education')['strengths'],
+        'nWsaaSe1klU': domain('education')['challenges'],
+        'bKTTC1xxL3t': domain('behaviouralDevelopment')['observations'],
+        'dU3jIu08ryu': domain('behaviouralDevelopment')['strengths'],
+        'IZ5DnHuu3pN': domain('behaviouralDevelopment')['challenges'],
+        'Z0z38RYjy77': domain('identity')['observations'],
+        'PdrvYognd7y': domain('identity')['strengths'],
+        'ZEAYs0Fnzvb': domain('identity')['challenges'],
+        'k0Ik2xJsHDl': domain('familyBackground')['rating'],
+        'XB7RLLQgU1F': domain('familyBackground')['observations'],
+        'ysY9wKRU5fE': domain('familyBackground')['strengths'],
+        'a02A4U9BQQ0': domain('familyBackground')['challenges'],
+        'mQayWci59n4': domain('caregiverWellbeing')['rating'],
+        'WqLgxEDZtfP': domain('caregiverWellbeing')['observations'],
+        'MZRMxOp0EoV': domain('caregiverWellbeing')['strengths'],
+        'SgB7LzfM3kt': domain('caregiverWellbeing')['challenges'],
+        'IByvTnQBrZ5': domain('extendedFamily')['rating'],
+        'Ad7FrGPyNJF': domain('extendedFamily')['observations'],
+        'yxzYAjiktVi': domain('extendedFamily')['strengths'],
+        'FE5I7XVQ2J3': domain('extendedFamily')['challenges'],
+        'KeiF3aK0QNI': domain('parentSiblingRelationship')['rating'],
+        'z69fmJ4GRHc': domain('parentSiblingRelationship')['observations'],
+        'CgoAckfgdUN': domain('parentSiblingRelationship')['strengths'],
+        'ajrgDRw1rhN': domain('parentSiblingRelationship')['challenges'],
+        'nS5KHNR8E91': domain('peerRelationship')['observations'],
+        'lrFCxTYisBG': domain('peerRelationship')['strengths'],
+        'kqgvL8SfunA': domain('peerRelationship')['challenges'],
+        'Ictu4p4iFND': domain('alternativeCare')['observations'],
+        'uzblliQBYz6': domain('alternativeCare')['strengths'],
+        'C5pbISpAWry': domain('alternativeCare')['challenges'],
+        'gBd1mT2jaaP': domain('housing')['rating'],
+        'G9sfhJ6Ks1M': domain('housing')['observations'],
+        'ezeEaqAi3CF': domain('housing')['strengths'],
+        'qygp5C0xDR8': domain('housing')['challenges'],
+        'wkvOsAGK1iD': domain('socialInclusion')['rating'],
+        'BzTphSnSjuK': domain('socialInclusion')['observations'],
+        'GHT32pRIRSJ': domain('socialInclusion')['strengths'],
+        'wj0g8OuClZK': domain('socialInclusion')['challenges'],
       },
-      conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 

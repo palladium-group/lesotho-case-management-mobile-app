@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lncmis_mobile_app/app_state/current_user_state/current_user_state.dart';
 import 'package:lncmis_mobile_app/core/offline_db/offline_db_provider.dart';
+import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/workflow/helpers/mgysd_program_stage_event_helper.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/models/mgysd_case.dart';
 import 'package:sqflite/sqflite.dart';
@@ -321,6 +322,16 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
         eventId: widget.mgysdCase.id,
         status: status,
         eventDate: eventDate,
+        dataValues: {
+          MgysdDhis2Uids.deReferralServiceCategory: _selectedCategory,
+          MgysdDhis2Uids.deReferralReceivingOrganisation: _receivingOrganisationController.text,
+          MgysdDhis2Uids.deReferralContactPerson: _contactPersonController.text,
+          MgysdDhis2Uids.deReferralContactPhone: _contactPhoneController.text,
+          MgysdDhis2Uids.deReferralDocuments: _documentsAccompanyingController.text,
+          MgysdDhis2Uids.deReferralReason: _reasonForReferralController.text,
+          MgysdDhis2Uids.deReferralPriority: _priority,
+          MgysdDhis2Uids.deReferralRecommendations: _recommendationsController.text,
+        },
       );
 
       await db.insert(

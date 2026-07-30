@@ -25,38 +25,27 @@ import 'package:lncmis_mobile_app/models/enrollment.dart';
 import 'package:lncmis_mobile_app/models/events.dart';
 import 'package:lncmis_mobile_app/models/tei_relationship.dart';
 import 'package:lncmis_mobile_app/models/tracked_entity_instance.dart';
-import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
 
 class SynchronizationService {
   late HttpService httpClient;
 
-  final List<String> programs;
+  final List? programs;
   final List? orgUnitIds;
 
   final String offlineSyncStatus = 'not-synced';
   final String onlineSyncStatus = 'synced';
 
   SynchronizationService(
-    String? username,
-    String? password,
-    List? userPrograms,
-    this.orgUnitIds,
-  ) : programs = <String>{
-          ...?userPrograms?.map((program) => program.toString()),
-          ...MgysdDhis2Uids.synchronizationPrograms,
-        }.toList() {
+      String? username,
+      String? password,
+      this.programs,
+      this.orgUnitIds,
+      ) {
     httpClient = HttpService(
       username: username,
       password: password,
     );
   }
-
-
-  List<String> get trackerPrograms =>
-      MgysdDhis2Uids.trackerSynchronizationPrograms;
-
-  List<String> get eventPrograms =>
-      MgysdDhis2Uids.eventSynchronizationPrograms;
 
   Future<List> getDataPaginationFilters(
       String url, {
@@ -399,8 +388,8 @@ class SynchronizationService {
     int enrollmentsCount = 0;
     String url = 'api/trackedEntityInstances';
     try {
-      for (String? orgUnit in orgUnitIds ?? []) {
-        for (String program in trackerPrograms) {
+      for (String? orgUnit in currentUser.userOrgUnitIds ?? []) {
+        for (String? program in currentUser.programs ?? []) {
           var queryParameters = {
             "program": program,
             "ou": orgUnit,
@@ -426,8 +415,8 @@ class SynchronizationService {
     int eventsCount = 0;
     String url = 'api/events';
     try {
-      for (String? orgUnit in orgUnitIds ?? []) {
-        for (String program in eventPrograms) {
+      for (String? orgUnit in currentUser.userOrgUnitIds ?? []) {
+        for (String? program in currentUser.programs ?? []) {
           var queryParameters = {
             "program": program,
             "orgUnit": orgUnit,
