@@ -1,26 +1,6 @@
-# NCMIS Enterprise Documentation
+# NCMIS
 
-This repository contains the enterprise documentation for the National Case Management Information System (NCMIS).
+Enterprise documentation.
 
-## Enterprise Documentation
-- Executive Summary
-- Business Requirements
-- Functional Specification
-- Technical Architecture
-- Data Model
-- API Documentation
-- Security
-- Deployment
-- Operations
-- Offline Synchronization
-- Developer Guide
-- User Guide
-- Administrator Guide
-- Testing
-- Government Handover
-
-## Critical Business Rule
-
-A household is enrolled into **MGYSD Enrolled Households** only when:
-- Investigation Outcome = Eligible
-- Supervisor Decision = Approve
+## Enrollment Rule
+Enrollment into MGYSD Enrolled Households occurs only after **Eligible** + **Supervisor Approval**.

@@ -1,3 +1,0 @@
-# Handover
-
-Comprehensive documentation section.
