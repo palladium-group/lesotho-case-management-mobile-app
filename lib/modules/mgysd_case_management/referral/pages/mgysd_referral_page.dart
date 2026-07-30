@@ -1222,6 +1222,13 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
             ? 'Referral completed successfully.'
             : 'Referral draft saved.',
       );
+
+      Navigator.pop(context, {
+        'referralSaved': true,
+        'status': status,
+        'caseId': widget.mgysdCase.id,
+        'householdTei': (widget.householdTei ?? '').trim(),
+      });
     } catch (e) {
       _showSnack('Failed to save referral: $e');
     } finally {
