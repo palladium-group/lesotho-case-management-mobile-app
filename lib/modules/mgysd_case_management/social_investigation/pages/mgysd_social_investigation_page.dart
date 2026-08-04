@@ -6404,7 +6404,7 @@ class _MgysdSocialInvestigationPageState
             _collapsiblePart(
               id: 'supervisorReview',
               title: 'Eligibility and Supervisor Review',
-              subtitle: 'Outcome, supervisor remarks and final approval decision.',
+              subtitle: 'Outcome,  supervisor remarks and final approval decision.',
               icon: Icons.verified_user_outlined,
               child: _supervisorReviewSection(),
             ),
