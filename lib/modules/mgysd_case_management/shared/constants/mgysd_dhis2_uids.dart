@@ -4,7 +4,7 @@ class MgysdDhis2Uids {
   // Replace these placeholders with real DHIS2 program UIDs.
   // ---------------------------------------------------------------------------
   static const String reportedCasesEventProgram = 'TbR7dOCu5XK';
-  static const String reportedCasesProgramStage = 'MGYSD_REPORT_STAGE_UID';
+  static const String reportedCasesProgramStage = 'TybrOV3Isgz';
 
   // UAT household-program model.
   // All households with completed Intake + Initial Risk are enrolled here.
@@ -32,13 +32,126 @@ class MgysdDhis2Uids {
   // ---------------------------------------------------------------------------
   // CASE MANAGEMENT PROGRAM STAGES
   // ---------------------------------------------------------------------------
-  static const String initialRiskAssessmentStage = 'MGYSD_PS_INITIAL_RISK_ASSESSMENT_UID';
-  static const String socialInvestigationStage = 'MGYSD_PS_SOCIAL_INVESTIGATION_UID';
-  static const String carePlanStage = 'MGYSD_PS_CARE_PLAN_UID';
-  static const String referralStage = 'MGYSD_PS_REFERRAL_UID';
-  static const String monitoringStage = 'MGYSD_PS_MONITORING_UID';
-  static const String familyServiceProvisionStage = 'MGYSD_FAMILY_PS_SERVICE_PROVISION_UID';
-  static const String familyReferralStage = 'MGYSD_FAMILY_PS_REFERRAL_UID';
+  static const String initialRiskAssessmentStage = 'Yd9HAhIUdZT';
+  static const String socialInvestigationStage = 'KoYx0zLUSC7';
+  // Not present in the supplied metadata export. Reassessment remains local until the stage is added to DHIS2.
+  static const String enrolledsocialInvestigationStage = '';
+  static const String carePlanStage = 'jvfi6JnZPxU';
+  static const String referralStage = 'uijeGa1d3ZW';
+  // Not present in the supplied metadata export. Monitoring remains local until the stage is added to DHIS2.
+  static const String monitoringStage = '';
+  static const String familyServiceProvisionStage = 'JusjUjRXKCN';
+  static const String familyReferralStage = 'lRLikYWFv5u';
+
+  static const String enrolledServiceProvisionStage = 'zz2Le52Wx0w';
+  static const String enrolledCaseClosureStage = 'JvJ3YxzV9GT';
+  static const String familyCarePlanStage = 'cmdutyjEbKj';
+  static const String familyCaseClosureStage = 'knCYcUv7MOP';
+
+  // ---------------------------------------------------------------------------
+  // PROGRAM STAGE DATA ELEMENTS
+  // ---------------------------------------------------------------------------
+  // Initial Risk Assessment
+  static const String deRiskSocialWorker = 'x7OiQdB0z8N';
+  static const String deRiskFamilyBackground = 'k0Ik2xJsHDl';
+  static const String deRiskFamilyBackgroundNotes = 'rpTsXSQdCLG';
+  static const String deRiskExtendedFamilyRelationships = 'IByvTnQBrZ5';
+  static const String deRiskExtendedFamilyNotes = 'Ad7FrGPyNJF';
+  static const String deRiskClientRelationships = 'J7Gw2WBtDdl';
+  static const String deRiskClientRelationshipsNotes = 'A1FL4kEtQmF';
+  static const String deRiskLivingCircumstances = 'x0aRkojnDZw';
+  static const String deRiskLivingCircumstancesNotes = 'pydu54qM0c5';
+  static const String deRiskHousing = 'BiNg7sCCCwj';
+  static const String deRiskHousingNotes = 'Bx5q2b8SYrv';
+  static const String deRiskPhysicalHealth = 't9MyIrxgRSz';
+  static const String deRiskPhysicalHealthNotes = 'MLzjC3tFcw4';
+  static const String deRiskNutrition = 'xcUH1xsraWJ';
+  static const String deRiskNutritionNotes = 'd5oYGFPlauq';
+  static const String deRiskEmotionalHealth = 'fAuuUmTMvYg';
+  static const String deRiskEmotionalHealthNotes = 'l2vSjTBEKF6';
+  static const String deRiskSupervision = 'MCZ0FP8pMAA';
+  static const String deRiskSupervisionNotes = 'LycDSRZMPrQ';
+  static const String deRiskEducation = 'nf1lUdwfGL7';
+  static const String deRiskEducationNotes = 'BjWTsZspDMz';
+  static const String deRiskLevel = 'npSovAKbpKJ';
+  static const String deRiskReason = 'OJtTGOXdPQW';
+  static const String deRiskImmediateReferrals = 'zhVMrnMScAf';
+  static const String deRiskSelfCare = 'MueBNV7Q8Dv';
+  static const String deRiskDisabilityDiagnosis = 'LP3qsc3lbwf';
+  static const String deRiskAssistiveDevices = 'fMIT7ZRxfJa';
+  static const String deRiskRehabilitationServices = 'aNCWaj2uiNT';
+
+  // Social Investigation
+  static const String deSiFirstName = 'iKnsia7KkBH';
+  static const String deSiLastName = 'LJneSL7qw2j';
+  static const String deSiPhone = 'btlkDoGnC6V';
+  static const String deSiIncidentPattern = 'OpFRYfIY7Mg';
+  static const String deSiDistrict = 'adljwftsi5a';
+  static const String deSiCommunityCouncil = 'gZnegKWLd5c';
+  static const String deSiVillage = 'UwebjUHdn33';
+  static const String deSiAssessmentChanged = 'vPcfbHYu7Ec';
+  static const String deSiChangeReason = 'ZwsovAKkbT0';
+  static const String deSiAdditionalObservations = 'owwT4uo6Q1A';
+
+  // Care Plan (shared DEs for household and family-member stages)
+  static const String deCareClientLongTermGoals = 'MGcvdwB9an1';
+  static const String deCareClientMediumTermGoals = 'XccSRDYOuIi';
+  static const String deCareClientShortTermGoals = 'YXRW59Ix4Yo';
+  static const String deCareSocialWorkerLongTermGoals = 'SmNDSnIpDZI';
+  static const String deCareSocialWorkerMediumTermGoals = 'HYtAelvhmMm';
+  static const String deCareSocialWorkerShortTermGoals = 'j05YMaR7nPu';
+  static const String deCareGuardianLongTermGoals = 'Cd899Q0QbGN';
+  static const String deCareGuardianMediumTermGoals = 'xdMgSCXyiOv';
+  static const String deCareGuardianShortTermGoals = 'DCflOGcRpRf';
+  static const String deCareDisagreeFirstName = 'zU38XqTkS39';
+  static const String deCareDisagreeLastName = 'nZ4irElAn5H';
+  static const String deCareDisagreeReason = 'LIqmToBEqln';
+
+  // Referral
+  static const String deReferralServiceCategory = 'kZTkQlqucTY';
+  static const String deReferralReceivingOrganisation = 'GbUlBfHYiQW';
+  static const String deReferralContactPerson = 'ZaxqcBTBZlX';
+  static const String deReferralContactPhone = 'cOZ76AfIzNR';
+  static const String deReferralDocuments = 'KEqZPvTrHvU';
+  static const String deReferralReason = 'eNM5xzGJ1Qw';
+  static const String deReferralPriority = 'kNXszeg38Iw';
+  static const String deReferralRecommendations = 'o6ArGWXS4Rt';
+
+  // Service Provision
+  static const String deServiceProvided = 'zgJofqWwDkV';
+  static const String deServiceProvider = 'xlrAIsW0sLp';
+  static const String deServiceOutcome = 'bNRpZ7ufqy1';
+  static const String deServiceGoalStatus = 'HFChYcrz4Eu';
+  static const String deServiceGoalStatusNotes = 'UQc0FNIBJbq';
+
+  // Case Closure
+  static const String deClosureObjectivesMet = 'NZLHtwFJvQg';
+  static const String deClosureCompletionDate = 'y6B3MP8qy9a';
+  static const String deClosureOpeningDate = 'SOEcwstdK7K';
+  static const String deClosureMeetingPerson = 'QqFnMiruug4';
+  static const String deClosureTransferredTo = 'UqtSGmJqbE1';
+  static const String deClosureCurrentAddress = 'DARyQfvE8Xf';
+  static const String deClosurePreviousAddress = 'FNE7QsfJkSD';
+  static const String deClosureLostToFollowUp = 'UJMn6Jpp2VY';
+  static const String deClosureNoLongerNeedsCare = 'LaXNhcS3e0u';
+  static const String deClosureNoLongerWilling = 'CzUzgXwT4VF';
+  static const String deClosureRelationshipToClient = 'XYmD9IE4KJx';
+
+  static String programForStage(String stage) {
+    if (stage == initialRiskAssessmentStage || stage == socialInvestigationStage) {
+      return assessedHouseholdsProgram;
+    }
+    if (stage == carePlanStage || stage == referralStage ||
+        stage == enrolledServiceProvisionStage || stage == enrolledCaseClosureStage) {
+      return enrolledHouseholdsProgram;
+    }
+    if (stage == familyCarePlanStage || stage == familyReferralStage ||
+        stage == familyServiceProvisionStage || stage == familyCaseClosureStage) {
+      return familyMemberTrackerProgram;
+    }
+    if (stage == reportedCasesProgramStage) return reportedCasesEventProgram;
+    return '';
+  }
 
   // ---------------------------------------------------------------------------
   // REPORTED CASE EVENT PROGRAM DATA ELEMENTS
@@ -67,6 +180,7 @@ class MgysdDhis2Uids {
   static const String deClientsJson = 'DE_CLIENTS_JSON';
   static const String dePeopleInvolvedJson = 'DE_PEOPLE_INVOLVED_JSON';
   static const String deReportPayloadJson = 'MGYSD_REPORT_PAYLOAD_JSON';
+
 
   static const String deConcernReason = 'UJIrqEgPMn1';
   static const String deConcernReasonOther = 'UJIrqEgPMn1_OTHER';

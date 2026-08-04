@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:lncmis_mobile_app/core/offline_db/offline_db_provider.dart';
 import 'package:lncmis_mobile_app/core/utils/app_util.dart';
+import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/models/mgysd_case.dart';
+import 'package:lncmis_mobile_app/modules/mgysd_case_management/workflow/helpers/mgysd_program_stage_event_helper.dart';
 import 'package:sqflite/sqflite.dart';
 
 class MgysdCaseClosurePage extends StatefulWidget {
@@ -344,6 +346,48 @@ class _MgysdCaseClosurePageState extends State<MgysdCaseClosurePage> {
           'updatedAt': now,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      final enrollmentRows = await db.query(
+        'enrollment',
+        columns: ['enrollment', 'orgUnit'],
+        where: 'trackedEntityInstance = ? AND program = ?',
+        whereArgs: [_householdTei, MgysdDhis2Uids.enrolledHouseholdsProgram],
+        orderBy: 'enrollmentDate DESC',
+        limit: 1,
+      );
+      final decisions = _closureDecisions;
+      final meetingNames = _peopleInMeeting
+          .map((p) => p.nameController.text.trim())
+          .where((v) => v.isNotEmpty)
+          .join(' | ');
+      final meetingRelationships = _peopleInMeeting
+          .map((p) => p.relationshipController.text.trim())
+          .where((v) => v.isNotEmpty)
+          .join(' | ');
+      await MgysdProgramStageEventHelper.saveProgramStageEvent(
+        db: db,
+        eventId: _closureId,
+        status: status,
+        eventDate: closureDate,
+        orgUnit: enrollmentRows.isEmpty ? '' : (enrollmentRows.first['orgUnit'] ?? '').toString(),
+        program: MgysdDhis2Uids.enrolledHouseholdsProgram,
+        programStage: MgysdDhis2Uids.enrolledCaseClosureStage,
+        trackedEntityInstance: _householdTei,
+        enrollment: enrollmentRows.isEmpty ? '' : (enrollmentRows.first['enrollment'] ?? '').toString(),
+        dataValues: {
+          MgysdDhis2Uids.deClosureCompletionDate: closureDate,
+          MgysdDhis2Uids.deClosureOpeningDate: _caseOpeningDateController.text,
+          MgysdDhis2Uids.deClosureCurrentAddress: _currentAddressController.text,
+          MgysdDhis2Uids.deClosurePreviousAddress: _previousAddressController.text,
+          MgysdDhis2Uids.deClosureMeetingPerson: meetingNames,
+          MgysdDhis2Uids.deClosureRelationshipToClient: meetingRelationships,
+          MgysdDhis2Uids.deClosureObjectivesMet: decisions['OBJECTIVES_MET'] ?? false,
+          MgysdDhis2Uids.deClosureLostToFollowUp: decisions['LOST_TO_FOLLOW_UP'] ?? false,
+          MgysdDhis2Uids.deClosureNoLongerNeedsCare: decisions['CHANGE_IN_CIRCUMSTANCES'] ?? false,
+          MgysdDhis2Uids.deClosureNoLongerWilling: decisions['NO_LONGER_WILLING'] ?? false,
+          MgysdDhis2Uids.deClosureTransferredTo: decisions['CLIENT_MOVED'] == true ? 'Transferred' : '',
+        },
       );
 
       if (!mounted) return;

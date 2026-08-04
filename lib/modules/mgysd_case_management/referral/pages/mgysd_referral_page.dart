@@ -1,9 +1,11 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:lncmis_mobile_app/app_state/current_user_state/current_user_state.dart';
 import 'package:lncmis_mobile_app/core/offline_db/offline_db_provider.dart';
+import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/workflow/helpers/mgysd_program_stage_event_helper.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/models/mgysd_case.dart';
 import 'package:sqflite/sqflite.dart';
@@ -42,6 +44,93 @@ class _ServiceCategory {
   final IconData icon;
 }
 
+class MgysdCountryCodeOption {
+  final String code;
+  final String label;
+  final String dialCode;
+  final int minNationalDigits;
+  final int maxNationalDigits;
+  final List<String> allowedNationalPrefixes;
+  final List<String> disallowedNationalPrefixes;
+  final String prefixHint;
+  final bool useNanpRules;
+
+  const MgysdCountryCodeOption({
+    required this.code,
+    required this.label,
+    required this.dialCode,
+    this.minNationalDigits = 7,
+    this.maxNationalDigits = 12,
+    this.allowedNationalPrefixes = const [],
+    this.disallowedNationalPrefixes = const [],
+    this.prefixHint = '',
+    this.useNanpRules = false,
+  });
+}
+
+class MgysdPhoneNumberInputFormatter extends TextInputFormatter {
+  final MgysdCountryCodeOption country;
+
+  const MgysdPhoneNumberInputFormatter(this.country);
+
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue,
+      TextEditingValue newValue,
+      ) {
+    final formatted = country.code == 'INTL'
+        ? _formatInternationalNumber(newValue.text)
+        : _formatNationalNumber(newValue.text);
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+      composing: TextRange.empty,
+    );
+  }
+
+  String _formatInternationalNumber(String value) {
+    final trimmed = value.trim();
+    final hasLeadingPlus = trimmed.startsWith('+');
+    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+    final limitedDigits = digits.length > country.maxNationalDigits
+        ? digits.substring(0, country.maxNationalDigits)
+        : digits;
+
+    if (limitedDigits.isEmpty) {
+      return hasLeadingPlus ? '+' : '';
+    }
+
+    return hasLeadingPlus ? '+$limitedDigits' : limitedDigits;
+  }
+
+  String _formatNationalNumber(String value) {
+    final dialDigits = country.dialCode.replaceAll('+', '');
+    var digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+
+    // If the user pastes a full number such as +26658881234 or 26658881234,
+    // keep only the national part because the country code is already selected.
+    if (digits.startsWith(dialDigits) && digits.length > dialDigits.length) {
+      digits = digits.substring(dialDigits.length);
+    }
+
+    // Remove a leading trunk 0 so countries like South Africa/UK can be typed
+    // as 082... or 071... while still storing only the national digits after +code.
+    if (digits.startsWith('0')) {
+      final withoutLeadingZeros = digits.replaceFirst(RegExp(r'^0+'), '');
+      if (withoutLeadingZeros.isNotEmpty) {
+        digits = withoutLeadingZeros;
+      }
+    }
+
+    if (digits.length > country.maxNationalDigits) {
+      digits = digits.substring(0, country.maxNationalDigits);
+    }
+
+    return digits;
+  }
+}
+
 class _MgysdReferralPageState extends State<MgysdReferralPage> {
   final _formKey = GlobalKey<FormState>();
 
@@ -65,11 +154,14 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
 
   String _selectedCategory = '';
   final Set<String> _selectedServices = {};
+  final Set<String> _selectedAttachments = {};
   String _priority = 'ROUTINE';
   bool _consentDiscussed = false;
   bool _saving = false;
   String? _savedStatus;
   bool _userFilled = false;
+  bool _countryPickerBusy = false;
+  String _contactPhoneCountryCode = 'LS';
 
   static const List<_ServiceCategory> _serviceCategories = [
     _ServiceCategory(
@@ -149,6 +241,144 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
     'ROUTINE': 'Routine',
     'URGENT': 'Urgent',
     'EMERGENCY': 'Emergency',
+  };
+
+  static const List<MgysdCountryCodeOption> _phoneCountryOptions = [
+    MgysdCountryCodeOption(
+      code: 'LS',
+      label: 'Lesotho (+266)',
+      dialCode: '+266',
+      minNationalDigits: 8,
+      maxNationalDigits: 8,
+      allowedNationalPrefixes: ['2', '5', '6'],
+      disallowedNationalPrefixes: ['54', '55'],
+      prefixHint: 'Lesotho numbers must start with 2, 5 or 6. Prefixes 54 and 55 are not allowed',
+    ),
+    MgysdCountryCodeOption(
+      code: 'ZA',
+      label: 'South Africa (+27)',
+      dialCode: '+27',
+      minNationalDigits: 9,
+      maxNationalDigits: 9,
+      allowedNationalPrefixes: [
+        '60',
+        '61',
+        '62',
+        '63',
+        '64',
+        '65',
+        '66',
+        '67',
+        '68',
+        '71',
+        '72',
+        '73',
+        '74',
+        '76',
+        '78',
+        '79',
+        '81',
+        '82',
+        '83',
+        '84',
+      ],
+      prefixHint: 'South African mobile numbers usually start with 6, 7 or 8 ranges such as 60, 71 or 82',
+    ),
+    MgysdCountryCodeOption(
+      code: 'ZW',
+      label: 'Zimbabwe (+263)',
+      dialCode: '+263',
+      minNationalDigits: 9,
+      maxNationalDigits: 9,
+      allowedNationalPrefixes: ['71', '73', '77', '78'],
+      prefixHint: 'Zimbabwe mobile numbers must start with 71, 73, 77 or 78',
+    ),
+    MgysdCountryCodeOption(
+      code: 'MZ',
+      label: 'Mozambique (+258)',
+      dialCode: '+258',
+      minNationalDigits: 8,
+      maxNationalDigits: 9,
+      allowedNationalPrefixes: ['82', '83', '84', '85', '86', '87'],
+      prefixHint: 'Mozambique mobile numbers must start with 82, 83, 84, 85, 86 or 87',
+    ),
+    MgysdCountryCodeOption(
+      code: 'BW',
+      label: 'Botswana (+267)',
+      dialCode: '+267',
+      minNationalDigits: 8,
+      maxNationalDigits: 8,
+      allowedNationalPrefixes: ['71', '72', '73', '74', '75', '76'],
+      prefixHint: 'Botswana mobile numbers must start with 71, 72, 73, 74, 75 or 76',
+    ),
+    MgysdCountryCodeOption(
+      code: 'NA',
+      label: 'Namibia (+264)',
+      dialCode: '+264',
+      minNationalDigits: 9,
+      maxNationalDigits: 9,
+      allowedNationalPrefixes: ['81', '82', '83', '84', '85'],
+      prefixHint: 'Namibia mobile/electronic communications numbers must start with 81, 82, 83, 84 or 85',
+    ),
+    MgysdCountryCodeOption(
+      code: 'SZ',
+      label: 'Eswatini (+268)',
+      dialCode: '+268',
+      minNationalDigits: 8,
+      maxNationalDigits: 8,
+      allowedNationalPrefixes: ['75', '76', '77', '78', '79'],
+      prefixHint: 'Eswatini mobile numbers must start with 75, 76, 77, 78 or 79',
+    ),
+    MgysdCountryCodeOption(
+      code: 'ZM',
+      label: 'Zambia (+260)',
+      dialCode: '+260',
+      minNationalDigits: 9,
+      maxNationalDigits: 9,
+      allowedNationalPrefixes: ['76', '77', '95', '96', '97'],
+      prefixHint: 'Zambia mobile numbers must start with 76, 77, 95, 96 or 97',
+    ),
+    MgysdCountryCodeOption(
+      code: 'MW',
+      label: 'Malawi (+265)',
+      dialCode: '+265',
+      minNationalDigits: 7,
+      maxNationalDigits: 9,
+      allowedNationalPrefixes: ['1', '3', '7', '8', '9'],
+      prefixHint: 'Malawi numbers must start with an allocated range such as 1, 3, 7, 8 or 9',
+    ),
+    MgysdCountryCodeOption(
+      code: 'US',
+      label: 'USA/Canada (+1)',
+      dialCode: '+1',
+      minNationalDigits: 10,
+      maxNationalDigits: 10,
+      useNanpRules: true,
+      prefixHint: 'USA/Canada numbers must follow NANP format: area code and exchange code start with 2-9',
+    ),
+    MgysdCountryCodeOption(
+      code: 'GB',
+      label: 'United Kingdom (+44)',
+      dialCode: '+44',
+      minNationalDigits: 10,
+      maxNationalDigits: 10,
+      allowedNationalPrefixes: ['7'],
+      prefixHint: 'UK mobile numbers must start with 7 after the +44 country code',
+    ),
+    MgysdCountryCodeOption(
+      code: 'INTL',
+      label: 'Other country (use + code)',
+      dialCode: '+',
+      minNationalDigits: 8,
+      maxNationalDigits: 15,
+    ),
+  ];
+
+  static const Map<String, String> _attachmentLabels = {
+    'Assessment notes': 'Assessment notes',
+    'ID copy': 'ID copy',
+    'Medical note': 'Medical note',
+    'Court document': 'Court document',
   };
 
   @override
@@ -233,6 +463,652 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
     return '';
   }
 
+  MgysdCountryCodeOption _phoneCountryByCode(String code) {
+    for (final option in _phoneCountryOptions) {
+      if (option.code == code) return option;
+    }
+    return _phoneCountryOptions.first;
+  }
+
+  String _digitsOnly(String value) {
+    return value.replaceAll(RegExp(r'[^0-9]'), '');
+  }
+
+  bool _hasInvalidPhoneCharacters(String value) {
+    return RegExp(r'[^0-9+\s\-\(\)]').hasMatch(value);
+  }
+
+  bool _hasValidNationalLength(
+      String nationalDigits,
+      MgysdCountryCodeOption country,
+      ) {
+    return nationalDigits.length >= country.minNationalDigits &&
+        nationalDigits.length <= country.maxNationalDigits;
+  }
+
+  bool _hasDisallowedNationalPrefix(
+      String nationalDigits,
+      MgysdCountryCodeOption country,
+      ) {
+    if (country.code == 'INTL' || nationalDigits.isEmpty) return false;
+    return country.disallowedNationalPrefixes.any(nationalDigits.startsWith);
+  }
+
+  bool _hasPossibleNetworkPrefix(
+      String nationalDigits,
+      MgysdCountryCodeOption country,
+      ) {
+    if (country.code == 'INTL' || nationalDigits.isEmpty) return true;
+
+    if (_hasDisallowedNationalPrefix(nationalDigits, country)) {
+      return false;
+    }
+
+    if (country.useNanpRules) {
+      if (nationalDigits.isNotEmpty &&
+          !RegExp(r'^[2-9]').hasMatch(nationalDigits)) {
+        return false;
+      }
+      if (nationalDigits.length >= 4 &&
+          !RegExp(r'^[2-9][0-9]{2}[2-9]').hasMatch(nationalDigits)) {
+        return false;
+      }
+      return true;
+    }
+
+    if (country.allowedNationalPrefixes.isEmpty) return true;
+
+    return country.allowedNationalPrefixes.any((prefix) {
+      return prefix.startsWith(nationalDigits) ||
+          nationalDigits.startsWith(prefix);
+    });
+  }
+
+  bool _hasValidNetworkPrefix(
+      String nationalDigits,
+      MgysdCountryCodeOption country,
+      ) {
+    if (country.code == 'INTL') return true;
+
+    if (_hasDisallowedNationalPrefix(nationalDigits, country)) {
+      return false;
+    }
+
+    if (country.useNanpRules) {
+      return RegExp(r'^[2-9][0-9]{2}[2-9][0-9]{6}$')
+          .hasMatch(nationalDigits);
+    }
+
+    if (country.allowedNationalPrefixes.isEmpty) return true;
+    return country.allowedNationalPrefixes.any(nationalDigits.startsWith);
+  }
+
+  String _phonePrefixMessage(MgysdCountryCodeOption country) {
+    return country.prefixHint.isNotEmpty
+        ? country.prefixHint
+        : 'Phone number prefix does not match selected country';
+  }
+
+  String _phoneLengthMessage(MgysdCountryCodeOption country) {
+    if (country.minNationalDigits == country.maxNationalDigits) {
+      return '${country.label} numbers must have '
+          '${country.maxNationalDigits} digits after ${country.dialCode}';
+    }
+
+    return '${country.label} numbers must have '
+        '${country.minNationalDigits} to ${country.maxNationalDigits} digits '
+        'after ${country.dialCode}';
+  }
+
+  void _validateNationalPhoneDigits(
+      String nationalDigits,
+      MgysdCountryCodeOption country,
+      ) {
+    // Reused from Report Case: check prefix before length so invalid Lesotho
+    // prefixes such as 54 and 55 are reported immediately.
+    if (!_hasPossibleNetworkPrefix(nationalDigits, country)) {
+      throw FormatException(_phonePrefixMessage(country));
+    }
+
+    if (!_hasValidNationalLength(nationalDigits, country)) {
+      throw FormatException(_phoneLengthMessage(country));
+    }
+
+    if (!_hasValidNetworkPrefix(nationalDigits, country)) {
+      throw FormatException(_phonePrefixMessage(country));
+    }
+  }
+
+  String _normalisePhoneByCountryCode(
+      String value,
+      String countryCode,
+      ) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return '';
+
+    final country = _phoneCountryByCode(countryCode);
+    final compact = trimmed.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+    final digits = _digitsOnly(compact);
+
+    if (digits.isEmpty) {
+      throw const FormatException('Phone number must contain digits');
+    }
+
+    if (country.code == 'INTL') {
+      if (!compact.startsWith('+')) {
+        throw const FormatException(
+          'International numbers must start with +',
+        );
+      }
+      if (digits.length < 8 || digits.length > 15) {
+        throw const FormatException(
+          'International numbers must have 8 to 15 digits',
+        );
+      }
+      return '+$digits';
+    }
+
+    final dialDigits = country.dialCode.replaceAll('+', '');
+
+    if (compact.startsWith('+')) {
+      if (!digits.startsWith(dialDigits)) {
+        throw const FormatException(
+          'Phone number country code does not match selected country',
+        );
+      }
+      final nationalDigits = digits.substring(dialDigits.length);
+      _validateNationalPhoneDigits(nationalDigits, country);
+      return '+$digits';
+    }
+
+    if (digits.startsWith(dialDigits)) {
+      final nationalDigits = digits.substring(dialDigits.length);
+      _validateNationalPhoneDigits(nationalDigits, country);
+      return '+$digits';
+    }
+
+    final localDigits = digits.replaceFirst(RegExp(r'^0+'), '');
+    _validateNationalPhoneDigits(localDigits, country);
+    return '${country.dialCode}$localDigits';
+  }
+
+  String _normalisedPhoneNumber(String value, String countryCode) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return '';
+
+    try {
+      return _normalisePhoneByCountryCode(trimmed, countryCode);
+    } catch (_) {
+      return trimmed;
+    }
+  }
+
+  String? _phoneValidator(
+      String? value, {
+        required bool requiredField,
+        required String countryCode,
+      }) {
+    final trimmed = (value ?? '').trim();
+    if (!requiredField && trimmed.isEmpty) return null;
+    if (trimmed.isEmpty) return 'Required';
+
+    if (_hasInvalidPhoneCharacters(trimmed)) {
+      return 'Use numbers only';
+    }
+
+    final country = _phoneCountryByCode(countryCode);
+
+    try {
+      _normalisePhoneByCountryCode(trimmed, countryCode);
+      return null;
+    } on FormatException catch (e) {
+      if (country.code == 'INTL') {
+        return e.message.isNotEmpty
+            ? e.message
+            : 'Start with + country code, e.g. +266...';
+      }
+      return e.message.isNotEmpty
+          ? e.message
+          : 'Enter a valid ${country.label} phone number';
+    } catch (_) {
+      if (country.code == 'INTL') {
+        return 'Start with + country code, e.g. +266...';
+      }
+      return 'Enter a valid ${country.label} phone number';
+    }
+  }
+
+  bool _looksLikeEmail(String value) {
+    return value.contains('@') || RegExp(r'[A-Za-z]').hasMatch(value);
+  }
+
+  String? _phoneOrEmailValidator(
+      String? value, {
+        required bool requiredField,
+        required String countryCode,
+      }) {
+    final trimmed = (value ?? '').trim();
+    if (!requiredField && trimmed.isEmpty) return null;
+    if (trimmed.isEmpty) return 'Required';
+
+    if (_looksLikeEmail(trimmed)) {
+      final validEmail = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+      return validEmail.hasMatch(trimmed)
+          ? null
+          : 'Enter a valid email address';
+    }
+
+    return _phoneValidator(
+      trimmed,
+      requiredField: requiredField,
+      countryCode: countryCode,
+    );
+  }
+
+  String _countryDisplayName(MgysdCountryCodeOption country) {
+    final label = country.label.trim();
+    final bracketIndex = label.indexOf(' (');
+    if (bracketIndex > 0) return label.substring(0, bracketIndex);
+    return label;
+  }
+
+  String _countryFlag(MgysdCountryCodeOption country) {
+    switch (country.code) {
+      case 'LS':
+        return '🇱🇸';
+      case 'ZA':
+        return '🇿🇦';
+      case 'ZW':
+        return '🇿🇼';
+      case 'MZ':
+        return '🇲🇿';
+      case 'BW':
+        return '🇧🇼';
+      case 'NA':
+        return '🇳🇦';
+      case 'SZ':
+        return '🇸🇿';
+      case 'ZM':
+        return '🇿🇲';
+      case 'MW':
+        return '🇲🇼';
+      case 'US':
+        return '🇺🇸';
+      case 'GB':
+        return '🇬🇧';
+      default:
+        return '🌐';
+    }
+  }
+
+  String _phoneFieldLabel(String label, MgysdCountryCodeOption country) {
+    if (country.code == 'INTL') return label;
+    if (country.minNationalDigits == country.maxNationalDigits) {
+      return '$label (${country.maxNationalDigits} digits)';
+    }
+    return '$label '
+        '(${country.minNationalDigits}-${country.maxNationalDigits} digits)';
+  }
+
+  String _formatPhoneTextForSelectedCountry(
+      String value,
+      String countryCode,
+      ) {
+    final country = _phoneCountryByCode(countryCode);
+    return MgysdPhoneNumberInputFormatter(country).formatEditUpdate(
+      const TextEditingValue(),
+      TextEditingValue(text: value),
+    ).text;
+  }
+
+  void _formatPhoneControllerForSelectedCountry(
+      TextEditingController controller,
+      String countryCode,
+      ) {
+    final formatted = _formatPhoneTextForSelectedCountry(
+      controller.text,
+      countryCode,
+    );
+
+    controller.value = TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+      composing: TextRange.empty,
+    );
+  }
+
+  Future<String?> _showCountryPicker({
+    required String selectedCode,
+  }) async {
+    String query = '';
+
+    final selectedCountryCode = await showDialog<String>(
+      context: context,
+      useRootNavigator: true,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setModalState) {
+            final normalizedQuery = query.trim().toLowerCase();
+            final countries = normalizedQuery.isEmpty
+                ? _phoneCountryOptions
+                : _phoneCountryOptions.where((country) {
+              final countryName = _countryDisplayName(country).toLowerCase();
+              final label = country.label.toLowerCase();
+              final dialCode = country.dialCode.toLowerCase();
+              final code = country.code.toLowerCase();
+
+              return countryName.contains(normalizedQuery) ||
+                  label.contains(normalizedQuery) ||
+                  dialCode.contains(normalizedQuery) ||
+                  code.contains(normalizedQuery);
+            }).toList();
+
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 24,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: 620,
+                  maxHeight: MediaQuery.of(dialogContext).size.height * 0.82,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Select Country',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () {
+                              FocusScope.of(dialogContext).unfocus();
+                              Navigator.of(
+                                dialogContext,
+                                rootNavigator: true,
+                              ).pop();
+                            },
+                            icon: const Icon(Icons.close),
+                            tooltip: 'Close',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        autofocus: false,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.search),
+                          hintText:
+                          'Search by country or code (e.g. Lesotho or +266)',
+                          isDense: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: Colors.blueGrey.withOpacity(0.25),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: widget.color,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                        onChanged: (value) => setModalState(() {
+                          query = value;
+                        }),
+                      ),
+                      const SizedBox(height: 12),
+                      Flexible(
+                        child: countries.isEmpty
+                            ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Text('No countries found'),
+                          ),
+                        )
+                            : ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: countries.length,
+                          itemBuilder: (itemContext, index) {
+                            final country = countries[index];
+                            final selected = country.code == selectedCode;
+
+                            return Material(
+                              color: selected
+                                  ? widget.color.withOpacity(0.10)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(10),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(10),
+                                onTap: () {
+                                  FocusScope.of(dialogContext).unfocus();
+                                  Navigator.of(
+                                    dialogContext,
+                                    rootNavigator: true,
+                                  ).pop(country.code);
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 12,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        _countryFlag(country),
+                                        style: const TextStyle(fontSize: 24),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          _countryDisplayName(country),
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: selected
+                                                ? FontWeight.w800
+                                                : FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                      Text(
+                                        country.dialCode,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.blueGrey,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    return selectedCountryCode;
+  }
+
+  Widget _countryCodeSelectorButton({
+    required String value,
+    required void Function(String?) onChanged,
+  }) {
+    final country = _phoneCountryByCode(value);
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () async {
+        if (_countryPickerBusy) return;
+        _countryPickerBusy = true;
+
+        final selectedCode = await _showCountryPicker(
+          selectedCode: country.code,
+        );
+
+        _countryPickerBusy = false;
+
+        if (!mounted || selectedCode == null || selectedCode == value) return;
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          onChanged(selectedCode);
+        });
+      },
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF9FBFD),
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: Colors.blueGrey.withOpacity(0.18)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _countryFlag(country),
+                style: const TextStyle(fontSize: 20),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                country.dialCode,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.keyboard_arrow_down, size: 18),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _phoneInputField({
+    required TextEditingController controller,
+    required String label,
+    required String countryCode,
+    required void Function(String?) onCountryChanged,
+    bool requiredField = false,
+    bool allowEmail = false,
+  }) {
+    final country = _phoneCountryByCode(countryCode);
+    final currentIsEmail = allowEmail && _looksLikeEmail(controller.text);
+    final phoneHint = country.code == 'INTL'
+        ? 'Start with + country code'
+        : country.minNationalDigits == country.maxNationalDigits
+        ? 'Phone Number (${country.maxNationalDigits} digits)'
+        : 'Phone Number '
+        '(${country.minNationalDigits}-${country.maxNationalDigits} digits)';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!currentIsEmail) ...[
+            SizedBox(
+              width: 108,
+              child: _countryCodeSelectorButton(
+                value: countryCode,
+                onChanged: onCountryChanged,
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
+          Expanded(
+            child: TextFormField(
+              controller: controller,
+              keyboardType: allowEmail
+                  ? TextInputType.emailAddress
+                  : country.code == 'INTL'
+                  ? TextInputType.phone
+                  : TextInputType.number,
+              inputFormatters: allowEmail
+                  ? null
+                  : [MgysdPhoneNumberInputFormatter(country)],
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              onChanged: allowEmail ? (_) => setState(() {}) : null,
+              validator: (value) => allowEmail
+                  ? _phoneOrEmailValidator(
+                value,
+                requiredField: requiredField,
+                countryCode: countryCode,
+              )
+                  : _phoneValidator(
+                value,
+                requiredField: requiredField,
+                countryCode: countryCode,
+              ),
+              decoration: InputDecoration(
+                labelText: allowEmail
+                    ? label
+                    : _phoneFieldLabel(label, country),
+                hintText: allowEmail
+                    ? 'Enter a phone number or email address'
+                    : phoneHint,
+                errorMaxLines: 4,
+                filled: true,
+                fillColor: const Color(0xFFF9FBFD),
+                prefixIcon: allowEmail && currentIsEmail
+                    ? const Icon(Icons.email_outlined, size: 19)
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(15),
+                  borderSide: BorderSide(
+                    color: Colors.blueGrey.withOpacity(0.18),
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(15),
+                  borderSide: BorderSide(color: widget.color, width: 1.35),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 13,
+                  vertical: 13,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _pickReferralDate() async {
     final initial = DateTime.tryParse(_referralDateController.text.trim()) ??
         DateTime.now();
@@ -278,7 +1154,10 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
       'services': _selectedServices.toList(),
       'receivingOrganisation': _receivingOrganisationController.text.trim(),
       'contactPerson': _contactPersonController.text.trim(),
-      'contactPhone': _contactPhoneController.text.trim(),
+      'contactPhone': _normalisedPhoneNumber(
+        _contactPhoneController.text,
+        _contactPhoneCountryCode,
+      ),
       'priority': _priority,
       'consentDiscussed': _consentDiscussed,
       'reasonForReferral': _reasonForReferralController.text.trim(),
@@ -321,6 +1200,16 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
         eventId: widget.mgysdCase.id,
         status: status,
         eventDate: eventDate,
+        dataValues: {
+          MgysdDhis2Uids.deReferralServiceCategory: _selectedCategory,
+          MgysdDhis2Uids.deReferralReceivingOrganisation: _receivingOrganisationController.text,
+          MgysdDhis2Uids.deReferralContactPerson: _contactPersonController.text,
+          MgysdDhis2Uids.deReferralContactPhone: _contactPhoneController.text,
+          MgysdDhis2Uids.deReferralDocuments: _documentsAccompanyingController.text,
+          MgysdDhis2Uids.deReferralReason: _reasonForReferralController.text,
+          MgysdDhis2Uids.deReferralPriority: _priority,
+          MgysdDhis2Uids.deReferralRecommendations: _recommendationsController.text,
+        },
       );
 
       await db.insert(
@@ -344,6 +1233,13 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
             ? 'Referral completed successfully.'
             : 'Referral draft saved.',
       );
+
+      Navigator.pop(context, {
+        'referralSaved': true,
+        'status': status,
+        'caseId': widget.mgysdCase.id,
+        'householdTei': (widget.householdTei ?? '').trim(),
+      });
     } catch (e) {
       _showSnack('Failed to save referral: $e');
     } finally {
@@ -623,6 +1519,101 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
           ),
           contentPadding:
           const EdgeInsets.symmetric(horizontal: 13, vertical: 13),
+        ),
+      ),
+    );
+  }
+
+  Widget _attachmentsSelector() {
+    final selectedText = _selectedAttachments.join(', ');
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(15),
+        onTap: () async {
+          final selected = Set<String>.from(_selectedAttachments);
+
+          await showDialog<void>(
+            context: context,
+            builder: (dialogContext) {
+              return StatefulBuilder(
+                builder: (dialogContext, setModalState) {
+                  return AlertDialog(
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                    content: SizedBox(
+                      width: double.maxFinite,
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: _attachmentLabels.keys.map((option) {
+                          return CheckboxListTile(
+                            value: selected.contains(option),
+                            controlAffinity: ListTileControlAffinity.leading,
+                            activeColor: widget.color,
+                            title: Text(_attachmentLabels[option] ?? option),
+                            onChanged: (checked) {
+                              setModalState(() {
+                                if (checked == true) {
+                                  selected.add(option);
+                                } else {
+                                  selected.remove(option);
+                                }
+                              });
+
+                              setState(() {
+                                _selectedAttachments
+                                  ..clear()
+                                  ..addAll(selected);
+                                _documentsAccompanyingController.text =
+                                    _selectedAttachments.join(', ');
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          );
+        },
+        child: InputDecorator(
+          isEmpty: selectedText.isEmpty,
+          decoration: InputDecoration(
+            labelText: 'Documents accompanying referral',
+            floatingLabelBehavior: FloatingLabelBehavior.always,
+            filled: true,
+            fillColor: const Color(0xFFF9FBFD),
+            // Attachment icon remains intentionally commented out.
+            // prefixIcon: const Icon(Icons.attach_file_outlined, size: 19),
+            suffixIcon: const Icon(Icons.arrow_drop_down),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(15),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(15),
+              borderSide: BorderSide(
+                color: Colors.blueGrey.withOpacity(0.18),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(15),
+              borderSide: BorderSide(color: widget.color, width: 1.35),
+            ),
+            contentPadding:
+            const EdgeInsets.fromLTRB(13, 16, 13, 13),
+          ),
+          child: Text(
+            selectedText.isEmpty
+                ? 'Select one or more documents'
+                : selectedText,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: selectedText.isEmpty ? Colors.blueGrey : Colors.black87,
+            ),
+          ),
         ),
       ),
     );
@@ -985,11 +1976,18 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
                   'Contact person',
                   prefixIcon: Icons.person_outline,
                 ),
-                _input(
-                  _contactPhoneController,
-                  'Contact phone',
-                  keyboardType: TextInputType.phone,
-                  prefixIcon: Icons.phone_outlined,
+                _phoneInputField(
+                  controller: _contactPhoneController,
+                  label: 'Contact phone',
+                  countryCode: _contactPhoneCountryCode,
+                  onCountryChanged: (value) => setState(() {
+                    final newCountryCode = value ?? 'LS';
+                    _contactPhoneCountryCode = newCountryCode;
+                    _formatPhoneControllerForSelectedCountry(
+                      _contactPhoneController,
+                      newCountryCode,
+                    );
+                  }),
                 ),
               ],
             ),
@@ -1027,14 +2025,7 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
                     maxLines: 3,
                     prefixIcon: Icons.warning_amber_outlined,
                   ),
-                _input(
-                  _documentsAccompanyingController,
-                  'Documents accompanying referral',
-                  hint:
-                  'Example: assessment notes, ID copy, medical note, court document',
-                  maxLines: 3,
-                  prefixIcon: Icons.attach_file_outlined,
-                ),
+                _attachmentsSelector(),
                 _input(
                   _recommendationsController,
                   'Recommendations / expected result',
