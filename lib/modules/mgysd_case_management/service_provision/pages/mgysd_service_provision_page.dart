@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 import 'dart:math';
 
@@ -639,6 +638,22 @@ class _MgysdServiceProvisionPageState extends State<MgysdServiceProvisionPage> {
       );
       result.add(_GoalWithServices(goal: goal, services: services));
     }
+
+    const goalTermOrder = {
+      'SHORT_TERM': 0,
+      'MEDIUM_TERM': 1,
+      'LONG_TERM': 2,
+    };
+
+    result.sort((a, b) {
+      final aTerm = a.goal.term.trim().toUpperCase().replaceAll(' ', '_');
+      final bTerm = b.goal.term.trim().toUpperCase().replaceAll(' ', '_');
+      final termComparison =
+      (goalTermOrder[aTerm] ?? 3).compareTo(goalTermOrder[bTerm] ?? 3);
+
+      if (termComparison != 0) return termComparison;
+      return b.goal.createdAt.compareTo(a.goal.createdAt);
+    });
 
     return result;
   }
@@ -1511,7 +1526,7 @@ class _MgysdServiceProvisionPageState extends State<MgysdServiceProvisionPage> {
               _header(),
               _carePlanList(),
               _goalsSection(),
-             // _generalServiceCard(),
+              // _generalServiceCard(),
               const SizedBox(height: 24),
             ],
           ),
@@ -1520,4 +1535,3 @@ class _MgysdServiceProvisionPageState extends State<MgysdServiceProvisionPage> {
     );
   }
 }
-
