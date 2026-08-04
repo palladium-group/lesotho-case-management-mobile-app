@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lncmis_mobile_app/app_state/intervention_card_state/intervention_card_state.dart';
 import 'package:lncmis_mobile_app/core/components/entry_form_save_button.dart';
 import 'package:lncmis_mobile_app/core/components/material_card.dart';
@@ -43,7 +44,7 @@ class MgysdNewCasePage extends StatefulWidget {
 
   bool get isEditing =>
       (existingHouseholdTei ?? '').trim().isNotEmpty &&
-      (existingAssessedEnrollment ?? '').trim().isNotEmpty;
+          (existingAssessedEnrollment ?? '').trim().isNotEmpty;
 
   @override
   State<MgysdNewCasePage> createState() => _MgysdNewCasePageState();
@@ -54,6 +55,89 @@ class _Opt {
   final String label;
 
   const _Opt(this.code, this.label);
+}
+
+class _MgysdCountryCodeOption {
+  final String code;
+  final String label;
+  final String dialCode;
+  final int minNationalDigits;
+  final int maxNationalDigits;
+  final List<String> allowedNationalPrefixes;
+  final List<String> disallowedNationalPrefixes;
+  final String prefixHint;
+  final bool useNanpRules;
+
+  const _MgysdCountryCodeOption({
+    required this.code,
+    required this.label,
+    required this.dialCode,
+    this.minNationalDigits = 7,
+    this.maxNationalDigits = 12,
+    this.allowedNationalPrefixes = const [],
+    this.disallowedNationalPrefixes = const [],
+    this.prefixHint = '',
+    this.useNanpRules = false,
+  });
+}
+
+class _MgysdPhoneNumberInputFormatter extends TextInputFormatter {
+  final _MgysdCountryCodeOption country;
+
+  const _MgysdPhoneNumberInputFormatter(this.country);
+
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue,
+      TextEditingValue newValue,
+      ) {
+    final formatted = country.code == 'INTL'
+        ? _formatInternationalNumber(newValue.text)
+        : _formatNationalNumber(newValue.text);
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+      composing: TextRange.empty,
+    );
+  }
+
+  String _formatInternationalNumber(String value) {
+    final trimmed = value.trim();
+    final hasLeadingPlus = trimmed.startsWith('+');
+    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+    final limitedDigits = digits.length > country.maxNationalDigits
+        ? digits.substring(0, country.maxNationalDigits)
+        : digits;
+
+    if (limitedDigits.isEmpty) {
+      return hasLeadingPlus ? '+' : '';
+    }
+
+    return hasLeadingPlus ? '+$limitedDigits' : limitedDigits;
+  }
+
+  String _formatNationalNumber(String value) {
+    final dialDigits = country.dialCode.replaceAll('+', '');
+    var digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+
+    if (digits.startsWith(dialDigits) && digits.length > dialDigits.length) {
+      digits = digits.substring(dialDigits.length);
+    }
+
+    if (digits.startsWith('0')) {
+      final withoutLeadingZeros = digits.replaceFirst(RegExp(r'^0+'), '');
+      if (withoutLeadingZeros.isNotEmpty) {
+        digits = withoutLeadingZeros;
+      }
+    }
+
+    if (digits.length > country.maxNationalDigits) {
+      digits = digits.substring(0, country.maxNationalDigits);
+    }
+
+    return digits;
+  }
 }
 
 class _ReasonGroup {
@@ -73,10 +157,12 @@ class _ReasonGroup {
 class _DynamicTextItem {
   final String id;
   final TextEditingController controller;
+  String phoneCountryCode;
 
   _DynamicTextItem({
     required this.id,
     String value = '',
+    this.phoneCountryCode = 'LS',
   }) : controller = TextEditingController(text: value);
 
   void dispose() => controller.dispose();
@@ -96,6 +182,7 @@ class _HouseholdMemberEntry {
   String sex;
   String relationshipToClient;
   String hasDisability;
+  String contactsCountryCode;
   bool isExpanded;
 
   _HouseholdMemberEntry({
@@ -103,6 +190,7 @@ class _HouseholdMemberEntry {
     this.sex = '',
     this.relationshipToClient = '',
     this.hasDisability = '',
+    this.contactsCountryCode = 'LS',
     this.isExpanded = true,
   })  : firstNameController = TextEditingController(),
         surnameController = TextEditingController(),
@@ -152,11 +240,13 @@ class _CaregiverEntry {
   final TextEditingController phoneController;
 
   String sex;
+  String phoneCountryCode;
   bool isExpanded;
 
   _CaregiverEntry({
     required this.id,
     this.sex = '',
+    this.phoneCountryCode = 'LS',
     this.isExpanded = true,
   })  : nameController = TextEditingController(),
         surnameController = TextEditingController(),
@@ -194,12 +284,14 @@ class _NextOfKinEntry {
   final TextEditingController relationshipOtherController;
 
   String relationship;
+  String phoneCountryCode;
   bool isExpanded;
 
 
   _NextOfKinEntry({
     required this.id,
     this.relationship = '',
+    this.phoneCountryCode = 'LS',
     this.isExpanded = true,
   })  : firstNameController = TextEditingController(),
         surnameController = TextEditingController(),
@@ -294,6 +386,13 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   bool _saving = false;
   bool _loadingOrgUnits = false;
   bool _loadingExistingCase = false;
+  bool _countryPickerBusy = false;
+
+  String _clientPhoneCountryCode = 'LS';
+  String _clientAlternativePhoneCountryCode = 'LS';
+  String _fatherPhoneCountryCode = 'LS';
+  String _motherPhoneCountryCode = 'LS';
+  String _personalAssistantPhoneCountryCode = 'LS';
 
   List<OrganisationUnit> _districtOrgUnits = [];
   List<OrganisationUnit> _communityCouncilOrgUnits = [];
@@ -555,6 +654,119 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   static const List<_Opt> sexOptions = [
     _Opt('Male', 'Male'),
     _Opt('Female', 'Female'),
+  ];
+
+  static const List<_MgysdCountryCodeOption> _phoneCountryOptions = [
+    _MgysdCountryCodeOption(
+      code: 'LS',
+      label: 'Lesotho (+266)',
+      dialCode: '+266',
+      minNationalDigits: 8,
+      maxNationalDigits: 8,
+      allowedNationalPrefixes: ['2', '5', '6'],
+      disallowedNationalPrefixes: ['54', '55'],
+      prefixHint: 'Lesotho numbers must start with 2, 5 or 6. Prefixes 54 and 55 are not allowed',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'ZA',
+      label: 'South Africa (+27)',
+      dialCode: '+27',
+      minNationalDigits: 9,
+      maxNationalDigits: 9,
+      allowedNationalPrefixes: [
+        '60', '61', '62', '63', '64', '65', '66', '67', '68',
+        '71', '72', '73', '74', '76', '78', '79', '81', '82', '83', '84',
+      ],
+      prefixHint: 'South African mobile numbers usually start with 6, 7 or 8 ranges such as 60, 71 or 82',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'ZW',
+      label: 'Zimbabwe (+263)',
+      dialCode: '+263',
+      minNationalDigits: 9,
+      maxNationalDigits: 9,
+      allowedNationalPrefixes: ['71', '73', '77', '78'],
+      prefixHint: 'Zimbabwe mobile numbers must start with 71, 73, 77 or 78',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'MZ',
+      label: 'Mozambique (+258)',
+      dialCode: '+258',
+      minNationalDigits: 8,
+      maxNationalDigits: 9,
+      allowedNationalPrefixes: ['82', '83', '84', '85', '86', '87'],
+      prefixHint: 'Mozambique mobile numbers must start with 82, 83, 84, 85, 86 or 87',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'BW',
+      label: 'Botswana (+267)',
+      dialCode: '+267',
+      minNationalDigits: 8,
+      maxNationalDigits: 8,
+      allowedNationalPrefixes: ['71', '72', '73', '74', '75', '76'],
+      prefixHint: 'Botswana mobile numbers must start with 71, 72, 73, 74, 75 or 76',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'NA',
+      label: 'Namibia (+264)',
+      dialCode: '+264',
+      minNationalDigits: 9,
+      maxNationalDigits: 9,
+      allowedNationalPrefixes: ['81', '82', '83', '84', '85'],
+      prefixHint: 'Namibia mobile/electronic communications numbers must start with 81, 82, 83, 84 or 85',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'SZ',
+      label: 'Eswatini (+268)',
+      dialCode: '+268',
+      minNationalDigits: 8,
+      maxNationalDigits: 8,
+      allowedNationalPrefixes: ['75', '76', '77', '78', '79'],
+      prefixHint: 'Eswatini mobile numbers must start with 75, 76, 77, 78 or 79',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'ZM',
+      label: 'Zambia (+260)',
+      dialCode: '+260',
+      minNationalDigits: 9,
+      maxNationalDigits: 9,
+      allowedNationalPrefixes: ['76', '77', '95', '96', '97'],
+      prefixHint: 'Zambia mobile numbers must start with 76, 77, 95, 96 or 97',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'MW',
+      label: 'Malawi (+265)',
+      dialCode: '+265',
+      minNationalDigits: 7,
+      maxNationalDigits: 9,
+      allowedNationalPrefixes: ['1', '3', '7', '8', '9'],
+      prefixHint: 'Malawi numbers must start with an allocated range such as 1, 3, 7, 8 or 9',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'US',
+      label: 'USA/Canada (+1)',
+      dialCode: '+1',
+      minNationalDigits: 10,
+      maxNationalDigits: 10,
+      useNanpRules: true,
+      prefixHint: 'USA/Canada numbers must follow NANP format: area code and exchange code start with 2-9',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'GB',
+      label: 'United Kingdom (+44)',
+      dialCode: '+44',
+      minNationalDigits: 10,
+      maxNationalDigits: 10,
+      allowedNationalPrefixes: ['7'],
+      prefixHint: 'UK mobile numbers must start with 7 after the +44 country code',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'INTL',
+      label: 'Other country (use + code)',
+      dialCode: '+',
+      minNationalDigits: 8,
+      maxNationalDigits: 15,
+    ),
   ];
 
   static const List<_Opt> nationalityOptions = [
@@ -950,9 +1162,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
 
 
   Future<Map<String, String>> _loadAttributes(
-    Database db,
-    String teiId,
-  ) async {
+      Database db,
+      String teiId,
+      ) async {
     final values = <String, String>{};
     try {
       final rows = await db.query(
@@ -970,9 +1182,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   }
 
   Future<String> _loadPrimaryClientTei(
-    Database db,
-    String householdTei,
-  ) async {
+      Database db,
+      String householdTei,
+      ) async {
     try {
       final rows = await db.query(
         'mgysd_household_member',
@@ -1054,118 +1266,118 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
 
       _riskAssessmentDateController.text =
           household[attRiskAssessmentDate] ??
-          client[attRiskAssessmentDate] ??
-          '';
+              client[attRiskAssessmentDate] ??
+              '';
       _riskSocialWorkerController.text =
           household[attRiskAssessmentSocialWorker] ??
-          client[attRiskAssessmentSocialWorker] ??
-          '';
+              client[attRiskAssessmentSocialWorker] ??
+              '';
       _riskReportSource =
           household[attRiskAssessmentReportSource] ??
-          client[attRiskAssessmentReportSource] ??
-          '';
+              client[attRiskAssessmentReportSource] ??
+              '';
       _riskHasActionTaken =
           household[attRiskAssessmentHasActionTaken] ??
-          client[attRiskAssessmentHasActionTaken] ??
-          '';
+              client[attRiskAssessmentHasActionTaken] ??
+              '';
       _riskNoActionReason =
           household[attRiskAssessmentNoActionReason] ??
-          client[attRiskAssessmentNoActionReason] ??
-          '';
+              client[attRiskAssessmentNoActionReason] ??
+              '';
       _riskFamilyBackground =
           household[attRiskFamilyBackground] ??
-          client[attRiskFamilyBackground] ??
-          '';
+              client[attRiskFamilyBackground] ??
+              '';
       _riskFamilyBackgroundNotesController.text =
           household[attRiskFamilyBackgroundNotes] ??
-          client[attRiskFamilyBackgroundNotes] ??
-          '';
+              client[attRiskFamilyBackgroundNotes] ??
+              '';
       _riskCaregiverWellbeing =
           household[attRiskCaregiverWellbeing] ??
-          client[attRiskCaregiverWellbeing] ??
-          '';
+              client[attRiskCaregiverWellbeing] ??
+              '';
       _riskCaregiverWellbeingNotesController.text =
           household[attRiskCaregiverWellbeingNotes] ??
-          client[attRiskCaregiverWellbeingNotes] ??
-          '';
+              client[attRiskCaregiverWellbeingNotes] ??
+              '';
       _riskExtendedFamilyRelationships =
           household[attRiskExtendedFamilyRelationships] ??
-          client[attRiskExtendedFamilyRelationships] ??
-          '';
+              client[attRiskExtendedFamilyRelationships] ??
+              '';
       _riskExtendedFamilyNotesController.text =
           household[attRiskExtendedFamilyNotes] ??
-          client[attRiskExtendedFamilyNotes] ??
-          '';
+              client[attRiskExtendedFamilyNotes] ??
+              '';
       _riskClientRelationships =
           household[attRiskClientRelationships] ??
-          client[attRiskClientRelationships] ??
-          '';
+              client[attRiskClientRelationships] ??
+              '';
       _riskClientRelationshipsNotesController.text =
           household[attRiskClientRelationshipsNotes] ??
-          client[attRiskClientRelationshipsNotes] ??
-          '';
+              client[attRiskClientRelationshipsNotes] ??
+              '';
       _riskLivingCircumstances =
           household[attRiskLivingCircumstances] ??
-          client[attRiskLivingCircumstances] ??
-          '';
+              client[attRiskLivingCircumstances] ??
+              '';
       _riskLivingCircumstancesNotesController.text =
           household[attRiskLivingCircumstancesNotes] ??
-          client[attRiskLivingCircumstancesNotes] ??
-          '';
+              client[attRiskLivingCircumstancesNotes] ??
+              '';
       _riskHousing =
           household[attRiskHousing] ?? client[attRiskHousing] ?? '';
       _riskHousingNotesController.text =
           household[attRiskHousingNotes] ??
-          client[attRiskHousingNotes] ??
-          '';
+              client[attRiskHousingNotes] ??
+              '';
       _riskPhysicalHealth =
           household[attRiskPhysicalHealth] ??
-          client[attRiskPhysicalHealth] ??
-          '';
+              client[attRiskPhysicalHealth] ??
+              '';
       _riskPhysicalHealthNotesController.text =
           household[attRiskPhysicalHealthNotes] ??
-          client[attRiskPhysicalHealthNotes] ??
-          '';
+              client[attRiskPhysicalHealthNotes] ??
+              '';
       _riskNutrition =
           household[attRiskNutrition] ?? client[attRiskNutrition] ?? '';
       _riskNutritionNotesController.text =
           household[attRiskNutritionNotes] ??
-          client[attRiskNutritionNotes] ??
-          '';
+              client[attRiskNutritionNotes] ??
+              '';
       _riskEmotionalHealth =
           household[attRiskEmotionalHealth] ??
-          client[attRiskEmotionalHealth] ??
-          '';
+              client[attRiskEmotionalHealth] ??
+              '';
       _riskEmotionalHealthNotesController.text =
           household[attRiskEmotionalHealthNotes] ??
-          client[attRiskEmotionalHealthNotes] ??
-          '';
+              client[attRiskEmotionalHealthNotes] ??
+              '';
       _riskSupervision =
           household[attRiskSupervision] ??
-          client[attRiskSupervision] ??
-          '';
+              client[attRiskSupervision] ??
+              '';
       _riskSupervisionNotesController.text =
           household[attRiskSupervisionNotes] ??
-          client[attRiskSupervisionNotes] ??
-          '';
+              client[attRiskSupervisionNotes] ??
+              '';
       _riskEducation =
           household[attRiskEducation] ?? client[attRiskEducation] ?? '';
       _riskEducationNotesController.text =
           household[attRiskEducationNotes] ??
-          client[attRiskEducationNotes] ??
-          '';
+              client[attRiskEducationNotes] ??
+              '';
       _riskLevel =
           household[attRiskLevel] ?? client[attRiskLevel] ?? '';
       _riskReasonController.text =
           household[attRiskReason] ?? client[attRiskReason] ?? '';
       _riskImmediateReferralsController.text =
           household[attRiskImmediateReferrals] ??
-          client[attRiskImmediateReferrals] ??
-          '';
+              client[attRiskImmediateReferrals] ??
+              '';
       _riskAdditionalNotesController.text =
           household[attRiskAdditionalNotes] ??
-          client[attRiskAdditionalNotes] ??
-          '';
+              client[attRiskAdditionalNotes] ??
+              '';
 
       _setJsonSet(
         _riskEmergencyActionsTaken,
@@ -1441,6 +1653,238 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         (today.month == dob.month && today.day >= dob.day);
     if (!hadBirthday) age--;
     return age < 0 ? 0 : age;
+  }
+
+  _MgysdCountryCodeOption _phoneCountryByCode(String code) {
+    for (final option in _phoneCountryOptions) {
+      if (option.code == code) return option;
+    }
+    return _phoneCountryOptions.first;
+  }
+
+  String _digitsOnly(String value) {
+    return value.replaceAll(RegExp(r'[^0-9]'), '');
+  }
+
+  bool _hasInvalidPhoneCharacters(String value) {
+    return RegExp(r'[^0-9+\s\-\(\)]').hasMatch(value);
+  }
+
+  bool _hasValidNationalLength(
+      String nationalDigits,
+      _MgysdCountryCodeOption country,
+      ) {
+    return nationalDigits.length >= country.minNationalDigits &&
+        nationalDigits.length <= country.maxNationalDigits;
+  }
+
+  bool _hasDisallowedNationalPrefix(
+      String nationalDigits,
+      _MgysdCountryCodeOption country,
+      ) {
+    if (country.code == 'INTL' || nationalDigits.isEmpty) return false;
+    return country.disallowedNationalPrefixes.any(nationalDigits.startsWith);
+  }
+
+  bool _hasPossibleNetworkPrefix(
+      String nationalDigits,
+      _MgysdCountryCodeOption country,
+      ) {
+    if (country.code == 'INTL' || nationalDigits.isEmpty) return true;
+
+    if (_hasDisallowedNationalPrefix(nationalDigits, country)) return false;
+
+    if (country.useNanpRules) {
+      if (nationalDigits.isNotEmpty &&
+          !RegExp(r'^[2-9]').hasMatch(nationalDigits)) {
+        return false;
+      }
+      if (nationalDigits.length >= 4 &&
+          !RegExp(r'^[2-9][0-9]{2}[2-9]').hasMatch(nationalDigits)) {
+        return false;
+      }
+      return true;
+    }
+
+    if (country.allowedNationalPrefixes.isEmpty) return true;
+
+    return country.allowedNationalPrefixes.any((prefix) {
+      return prefix.startsWith(nationalDigits) ||
+          nationalDigits.startsWith(prefix);
+    });
+  }
+
+  bool _hasValidNetworkPrefix(
+      String nationalDigits,
+      _MgysdCountryCodeOption country,
+      ) {
+    if (country.code == 'INTL') return true;
+
+    if (_hasDisallowedNationalPrefix(nationalDigits, country)) return false;
+
+    if (country.useNanpRules) {
+      return RegExp(r'^[2-9][0-9]{2}[2-9][0-9]{6}$')
+          .hasMatch(nationalDigits);
+    }
+
+    if (country.allowedNationalPrefixes.isEmpty) return true;
+
+    return country.allowedNationalPrefixes.any(nationalDigits.startsWith);
+  }
+
+  String _phonePrefixMessage(_MgysdCountryCodeOption country) {
+    return country.prefixHint.isNotEmpty
+        ? country.prefixHint
+        : 'Phone number prefix does not match selected country';
+  }
+
+  String _phoneLengthMessage(_MgysdCountryCodeOption country) {
+    if (country.minNationalDigits == country.maxNationalDigits) {
+      return '${country.label} numbers must have ${country.maxNationalDigits} digits after ${country.dialCode}';
+    }
+
+    return '${country.label} numbers must have ${country.minNationalDigits} to ${country.maxNationalDigits} digits after ${country.dialCode}';
+  }
+
+  void _validateNationalPhoneDigits(
+      String nationalDigits,
+      _MgysdCountryCodeOption country,
+      ) {
+    if (!_hasPossibleNetworkPrefix(nationalDigits, country)) {
+      throw FormatException(_phonePrefixMessage(country));
+    }
+
+    if (!_hasValidNationalLength(nationalDigits, country)) {
+      throw FormatException(_phoneLengthMessage(country));
+    }
+
+    if (!_hasValidNetworkPrefix(nationalDigits, country)) {
+      throw FormatException(_phonePrefixMessage(country));
+    }
+  }
+
+  String _normalisePhoneByCountryCode(String value, String countryCode) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return '';
+
+    final country = _phoneCountryByCode(countryCode);
+    final compact = trimmed.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+    final digits = _digitsOnly(compact);
+
+    if (digits.isEmpty) {
+      throw const FormatException('Phone number must contain digits');
+    }
+
+    if (country.code == 'INTL') {
+      if (!compact.startsWith('+')) {
+        throw const FormatException('International numbers must start with +');
+      }
+      if (digits.length < 8 || digits.length > 15) {
+        throw const FormatException('International numbers must have 8 to 15 digits');
+      }
+      return '+$digits';
+    }
+
+    final dialDigits = country.dialCode.replaceAll('+', '');
+
+    if (compact.startsWith('+')) {
+      if (!digits.startsWith(dialDigits)) {
+        throw const FormatException('Phone number country code does not match selected country');
+      }
+      final nationalDigits = digits.substring(dialDigits.length);
+      _validateNationalPhoneDigits(nationalDigits, country);
+      return '+$digits';
+    }
+
+    if (digits.startsWith(dialDigits)) {
+      final nationalDigits = digits.substring(dialDigits.length);
+      _validateNationalPhoneDigits(nationalDigits, country);
+      return '+$digits';
+    }
+
+    final localDigits = digits.replaceFirst(RegExp(r'^0+'), '');
+    _validateNationalPhoneDigits(localDigits, country);
+
+    return '${country.dialCode}$localDigits';
+  }
+
+  String _normalisedPhoneNumber(String value, String countryCode) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return '';
+
+    try {
+      return _normalisePhoneByCountryCode(trimmed, countryCode);
+    } catch (_) {
+      return trimmed;
+    }
+  }
+
+  String? _phoneValidator(
+      String? value, {
+        required bool requiredField,
+        required String countryCode,
+      }) {
+    final text = (value ?? '').trim();
+    if (!requiredField && text.isEmpty) return null;
+    if (text.isEmpty) return 'Required';
+
+    if (_hasInvalidPhoneCharacters(text)) {
+      return 'Use numbers only';
+    }
+
+    final country = _phoneCountryByCode(countryCode);
+
+    try {
+      _normalisePhoneByCountryCode(text, countryCode);
+      return null;
+    } on FormatException catch (e) {
+      if (country.code == 'INTL') {
+        return e.message.isNotEmpty
+            ? e.message
+            : 'Start with + country code, e.g. +266...';
+      }
+      return e.message.isNotEmpty
+          ? e.message
+          : 'Enter a valid ${country.label} phone number';
+    } catch (_) {
+      if (country.code == 'INTL') {
+        return 'Start with + country code, e.g. +266...';
+      }
+      return 'Enter a valid ${country.label} phone number';
+    }
+  }
+
+  String? _identityNumberValidator(String? value) {
+    final raw = (value ?? '').trim();
+    if (raw.isEmpty) return null;
+
+    final compact = raw.replaceAll(RegExp(r'[\s-]'), '').toUpperCase();
+
+    if (!RegExp(r'^[A-Z0-9]+$').hasMatch(compact)) {
+      return 'Use letters and numbers only';
+    }
+
+    if (compact.length < 6 || compact.length > 20) {
+      return 'Identity number must be 6 to 20 characters';
+    }
+
+    if (_nationality == 'South African' &&
+        RegExp(r'^\d+$').hasMatch(compact) &&
+        compact.length != 13) {
+      return 'South African identity number must have 13 digits';
+    }
+
+    return null;
+  }
+
+  List<String> _normalisedDynamicPhoneValues(List<_DynamicTextItem> items) {
+    return items
+        .map((item) => _normalisedPhoneNumber(
+      item.controller.text.trim(),
+      item.phoneCountryCode,
+    ))
+        .where((value) => value.isNotEmpty)
+        .toList();
   }
 
   Future<void> _pickDateFor(TextEditingController controller) async {
@@ -2070,7 +2514,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           attReasonForEnrolment: jsonEncode(_selectedReasonPayload()),
           attReasonForEnrolmentOther: _reasonOtherController.text,
           attEmergencyContactedPhoneNumbers:
-          jsonEncode(_dynamicValues(_contactedPhoneNumbers)),
+          jsonEncode(_normalisedDynamicPhoneValues(_contactedPhoneNumbers)),
           attEmergencyServicesAlreadyProvided:
           jsonEncode(_dynamicValues(_servicesAlreadyProvided)),
           attRiskAssessmentDate: _riskAssessmentDateController.text,
@@ -2135,8 +2579,14 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         attHomeLanguage: _homeLanguage,
         attHomeLanguageOther: _homeLanguageOtherController.text,
         attNationalityOther: _nationalityOtherController.text,
-        attPhone: _phoneController.text,
-        attAlternativePhone: _alternativePhoneController.text,
+        attPhone: _normalisedPhoneNumber(
+          _phoneController.text,
+          _clientPhoneCountryCode,
+        ),
+        attAlternativePhone: _normalisedPhoneNumber(
+          _alternativePhoneController.text,
+          _clientAlternativePhoneCountryCode,
+        ),
         attIsClientInSchool: _isClientInSchool,
         attSchoolName: _schoolNameController.text,
         attGrade: _grade,
@@ -2156,7 +2606,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         attReasonForEnrolment: jsonEncode(_selectedReasonPayload()),
         attReasonForEnrolmentOther: _reasonOtherController.text,
         attEmergencyContactedPhoneNumbers:
-        jsonEncode(_dynamicValues(_contactedPhoneNumbers)),
+        jsonEncode(_normalisedDynamicPhoneValues(_contactedPhoneNumbers)),
         attEmergencyServicesAlreadyProvided:
         jsonEncode(_dynamicValues(_servicesAlreadyProvided)),
         attRiskAssessmentDate: _riskAssessmentDateController.text,
@@ -2308,7 +2758,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         );
         for (final linkedMember in linkedMembers) {
           final memberTei =
-              (linkedMember['memberTei'] ?? '').toString().trim();
+          (linkedMember['memberTei'] ?? '').toString().trim();
           if (memberTei.isEmpty) continue;
           await db.delete(
             'enrollment',
@@ -2366,7 +2816,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             attLastName: _fatherSurnameController.text,
             attDob: _fatherDobController.text,
             attOccupation: _fatherOccupationController.text,
-            attPhone: _fatherPhoneController.text,
+            attPhone: _normalisedPhoneNumber(
+              _fatherPhoneController.text,
+              _fatherPhoneCountryCode,
+            ),
             attSex: 'MALE',
             attRelationshipToClient: 'FATHER',
             attFatherAlive: _fatherAlive,
@@ -2388,7 +2841,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             attLastName: _motherSurnameController.text,
             attDob: _motherDobController.text,
             attOccupation: _motherOccupationController.text,
-            attPhone: _motherPhoneController.text,
+            attPhone: _normalisedPhoneNumber(
+              _motherPhoneController.text,
+              _motherPhoneCountryCode,
+            ),
             attSex: 'FEMALE',
             attRelationshipToClient: 'MOTHER',
             attMotherAlive: _motherAlive,
@@ -2412,7 +2868,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             attRelationshipToClient: caregiver.relationshipController.text,
             attDob: caregiver.dobController.text,
             attOccupation: caregiver.occupationController.text,
-            attPhone: caregiver.phoneController.text,
+            attPhone: _normalisedPhoneNumber(
+              caregiver.phoneController.text,
+              caregiver.phoneCountryCode,
+            ),
           },
         );
       }
@@ -2427,7 +2886,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           attrs: {
             attFirstName: nextOfKin.firstNameController.text,
             attLastName: nextOfKin.surnameController.text,
-            attPhone: nextOfKin.phoneController.text,
+            attPhone: _normalisedPhoneNumber(
+              nextOfKin.phoneController.text,
+              nextOfKin.phoneCountryCode,
+            ),
             attRelationshipToClient: nextOfKin.relationship,
             attRelationshipToClientOther: nextOfKin.relationshipOtherController.text,
           },
@@ -2449,7 +2911,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             _personalAssistantRelationshipController.text,
             attDob: _personalAssistantDobController.text,
             attOccupation: _personalAssistantOccupationController.text,
-            attPhone: _personalAssistantPhoneController.text,
+            attPhone: _normalisedPhoneNumber(
+              _personalAssistantPhoneController.text,
+              _personalAssistantPhoneCountryCode,
+            ),
           },
         );
       }
@@ -2472,7 +2937,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             attRelationshipToClient: member.relationshipToClient,
             attRelationshipToClientOther: member.relationshipOtherController.text,
             attOccupation: member.occupationController.text,
-            attPhone: member.contactsController.text,
+            attPhone: _normalisedPhoneNumber(
+              member.contactsController.text,
+              member.contactsCountryCode,
+            ),
             attHasDisability: member.hasDisability,
             attDisabilitySpecify: member.disabilitySpecifyController.text,
           },
@@ -2665,6 +3133,421 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     );
   }
 
+  Widget _requiredInputLabel(String label, {required bool requiredField}) {
+    if (!requiredField) return Text(label);
+
+    return RichText(
+      text: TextSpan(
+        style: const TextStyle(
+          color: Colors.black87,
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+        ),
+        children: [
+          TextSpan(text: label),
+          const TextSpan(text: ' *', style: TextStyle(color: Colors.red)),
+        ],
+      ),
+    );
+  }
+
+  InputDecoration _phoneDecoration(
+      String label, {
+        required String hint,
+        required bool requiredField,
+      }) {
+    return InputDecoration(
+      label: _requiredInputLabel(label, requiredField: requiredField),
+      hintText: hint,
+      errorMaxLines: 4,
+      helperMaxLines: 4,
+      labelStyle: const TextStyle(
+        fontWeight: FontWeight.w700,
+        color: Colors.blueGrey,
+      ),
+      hintStyle: TextStyle(
+        color: Colors.blueGrey.withOpacity(0.82),
+        fontSize: 13,
+        fontWeight: FontWeight.w500,
+      ),
+      filled: true,
+      fillColor: const Color(0xFFF3F7FA),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.blueGrey.withOpacity(0.24)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(
+          color: Theme.of(context).colorScheme.primary,
+          width: 1.6,
+        ),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.red.withOpacity(0.65)),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.red.withOpacity(0.85), width: 1.4),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    );
+  }
+
+  String _countryDisplayName(_MgysdCountryCodeOption country) {
+    final label = country.label.trim();
+    final bracketIndex = label.indexOf(' (');
+    if (bracketIndex > 0) return label.substring(0, bracketIndex);
+    return label;
+  }
+
+  String _countryFlag(_MgysdCountryCodeOption country) {
+    switch (country.code) {
+      case 'LS':
+        return '🇱🇸';
+      case 'ZA':
+        return '🇿🇦';
+      case 'ZW':
+        return '🇿🇼';
+      case 'MZ':
+        return '🇲🇿';
+      case 'BW':
+        return '🇧🇼';
+      case 'NA':
+        return '🇳🇦';
+      case 'SZ':
+        return '🇸🇿';
+      case 'ZM':
+        return '🇿🇲';
+      case 'MW':
+        return '🇲🇼';
+      case 'US':
+        return '🇺🇸';
+      case 'GB':
+        return '🇬🇧';
+      case 'INTL':
+        return '🌐';
+      default:
+        return '🌐';
+    }
+  }
+
+  String _phoneFieldLabel(String label, _MgysdCountryCodeOption country) {
+    if (country.code == 'INTL') return label;
+
+    if (country.minNationalDigits == country.maxNationalDigits) {
+      return '$label (${country.maxNationalDigits} digits)';
+    }
+
+    return '$label (${country.minNationalDigits}-${country.maxNationalDigits} digits)';
+  }
+
+  String _formatPhoneTextForSelectedCountry(String value, String countryCode) {
+    final country = _phoneCountryByCode(countryCode);
+    return _MgysdPhoneNumberInputFormatter(country).formatEditUpdate(
+      const TextEditingValue(),
+      TextEditingValue(text: value),
+    ).text;
+  }
+
+  void _formatPhoneControllerForSelectedCountry(
+      TextEditingController controller,
+      String countryCode,
+      ) {
+    final formatted = _formatPhoneTextForSelectedCountry(
+      controller.text,
+      countryCode,
+    );
+
+    controller.value = TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+      composing: TextRange.empty,
+    );
+  }
+
+  Future<String?> _showCountryPicker({
+    required String selectedCode,
+  }) async {
+    String query = '';
+
+    return showDialog<String>(
+      context: context,
+      useRootNavigator: true,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setModalState) {
+            final normalizedQuery = query.trim().toLowerCase();
+            final countries = normalizedQuery.isEmpty
+                ? _phoneCountryOptions
+                : _phoneCountryOptions.where((country) {
+              final countryName = _countryDisplayName(country).toLowerCase();
+              final label = country.label.toLowerCase();
+              final dialCode = country.dialCode.toLowerCase();
+              final code = country.code.toLowerCase();
+
+              return countryName.contains(normalizedQuery) ||
+                  label.contains(normalizedQuery) ||
+                  dialCode.contains(normalizedQuery) ||
+                  code.contains(normalizedQuery);
+            }).toList();
+
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 24,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: 620,
+                  maxHeight: MediaQuery.of(dialogContext).size.height * 0.82,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Select Country',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () {
+                              FocusScope.of(dialogContext).unfocus();
+                              Navigator.of(dialogContext, rootNavigator: true).pop();
+                            },
+                            icon: const Icon(Icons.close),
+                            tooltip: 'Close',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        autofocus: false,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.search),
+                          hintText: 'Search by country or code (e.g. Lesotho or +266)',
+                          isDense: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: Colors.blueGrey.withOpacity(0.25),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: widget.color,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                        onChanged: (value) => setModalState(() {
+                          query = value;
+                        }),
+                      ),
+                      const SizedBox(height: 12),
+                      Flexible(
+                        child: countries.isEmpty
+                            ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Text('No countries found'),
+                          ),
+                        )
+                            : ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: countries.length,
+                          itemBuilder: (itemContext, index) {
+                            final country = countries[index];
+                            final selected = country.code == selectedCode;
+
+                            return Material(
+                              color: selected
+                                  ? widget.color.withOpacity(0.10)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(10),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(10),
+                                onTap: () {
+                                  FocusScope.of(dialogContext).unfocus();
+                                  Navigator.of(dialogContext, rootNavigator: true)
+                                      .pop(country.code);
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 12,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        _countryFlag(country),
+                                        style: const TextStyle(fontSize: 24),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          _countryDisplayName(country),
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: selected
+                                                ? FontWeight.w800
+                                                : FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                      Text(
+                                        country.dialCode,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.blueGrey,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _countryCodeSelectorButton({
+    required String value,
+    required void Function(String?) onChanged,
+  }) {
+    final country = _phoneCountryByCode(value);
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () async {
+        if (_countryPickerBusy) return;
+        _countryPickerBusy = true;
+
+        final selectedCode = await _showCountryPicker(
+          selectedCode: country.code,
+        );
+
+        _countryPickerBusy = false;
+
+        if (!mounted || selectedCode == null || selectedCode == value) return;
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          onChanged(selectedCode);
+        });
+      },
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.blueGrey.withOpacity(0.25)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _countryFlag(country),
+                style: const TextStyle(fontSize: 20),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                country.dialCode,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.keyboard_arrow_down, size: 18),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _phoneInputField({
+    required String label,
+    required TextEditingController controller,
+    required String countryCode,
+    required void Function(String?) onCountryChanged,
+    required bool requiredField,
+  }) {
+    final country = _phoneCountryByCode(countryCode);
+    final phoneHint = country.code == 'INTL'
+        ? 'Start with + country code'
+        : country.minNationalDigits == country.maxNationalDigits
+        ? 'Phone Number (${country.maxNationalDigits} digits)'
+        : 'Phone Number (${country.minNationalDigits}-${country.maxNationalDigits} digits)';
+
+    final phoneField = TextFormField(
+      controller: controller,
+      decoration: _phoneDecoration(
+        _phoneFieldLabel(label, country),
+        hint: phoneHint,
+        requiredField: requiredField,
+      ),
+      keyboardType: country.code == 'INTL'
+          ? TextInputType.phone
+          : TextInputType.number,
+      inputFormatters: [
+        _MgysdPhoneNumberInputFormatter(country),
+      ],
+      autovalidateMode: AutovalidateMode.onUserInteraction,
+      validator: (value) => _phoneValidator(
+        value,
+        requiredField: requiredField,
+        countryCode: countryCode,
+      ),
+    );
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 108,
+          child: _countryCodeSelectorButton(
+            value: countryCode,
+            onChanged: onCountryChanged,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(child: phoneField),
+      ],
+    );
+  }
+
   Widget _reasonGroupCard(_ReasonGroup group) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -2830,7 +3713,21 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: _Input(
+                  child: keyboardType == TextInputType.phone
+                      ? _phoneInputField(
+                    controller: item.controller,
+                    label: '$label ${index + 1}',
+                    countryCode: item.phoneCountryCode,
+                    requiredField: false,
+                    onCountryChanged: (value) {
+                      setState(() => item.phoneCountryCode = value ?? 'LS');
+                      _formatPhoneControllerForSelectedCountry(
+                        item.controller,
+                        item.phoneCountryCode,
+                      );
+                    },
+                  )
+                      : _Input(
                     controller: item.controller,
                     label: '$label ${index + 1}',
                     hint: hint,
@@ -3541,6 +4438,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required void Function(String value) onLivingWithChildChanged,
     required TextEditingController whyNotLivingController,
     required TextEditingController phoneController,
+    required String phoneCountryCode,
+    required void Function(String value) onPhoneCountryChanged,
   }) {
     return Container(
       width: double.infinity,
@@ -3610,11 +4509,18 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 maxLines: 3,
               ),
               const SizedBox(height: 10),
-              _Input(
+              _phoneInputField(
                 controller: phoneController,
                 label: 'Phone Number',
-                hint: 'e.g. 5xxxxxxx',
-                keyboardType: TextInputType.phone,
+                countryCode: phoneCountryCode,
+                requiredField: false,
+                onCountryChanged: (value) {
+                  onPhoneCountryChanged(value ?? 'LS');
+                  _formatPhoneControllerForSelectedCountry(
+                    phoneController,
+                    value ?? 'LS',
+                  );
+                },
               ),
             ],
           ],
@@ -3698,13 +4604,18 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               ),
             ),
             const SizedBox(height: 10),
-            _Input(
+            _phoneInputField(
               controller: caregiver.phoneController,
               label: 'Phone Number',
-              hint: 'e.g. 5xxxxxxx',
-              keyboardType: TextInputType.phone,
+              countryCode: caregiver.phoneCountryCode,
               requiredField: true,
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+              onCountryChanged: (value) {
+                setState(() => caregiver.phoneCountryCode = value ?? 'LS');
+                _formatPhoneControllerForSelectedCountry(
+                  caregiver.phoneController,
+                  caregiver.phoneCountryCode,
+                );
+              },
             ),
           ],
         ],
@@ -3754,13 +4665,18 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               ),
             ),
             const SizedBox(height: 10),
-            _Input(
+            _phoneInputField(
               controller: nextOfKin.phoneController,
               label: 'Phone Number',
-              hint: 'e.g. 5xxxxxxx',
-              keyboardType: TextInputType.phone,
+              countryCode: nextOfKin.phoneCountryCode,
               requiredField: true,
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+              onCountryChanged: (value) {
+                setState(() => nextOfKin.phoneCountryCode = value ?? 'LS');
+                _formatPhoneControllerForSelectedCountry(
+                  nextOfKin.phoneController,
+                  nextOfKin.phoneCountryCode,
+                );
+              },
             ),
             const SizedBox(height: 10),
             _Input(
@@ -3891,11 +4807,18 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             ),
           ),
           const SizedBox(height: 10),
-          _Input(
+          _phoneInputField(
             controller: _personalAssistantPhoneController,
             label: 'Phone Number',
-            hint: 'e.g. 5xxxxxxx',
-            keyboardType: TextInputType.phone,
+            countryCode: _personalAssistantPhoneCountryCode,
+            requiredField: false,
+            onCountryChanged: (value) {
+              setState(() => _personalAssistantPhoneCountryCode = value ?? 'LS');
+              _formatPhoneControllerForSelectedCountry(
+                _personalAssistantPhoneController,
+                _personalAssistantPhoneCountryCode,
+              );
+            },
           ),
         ],
       ),
@@ -3951,6 +4874,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 },
                 whyNotLivingController: _fatherWhyNotLivingController,
                 phoneController: _fatherPhoneController,
+                phoneCountryCode: _fatherPhoneCountryCode,
+                onPhoneCountryChanged: (value) {
+                  setState(() => _fatherPhoneCountryCode = value);
+                },
               ),
               _parentSection(
                 title: 'Mother',
@@ -3985,6 +4912,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 },
                 whyNotLivingController: _motherWhyNotLivingController,
                 phoneController: _motherPhoneController,
+                phoneCountryCode: _motherPhoneCountryCode,
+                onPhoneCountryChanged: (value) {
+                  setState(() => _motherPhoneCountryCode = value);
+                },
               ),
             ],
             _caregiverSection(),
@@ -4121,13 +5052,18 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 requiredField: true,
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
               ),
-              _Input(
+              _phoneInputField(
                 controller: member.contactsController,
                 label: 'Contacts',
-                hint: 'Phone / contact details',
-                keyboardType: TextInputType.phone,
+                countryCode: member.contactsCountryCode,
                 requiredField: true,
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                onCountryChanged: (value) {
+                  setState(() => member.contactsCountryCode = value ?? 'LS');
+                  _formatPhoneControllerForSelectedCountry(
+                    member.contactsController,
+                    member.contactsCountryCode,
+                  );
+                },
               ),
             ),
             const SizedBox(height: 10),
@@ -4467,6 +5403,14 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                                 controller: _identityNumberController,
                                 label: 'Identity Number',
                                 hint: 'National ID / document number',
+                                keyboardType: TextInputType.text,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                    RegExp(r'[A-Za-z0-9\s-]'),
+                                  ),
+                                ],
+                                autovalidateMode: AutovalidateMode.onUserInteraction,
+                                validator: _identityNumberValidator,
                               ),
                               const SizedBox(height: 10),
                               _row2(
@@ -4581,17 +5525,31 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                               ],
                               const SizedBox(height: 10),
                               _row2(
-                                _Input(
+                                _phoneInputField(
                                   controller: _phoneController,
                                   label: 'Phone Number',
-                                  hint: 'e.g. 5xxxxxxx',
-                                  keyboardType: TextInputType.phone,
+                                  countryCode: _clientPhoneCountryCode,
+                                  requiredField: false,
+                                  onCountryChanged: (value) {
+                                    setState(() => _clientPhoneCountryCode = value ?? 'LS');
+                                    _formatPhoneControllerForSelectedCountry(
+                                      _phoneController,
+                                      _clientPhoneCountryCode,
+                                    );
+                                  },
                                 ),
-                                _Input(
+                                _phoneInputField(
                                   controller: _alternativePhoneController,
                                   label: 'Alternative Phone Number',
-                                  hint: 'e.g. 5xxxxxxx',
-                                  keyboardType: TextInputType.phone,
+                                  countryCode: _clientAlternativePhoneCountryCode,
+                                  requiredField: false,
+                                  onCountryChanged: (value) {
+                                    setState(() => _clientAlternativePhoneCountryCode = value ?? 'LS');
+                                    _formatPhoneControllerForSelectedCountry(
+                                      _alternativePhoneController,
+                                      _clientAlternativePhoneCountryCode,
+                                    );
+                                  },
                                 ),
                               ),
 
@@ -4873,20 +5831,20 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                         onPressed: (_saving || _loadingExistingCase) ? null : _saveCase,
                         icon: _saving
                             ? const SizedBox(
-                                width: 17,
-                                height: 17,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
+                          width: 17,
+                          height: 17,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
                             : const Icon(Icons.save_outlined),
                         label: Text(
                           _saving
                               ? 'Saving...'
                               : widget.isEditing
-                                  ? 'Update Intake and Initial Risk Assessment'
-                                  : 'Save Intake and Initial Risk Assessment',
+                              ? 'Update Intake and Initial Risk Assessment'
+                              : 'Save Intake and Initial Risk Assessment',
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: primary,
@@ -4928,6 +5886,9 @@ class _Input extends StatelessWidget {
     this.readOnly = false,
     this.keyboardType,
     this.requiredField = false,
+    this.inputFormatters,
+    this.autovalidateMode,
+    this.onChanged,
   }) : super(key: key);
 
   final TextEditingController controller;
@@ -4939,6 +5900,9 @@ class _Input extends StatelessWidget {
   final bool readOnly;
   final TextInputType? keyboardType;
   final bool requiredField;
+  final List<TextInputFormatter>? inputFormatters;
+  final AutovalidateMode? autovalidateMode;
+  final void Function(String)? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -4948,6 +5912,9 @@ class _Input extends StatelessWidget {
       maxLines: maxLines,
       readOnly: readOnly,
       keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
+      autovalidateMode: autovalidateMode,
+      onChanged: onChanged,
       decoration: InputDecoration(
         label: requiredField
             ? RichText(
@@ -4962,6 +5929,8 @@ class _Input extends StatelessWidget {
             : null,
         labelText: requiredField ? null : label,
         labelStyle: const TextStyle(fontWeight: FontWeight.w700, color: Colors.blueGrey),
+        errorMaxLines: 4,
+        helperMaxLines: 4,
         hintText: hint,
         hintStyle: TextStyle(color: Colors.blueGrey.withOpacity(0.82), fontSize: 13, fontWeight: FontWeight.w500),
         suffixIcon: suffixIcon,
