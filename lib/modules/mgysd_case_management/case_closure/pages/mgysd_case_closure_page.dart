@@ -30,22 +30,33 @@ class _PersonInMeeting {
   final String localId;
   final TextEditingController nameController;
   final TextEditingController relationshipController;
+  final TextEditingController relationshipOtherController;
 
   _PersonInMeeting({
     required this.localId,
     String name = '',
     String relationship = '',
+    String relationshipOther = '',
   })  : nameController = TextEditingController(text: name),
-        relationshipController = TextEditingController(text: relationship);
+        relationshipController = TextEditingController(text: relationship),
+        relationshipOtherController =
+        TextEditingController(text: relationshipOther);
+
+  bool get requiresRelationshipSpecification {
+    final relationship = relationshipController.text.trim();
+    return relationship == 'Family member' || relationship == 'Other';
+  }
 
   void dispose() {
     nameController.dispose();
     relationshipController.dispose();
+    relationshipOtherController.dispose();
   }
 
   Map<String, dynamic> toJson() => {
     'name': nameController.text.trim(),
     'relationshipToClient': relationshipController.text.trim(),
+    'relationshipOther': relationshipOtherController.text.trim(),
   };
 }
 
@@ -64,6 +75,7 @@ class _MgysdCaseClosurePageState extends State<MgysdCaseClosurePage> {
   final TextEditingController _caseOpeningDateController = TextEditingController();
   final TextEditingController _currentAddressController = TextEditingController();
   final TextEditingController _previousAddressController = TextEditingController();
+  final TextEditingController _otherClosureReasonController = TextEditingController();
   // Decision checkboxes
   final Map<String, bool> _closureDecisions = {
     'OBJECTIVES_MET': false,
@@ -71,6 +83,8 @@ class _MgysdCaseClosurePageState extends State<MgysdCaseClosurePage> {
     'NO_LONGER_WILLING': false,
     'CLIENT_MOVED': false,
     'LOST_TO_FOLLOW_UP': false,
+    'CLIENT_DECEASED': false,
+    'OTHER': false,
   };
 
   static const Map<String, String> _closureDecisionLabels = {
@@ -79,7 +93,23 @@ class _MgysdCaseClosurePageState extends State<MgysdCaseClosurePage> {
     'NO_LONGER_WILLING': 'The client and / or family no longer willing to participate',
     'CLIENT_MOVED': 'The client has moved, and case transferred to (note country or district & social worker)',
     'LOST_TO_FOLLOW_UP': 'The client has been lost to follow up (the client cannot be traced)',
+    'CLIENT_DECEASED': 'Client deceased',
+    'OTHER': 'Other',
   };
+
+  static const List<String> _relationshipOptions = [
+    'Mother',
+    'Father',
+    'Daughter',
+    'Sibling',
+    'Family member',
+    'Neighbour',
+    'Teacher',
+    'Nurse',
+    'Chief',
+    'Caregiver/Personal assistant',
+    'Other',
+  ];
 
   final List<_PersonInMeeting> _peopleInMeeting = [];
 
@@ -98,6 +128,7 @@ class _MgysdCaseClosurePageState extends State<MgysdCaseClosurePage> {
     _caseOpeningDateController.dispose();
     _currentAddressController.dispose();
     _previousAddressController.dispose();
+    _otherClosureReasonController.dispose();
     for (final person in _peopleInMeeting) {
       person.dispose();
     }
@@ -144,7 +175,7 @@ class _MgysdCaseClosurePageState extends State<MgysdCaseClosurePage> {
 
   Future<void> _ensureClosureColumns(Database db) async {
     try {
-    await db.execute('''
+      await db.execute('''
             CREATE TABLE IF NOT EXISTS mgysd_case_closure (
               id TEXT PRIMARY KEY,
               caseId TEXT,
@@ -252,6 +283,7 @@ class _MgysdCaseClosurePageState extends State<MgysdCaseClosurePage> {
 
         _currentAddressController.text = _text(payload['currentAddress']);
         _previousAddressController.text = _text(payload['previousAddress']);
+        _otherClosureReasonController.text = _text(payload['otherClosureReason']);
 
         // Restore decisions
         final decisions = payload['closureDecisions'] as Map<String, dynamic>? ?? {};
@@ -267,10 +299,17 @@ class _MgysdCaseClosurePageState extends State<MgysdCaseClosurePage> {
           _peopleInMeeting.clear();
           for (final item in list) {
             final m = item as Map<String, dynamic>;
+            final savedRelationship = _text(m['relationshipToClient']);
+            final knownRelationship =
+            _relationshipOptions.contains(savedRelationship);
             _peopleInMeeting.add(_PersonInMeeting(
               localId: DateTime.now().microsecondsSinceEpoch.toString(),
               name: _text(m['name']),
-              relationship: _text(m['relationshipToClient']),
+              relationship:
+              knownRelationship ? savedRelationship : 'Other',
+              relationshipOther: _text(m['relationshipOther']).isNotEmpty
+                  ? _text(m['relationshipOther'])
+                  : (knownRelationship ? '' : savedRelationship),
             ));
           }
         }
@@ -304,6 +343,7 @@ class _MgysdCaseClosurePageState extends State<MgysdCaseClosurePage> {
       'clientName': widget.clientName ?? '',
       'currentAddress': _currentAddressController.text.trim(),
       'previousAddress': _previousAddressController.text.trim(),
+      'otherClosureReason': _otherClosureReasonController.text.trim(),
       'closureDecisions': Map<String, bool>.from(_closureDecisions),
       'peopleInMeeting': _peopleInMeeting.map((e) => e.toJson()).toList(),
       'status': status,
@@ -561,10 +601,20 @@ class _MgysdCaseClosurePageState extends State<MgysdCaseClosurePage> {
               onChanged: (val) {
                 setState(() {
                   _closureDecisions[entry.key] = val ?? false;
+                  if (entry.key == 'OTHER' && val != true) {
+                    _otherClosureReasonController.clear();
+                  }
                 });
               },
             );
           }),
+          if (_closureDecisions['OTHER'] == true)
+            _input(
+              _otherClosureReasonController,
+              'Specify other reason',
+              maxLines: 2,
+              validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null,
+            ),
         ],
       ),
     );
@@ -583,6 +633,11 @@ class _MgysdCaseClosurePageState extends State<MgysdCaseClosurePage> {
           ..._peopleInMeeting.asMap().entries.map((e) {
             final idx = e.key;
             final person = e.value;
+            final relationship = person.relationshipController.text.trim();
+            final safeRelationship =
+            _relationshipOptions.contains(relationship) ? relationship : null;
+            final showRelationshipOther =
+                person.requiresRelationshipSpecification;
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(12),
@@ -601,8 +656,47 @@ class _MgysdCaseClosurePageState extends State<MgysdCaseClosurePage> {
                   const SizedBox(height: 8),
                   _two(
                     _input(person.nameController, 'Name'),
-                    _input(person.relationshipController, 'Relationship to client'),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: DropdownButtonFormField<String>(
+                        value: safeRelationship,
+                        isExpanded: true,
+                        items: _relationshipOptions.map((relationship) {
+                          return DropdownMenuItem<String>(
+                            value: relationship,
+                            child: Text(relationship),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            person.relationshipController.text = value ?? '';
+                            if (!person.requiresRelationshipSpecification) {
+                              person.relationshipOtherController.clear();
+                            }
+                          });
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'Relationship to client',
+                          filled: true,
+                          fillColor: const Color(0xFFF9FBFD),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(13),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
+                  if (showRelationshipOther)
+                    _input(
+                      person.relationshipOtherController,
+                      'Specify relationship to client',
+                      validator: (v) =>
+                      (v ?? '').trim().isEmpty ? 'Required' : null,
+                    ),
                   if (_peopleInMeeting.length > 1)
                     Align(
                       alignment: Alignment.centerRight,

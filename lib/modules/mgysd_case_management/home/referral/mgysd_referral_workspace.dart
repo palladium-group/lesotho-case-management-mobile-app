@@ -63,14 +63,14 @@ class _ReferralHousehold {
 
   int get totalReferrals =>
       householdReferralCount +
-      members.fold<int>(0, (total, member) => total + member.referralCount);
+          members.fold<int>(0, (total, member) => total + member.referralCount);
 
   String get searchableText => [
-        fileNumber,
-        clientName,
-        location,
-        ...members.map((member) => '${member.name} ${member.role}'),
-      ].join(' ').toLowerCase();
+    fileNumber,
+    clientName,
+    location,
+    ...members.map((member) => '${member.name} ${member.role}'),
+  ].join(' ').toLowerCase();
 }
 
 class _MgysdReferralWorkspaceState extends State<MgysdReferralWorkspace> {
@@ -168,15 +168,28 @@ class _MgysdReferralWorkspaceState extends State<MgysdReferralWorkspace> {
   }
 
   Future<int> _eventCount(
-    Database db, {
-    required String tei,
-    required String stage,
-  }) async {
+      Database db, {
+        required String tei,
+        required String stage,
+      }) async {
+    if (stage == MgysdDhis2Uids.referralStage &&
+        await _tableExists(db, 'mgysd_referral')) {
+      try {
+        final rows = await db.rawQuery(
+          'SELECT COUNT(*) AS c FROM mgysd_referral '
+              'WHERE householdTei = ?',
+          [tei],
+        );
+        final count = int.tryParse('${rows.first['c'] ?? 0}') ?? 0;
+        if (count > 0) return count;
+      } catch (_) {}
+    }
+
     if (!await _tableExists(db, 'events')) return 0;
     try {
       final rows = await db.rawQuery(
         'SELECT COUNT(*) AS c FROM events '
-        'WHERE trackedEntityInstance = ? AND programStage = ?',
+            'WHERE trackedEntityInstance = ? AND programStage = ?',
         [tei, stage],
       );
       return int.tryParse('${rows.first['c'] ?? 0}') ?? 0;
@@ -210,9 +223,9 @@ class _MgysdReferralWorkspaceState extends State<MgysdReferralWorkspace> {
   }
 
   Future<List<_ReferralMember>> _members(
-    Database db,
-    String householdTei,
-  ) async {
+      Database db,
+      String householdTei,
+      ) async {
     if (!await _tableExists(db, 'mgysd_household_member')) return [];
 
     final result = <_ReferralMember>[];
@@ -241,7 +254,7 @@ class _MgysdReferralWorkspaceState extends State<MgysdReferralWorkspace> {
             sex: _first(attrs, [MgysdDhis2Uids.attSex, 'sex']),
             age: _first(attrs, [MgysdDhis2Uids.attAge, 'age']),
             isPrimary:
-                '${row['isPrimaryClient'] ?? ''}'.toLowerCase() == 'true',
+            '${row['isPrimaryClient'] ?? ''}'.toLowerCase() == 'true',
             referralCount: await _eventCount(
               db,
               tei: tei,
@@ -285,7 +298,7 @@ class _MgysdReferralWorkspaceState extends State<MgysdReferralWorkspace> {
         final hhAttrs = await _attributes(db, householdTei);
         final primaryTei = await _primaryClientTei(db, householdTei);
         final clientAttrs =
-            primaryTei == null ? <String, String>{} : await _attributes(db, primaryTei);
+        primaryTei == null ? <String, String>{} : await _attributes(db, primaryTei);
 
         final fileNo = _first(hhAttrs, [
           MgysdDhis2Uids.attHouseholdFileNumber,
@@ -307,7 +320,7 @@ class _MgysdReferralWorkspaceState extends State<MgysdReferralWorkspace> {
         result.add(
           _ReferralHousehold(
             enrollmentId:
-                '${enrollment['enrollment'] ?? enrollment['id'] ?? ''}',
+            '${enrollment['enrollment'] ?? enrollment['id'] ?? ''}',
             householdTei: householdTei,
             fileNumber: fileNo.isEmpty ? householdTei : fileNo,
             clientName: _name(clientAttrs, 'Household client'),
@@ -388,9 +401,9 @@ class _MgysdReferralWorkspaceState extends State<MgysdReferralWorkspace> {
   }
 
   Future<void> _openMemberReferrals(
-    _ReferralHousehold household,
-    _ReferralMember member,
-  ) async {
+      _ReferralHousehold household,
+      _ReferralMember member,
+      ) async {
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -674,14 +687,14 @@ class _MgysdReferralWorkspaceState extends State<MgysdReferralWorkspace> {
                         ),
                         suffixIcon: _searchController.text.isEmpty
                             ? const Icon(Icons.public_outlined,
-                                color: Colors.blueGrey)
+                            color: Colors.blueGrey)
                             : IconButton(
-                                onPressed: () {
-                                  _searchController.clear();
-                                  _applyFilters();
-                                },
-                                icon: const Icon(Icons.close),
-                              ),
+                          onPressed: () {
+                            _searchController.clear();
+                            _applyFilters();
+                          },
+                          icon: const Icon(Icons.close),
+                        ),
                         filled: true,
                         fillColor: Colors.white,
                         border: OutlineInputBorder(
@@ -700,7 +713,7 @@ class _MgysdReferralWorkspaceState extends State<MgysdReferralWorkspace> {
                       icon: Icon(
                         Icons.tune_outlined,
                         color:
-                            _filter == 'ALL' ? Colors.blueGrey : widget.color,
+                        _filter == 'ALL' ? Colors.blueGrey : widget.color,
                       ),
                     ),
                   ),
@@ -720,7 +733,7 @@ class _MgysdReferralWorkspaceState extends State<MgysdReferralWorkspace> {
           else
             SliverList(
               delegate: SliverChildBuilderDelegate(
-                (_, index) => _card(_filtered[index]),
+                    (_, index) => _card(_filtered[index]),
                 childCount: _filtered.length,
               ),
             ),
