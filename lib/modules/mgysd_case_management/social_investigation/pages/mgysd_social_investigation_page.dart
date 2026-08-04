@@ -1468,6 +1468,8 @@ class _MgysdSocialInvestigationPageState
   final TextEditingController _emotionalHealthChallengesController = TextEditingController();
 
   String _educationRating = '';
+  // Free-text detail captured when the Education rating is "Other".
+  final TextEditingController _educationRatingOtherController = TextEditingController();
   final TextEditingController _educationObservationsController = TextEditingController();
   final TextEditingController _educationStrengthsController = TextEditingController();
   final TextEditingController _educationChallengesController = TextEditingController();
@@ -1500,6 +1502,7 @@ class _MgysdSocialInvestigationPageState
   final TextEditingController _parentSiblingStrengthsController = TextEditingController();
   final TextEditingController _parentSiblingChallengesController = TextEditingController();
 
+  String _peerRelationshipRating = '';
   final TextEditingController _peerRelationshipObservationsController = TextEditingController();
   final TextEditingController _peerRelationshipStrengthsController = TextEditingController();
   final TextEditingController _peerRelationshipChallengesController = TextEditingController();
@@ -1703,15 +1706,6 @@ class _MgysdSocialInvestigationPageState
     'HIGH': 'High',
     'MODERATE': 'Moderate',
     'LOW': 'Low',
-  };
-  static const List<String> _riskLevelOptions = [
-    'LOW_RISK', 'MODERATE_RISK', 'HIGH_RISK', 'CRITICAL',
-  ];
-  static const Map<String, String> _riskLevelLabels = {
-    'LOW_RISK': 'Low Risk',
-    'MODERATE_RISK': 'Moderate Risk',
-    'HIGH_RISK': 'High Risk',
-    'CRITICAL': 'Critical (Immediate intervention required)',
   };
   // Gender options for external informant (includes Other)
   static const List<String> _genderOptions = ['MALE', 'FEMALE'];
@@ -2079,10 +2073,6 @@ class _MgysdSocialInvestigationPageState
     'OTHER': 'Other',
   };
 
-  static const List<String> _gradeOptions = [
-    '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11',
-  ];
-
   static const List<String> _schoolAttendanceOptions = [
     'GOOD_ATTENDANCE',
     'POOR_ATTENDANCE',
@@ -2097,12 +2087,6 @@ class _MgysdSocialInvestigationPageState
   };
 
   static const List<String> _aliveOptions = ['YES', 'NO', 'UNKNOWN'];
-  static const Map<String, String> _aliveLabels = {
-    'YES': 'Yes',
-    'NO': 'No',
-    'UNKNOWN': 'Unknown',
-  };
-
   static const List<String> _incidentPatternOptions = ['SPECIFIC_DAY', 'LONG_TERM_ONGOING'];
   static const Map<String, String> _incidentPatternLabels = {
     'SPECIFIC_DAY': 'Specific day',
@@ -2141,6 +2125,7 @@ class _MgysdSocialInvestigationPageState
     'LEARNING_DISABILITIES',
     'ONGOING_CONCERNS',
     'SIGNIFICANT_ISSUES_DROPOUT',
+    'OTHER',
   ];
   static const Map<String, String> _educationLabels = {
     'STABLE_GOOD': 'Stable / good',
@@ -2148,6 +2133,7 @@ class _MgysdSocialInvestigationPageState
     'LEARNING_DISABILITIES': 'Learning disabilities',
     'ONGOING_CONCERNS': 'Ongoing concerns',
     'SIGNIFICANT_ISSUES_DROPOUT': 'Significant issues, including school or training drop out',
+    'OTHER': 'Other',
   };
 
   static const List<String> _familyBackgroundOptions = [
@@ -2263,6 +2249,7 @@ class _MgysdSocialInvestigationPageState
     _emotionalHealthObservationsController.dispose();
     _emotionalHealthStrengthsController.dispose();
     _emotionalHealthChallengesController.dispose();
+    _educationRatingOtherController.dispose();
     _educationObservationsController.dispose();
     _educationStrengthsController.dispose();
     _educationChallengesController.dispose();
@@ -2791,6 +2778,9 @@ class _MgysdSocialInvestigationPageState
         'alternativePhone': _c(attrs[MgysdDhis2Uids.attAlternativePhone] ?? ''),
         'occupation': _c(attrs[MgysdDhis2Uids.attOccupation] ?? ''),
         'relationshipToClient': _c(_normaliseOptionValue(attrs[MgysdDhis2Uids.attRelationshipToClient] ?? role, _relationshipToClientOptions)),
+        // Free-text specification for the "Other" relationship option. Held in
+        // the investigation payload, not as a tracked entity attribute.
+        'relationshipToClientOther': _c(),
         'hasDisability': _c(_normaliseOptionValue(attrs[MgysdDhis2Uids.attHasDisability] ?? attrs[MgysdDhis2Uids.attIsDisabled] ?? '', _disabilityOptions)),
         'disabilitySpecify': _c(attrs[MgysdDhis2Uids.attDisabilitySpecify] ?? ''),
         'clientCategory': _c(_normaliseOptionValue(attrs[MgysdDhis2Uids.attClientCategory] ?? '', _clientCategoryOptions)),
@@ -2829,15 +2819,33 @@ class _MgysdSocialInvestigationPageState
     _supervisorSurnameController.text = _text(part1['supervisorSurname']);
     _supervisorPhoneController.text = _text(part1['supervisorPhone']);
 
+    // Part 1 "Other" specifications are stored in the investigation payload
+    // rather than as tracked entity attributes, so overlay them onto the
+    // members that were just rebuilt from the intake record.
+    final savedMembers = (part1['clientAndFamilySummary'] ?? []) as List<dynamic>;
+    for (final raw in savedMembers) {
+      final item = (raw ?? {}) as Map<String, dynamic>;
+      final tei = _text(item['tei']);
+      if (tei.isEmpty) continue;
+      final values = (item['values'] ?? <String, dynamic>{}) as Map<String, dynamic>;
+      for (final member in _familyMembers) {
+        if (member.tei != tei) continue;
+        for (final key in const ['relationshipToClientOther']) {
+          final saved = _text(values[key]);
+          if (saved.isNotEmpty) member.controllers[key]?.text = saved;
+        }
+      }
+    }
+
     final supervisorReview =
-        (payload['supervisorReview'] ?? {}) as Map<String, dynamic>;
+    (payload['supervisorReview'] ?? {}) as Map<String, dynamic>;
     _investigationOutcome = _text(supervisorReview['investigationOutcome']);
     _supervisorDecision = _text(supervisorReview['decision']);
     _supervisorRemarksController.text = _text(supervisorReview['remarks']);
     _supervisorReviewDateController.text =
-        _text(supervisorReview['reviewDate']).isEmpty
-            ? _today()
-            : _text(supervisorReview['reviewDate']);
+    _text(supervisorReview['reviewDate']).isEmpty
+        ? _today()
+        : _text(supervisorReview['reviewDate']);
 
     final part2 = (payload['part2'] ?? {}) as Map<String, dynamic>;
     _incidentPattern = _text(part2['incidentPattern']);
@@ -2854,14 +2862,14 @@ class _MgysdSocialInvestigationPageState
     _changesSinceInitialObservationsController.text = _text(part3['additionalObservations']);
     _loadDomain(payload: part3, key: 'physicalHealth', ratingSetter: (v) => _physicalHealthRating = v, observations: _physicalHealthObservationsController, strengths: _physicalHealthStrengthsController, challenges: _physicalHealthChallengesController);
     _loadDomain(payload: part3, key: 'emotionalHealth', ratingSetter: (v) => _emotionalHealthRating = v, observations: _emotionalHealthObservationsController, strengths: _emotionalHealthStrengthsController, challenges: _emotionalHealthChallengesController);
-    _loadDomain(payload: part3, key: 'education', ratingSetter: (v) => _educationRating = v, observations: _educationObservationsController, strengths: _educationStrengthsController, challenges: _educationChallengesController);
+    _loadDomain(payload: part3, key: 'education', ratingSetter: (v) => _educationRating = v, ratingOther: _educationRatingOtherController, observations: _educationObservationsController, strengths: _educationStrengthsController, challenges: _educationChallengesController);
     _loadDomain(payload: part3, key: 'behaviouralDevelopment', ratingSetter: (_) {}, observations: _behaviouralObservationsController, strengths: _behaviouralStrengthsController, challenges: _behaviouralChallengesController);
     _loadDomain(payload: part3, key: 'identity', ratingSetter: (_) {}, observations: _identityObservationsController, strengths: _identityStrengthsController, challenges: _identityChallengesController);
     _loadDomain(payload: part3, key: 'familyBackground', ratingSetter: (v) => _familyBackgroundRating = v, observations: _familyBackgroundObservationsController, strengths: _familyBackgroundStrengthsController, challenges: _familyBackgroundChallengesController);
     _loadDomain(payload: part3, key: 'caregiverWellbeing', ratingSetter: (v) => _caregiverWellbeingRating = v, observations: _caregiverWellbeingObservationsController, strengths: _caregiverWellbeingStrengthsController, challenges: _caregiverWellbeingChallengesController);
     _loadDomain(payload: part3, key: 'extendedFamily', ratingSetter: (v) => _extendedFamilyRating = v, observations: _extendedFamilyObservationsController, strengths: _extendedFamilyStrengthsController, challenges: _extendedFamilyChallengesController);
     _loadDomain(payload: part3, key: 'parentSiblingRelationship', ratingSetter: (v) => _parentSiblingRelationshipRating = v, observations: _parentSiblingObservationsController, strengths: _parentSiblingStrengthsController, challenges: _parentSiblingChallengesController);
-    _loadDomain(payload: part3, key: 'peerRelationship', ratingSetter: (_) {}, observations: _peerRelationshipObservationsController, strengths: _peerRelationshipStrengthsController, challenges: _peerRelationshipChallengesController);
+    _loadDomain(payload: part3, key: 'peerRelationship', ratingSetter: (v) => _peerRelationshipRating = v, observations: _peerRelationshipObservationsController, strengths: _peerRelationshipStrengthsController, challenges: _peerRelationshipChallengesController);
     _loadDomain(payload: part3, key: 'alternativeCare', ratingSetter: (_) {}, observations: _alternativeCareObservationsController, strengths: _alternativeCareStrengthsController, challenges: _alternativeCareChallengesController);
     _loadDomain(payload: part3, key: 'housing', ratingSetter: (v) => _housingRating = v, observations: _housingObservationsController, strengths: _housingStrengthsController, challenges: _housingChallengesController);
     _loadDomain(payload: part3, key: 'socialInclusion', ratingSetter: (v) => _socialInclusionRating = v, observations: _socialInclusionObservationsController, strengths: _socialInclusionStrengthsController, challenges: _socialInclusionChallengesController);
@@ -3349,17 +3357,19 @@ class _MgysdSocialInvestigationPageState
 
   int? _intOrNull(dynamic value) => value == null ? null : int.tryParse(value.toString());
 
-  void _loadDomain({required Map<String, dynamic> payload, required String key, required void Function(String value) ratingSetter, required TextEditingController observations, required TextEditingController strengths, required TextEditingController challenges}) {
+  void _loadDomain({required Map<String, dynamic> payload, required String key, required void Function(String value) ratingSetter, TextEditingController? ratingOther, required TextEditingController observations, required TextEditingController strengths, required TextEditingController challenges}) {
     final domain = (payload[key] ?? {}) as Map<String, dynamic>;
     ratingSetter(_text(domain['rating']));
+    if (ratingOther != null) ratingOther.text = _text(domain['ratingOther']);
     observations.text = _text(domain['observations']);
     strengths.text = _text(domain['strengths']);
     challenges.text = _text(domain['challenges']);
   }
 
-  Map<String, dynamic> _domainPayload({String rating = '', required TextEditingController observations, required TextEditingController strengths, required TextEditingController challenges}) {
+  Map<String, dynamic> _domainPayload({String rating = '', TextEditingController? ratingOther, required TextEditingController observations, required TextEditingController strengths, required TextEditingController challenges}) {
     return {
       'rating': rating,
+      'ratingOther': ratingOther?.text.trim() ?? '',
       'observations': observations.text.trim(),
       'strengths': strengths.text.trim(),
       'challenges': challenges.text.trim(),
@@ -3398,7 +3408,7 @@ class _MgysdSocialInvestigationPageState
         'remarks': _supervisorRemarksController.text.trim(),
         'reviewDate': _supervisorReviewDateController.text.trim(),
         'approvedForEnrollment':
-            _investigationOutcome == 'ELIGIBLE' &&
+        _investigationOutcome == 'ELIGIBLE' &&
             _supervisorDecision == 'APPROVE',
       },
       'part2': {
@@ -3416,14 +3426,14 @@ class _MgysdSocialInvestigationPageState
         'additionalObservations': _changesSinceInitialObservationsController.text.trim(),
         'physicalHealth': _domainPayload(rating: _physicalHealthRating, observations: _physicalHealthObservationsController, strengths: _physicalHealthStrengthsController, challenges: _physicalHealthChallengesController),
         'emotionalHealth': _domainPayload(rating: _emotionalHealthRating, observations: _emotionalHealthObservationsController, strengths: _emotionalHealthStrengthsController, challenges: _emotionalHealthChallengesController),
-        'education': _domainPayload(rating: _educationRating, observations: _educationObservationsController, strengths: _educationStrengthsController, challenges: _educationChallengesController),
+        'education': _domainPayload(rating: _educationRating, ratingOther: _educationRatingOtherController, observations: _educationObservationsController, strengths: _educationStrengthsController, challenges: _educationChallengesController),
         'behaviouralDevelopment': _domainPayload(observations: _behaviouralObservationsController, strengths: _behaviouralStrengthsController, challenges: _behaviouralChallengesController),
         'identity': _domainPayload(observations: _identityObservationsController, strengths: _identityStrengthsController, challenges: _identityChallengesController),
         'familyBackground': _domainPayload(rating: _familyBackgroundRating, observations: _familyBackgroundObservationsController, strengths: _familyBackgroundStrengthsController, challenges: _familyBackgroundChallengesController),
         'caregiverWellbeing': _domainPayload(rating: _caregiverWellbeingRating, observations: _caregiverWellbeingObservationsController, strengths: _caregiverWellbeingStrengthsController, challenges: _caregiverWellbeingChallengesController),
         'extendedFamily': _domainPayload(rating: _extendedFamilyRating, observations: _extendedFamilyObservationsController, strengths: _extendedFamilyStrengthsController, challenges: _extendedFamilyChallengesController),
         'parentSiblingRelationship': _domainPayload(rating: _parentSiblingRelationshipRating, observations: _parentSiblingObservationsController, strengths: _parentSiblingStrengthsController, challenges: _parentSiblingChallengesController),
-        'peerRelationship': _domainPayload(observations: _peerRelationshipObservationsController, strengths: _peerRelationshipStrengthsController, challenges: _peerRelationshipChallengesController),
+        'peerRelationship': _domainPayload(rating: _peerRelationshipRating, observations: _peerRelationshipObservationsController, strengths: _peerRelationshipStrengthsController, challenges: _peerRelationshipChallengesController),
         'alternativeCare': _domainPayload(observations: _alternativeCareObservationsController, strengths: _alternativeCareStrengthsController, challenges: _alternativeCareChallengesController),
         'housing': _domainPayload(rating: _housingRating, observations: _housingObservationsController, strengths: _housingStrengthsController, challenges: _housingChallengesController),
         'socialInclusion': _domainPayload(rating: _socialInclusionRating, observations: _socialInclusionObservationsController, strengths: _socialInclusionStrengthsController, challenges: _socialInclusionChallengesController),
@@ -3785,8 +3795,8 @@ class _MgysdSocialInvestigationPageState
       _showSnack(
         status == 'COMPLETED'
             ? (enrolled
-                ? 'Investigation approved. Household enrolled successfully.'
-                : 'Social Investigation submitted successfully.')
+            ? 'Investigation approved. Household enrolled successfully.'
+            : 'Social Investigation submitted successfully.')
             : 'Social Investigation saved as draft.',
       );
       Navigator.pop(context, true);
@@ -4227,6 +4237,12 @@ class _MgysdSocialInvestigationPageState
             _input(member.controllers['occupation']!, 'Occupation'),
             _controllerDropdown(controller: member.controllers['relationshipToClient']!, label: 'Relationship to Client', options: _relationshipToClientOptions, labels: _relationshipToClientLabels, requiredField: true),
           ),
+          if (member.controllers['relationshipToClient']!.text.trim() == 'OTHER')
+            _input(
+              member.controllers['relationshipToClientOther']!,
+              'Please specify relationship to client',
+              validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null,
+            ),
           if (member.isPrimaryClient) ...[
             _input(member.controllers['identityNumber']!, 'Identity Number'),
             _two(
@@ -4237,27 +4253,14 @@ class _MgysdSocialInvestigationPageState
               _controllerDropdown(controller: member.controllers['isClientInSchool']!, label: 'Is Client in School?', options: _yesNoOptions, labels: _yesNoLabels),
               _input(member.controllers['schoolName']!, 'Name of School'),
             ),
-            _two(
-              _controllerDropdown(controller: member.controllers['grade']!, label: 'Grade', options: _gradeOptions, labels: const {}),
-              _controllerDropdown(controller: member.controllers['schoolAttendanceStatus']!, label: 'School Attendance Status', options: _schoolAttendanceOptions, labels: _schoolAttendanceLabels),
-            ),
+            _controllerDropdown(controller: member.controllers['schoolAttendanceStatus']!, label: 'School Attendance Status', options: _schoolAttendanceOptions, labels: _schoolAttendanceLabels),
             _two(
               _controllerDropdown(controller: member.controllers['isAdultEmployed']!, label: 'Is Adult Employed?', options: _yesNoOptions, labels: _yesNoLabels),
               _input(member.controllers['employerName']!, 'Employer Name'),
             ),
-            const Divider(height: 20),
-            const Align(alignment: Alignment.centerLeft, child: Text('Father / Mother Intake Status', style: TextStyle(fontWeight: FontWeight.w900))),
-            const SizedBox(height: 8),
-            _two(
-              _controllerDropdown(controller: member.controllers['fatherAlive']!, label: 'Is Father Alive?', options: _aliveOptions, labels: _aliveLabels),
-              _controllerDropdown(controller: member.controllers['fatherLivingWithChild']!, label: 'Is Father Living with Child?', options: _aliveOptions, labels: _aliveLabels),
-            ),
-            _input(member.controllers['fatherWhyNotLiving']!, 'Why is Father not living with Child?', maxLines: 2),
-            _two(
-              _controllerDropdown(controller: member.controllers['motherAlive']!, label: 'Is Mother Alive?', options: _aliveOptions, labels: _aliveLabels),
-              _controllerDropdown(controller: member.controllers['motherLivingWithChild']!, label: 'Is Mother Living with Child?', options: _aliveOptions, labels: _aliveLabels),
-            ),
-            _input(member.controllers['motherWhyNotLiving']!, 'Why is Mother not living with Child?', maxLines: 2),
+            // Father / Mother intake status removed from the Social Investigation
+            // form (ToT workshop). The values remain loaded from, and written
+            // back to, the intake record so existing data is preserved.
           ],
           const Divider(height: 20),
           const Align(
@@ -4295,13 +4298,25 @@ class _MgysdSocialInvestigationPageState
       _dropdown(label: 'Did the violation/incident take place on a specific day or is it a long-term / ongoing concern?', value: _incidentPattern, options: _incidentPatternOptions, labels: _incidentPatternLabels, requiredField: true, onChanged: (v) => setState(() => _incidentPattern = v)),
       if (_incidentPattern == 'SPECIFIC_DAY') _input(_specificIncidentDateController, 'Date of Incident', readOnly: true, onTap: () => _pickDate(_specificIncidentDateController)),
       if (_incidentPattern == 'LONG_TERM_ONGOING') _input(_ongoingStartDateController, 'Date when the problem started', readOnly: true, onTap: () => _pickDate(_ongoingStartDateController)),
-      _two(_input(_incidentDistrictController, 'Location: District'), _input(_incidentCommunityCouncilController, 'Location: Community Council')),
+      _two(
+        _orgUnitDropdown(
+          controller: _incidentDistrictController,
+          label: 'Location: District',
+          options: _districtOrgUnits,
+          afterChanged: () => _incidentCommunityCouncilController.clear(),
+        ),
+        _orgUnitDropdown(
+          controller: _incidentCommunityCouncilController,
+          label: 'Location: Community Council',
+          options: _communityCouncilsFor(_incidentDistrictController.text),
+        ),
+      ),
       _input(_incidentVillageController, 'Village'),
       if (_incidentPattern == 'LONG_TERM_ONGOING') _input(_ongoingNotesController, 'Notes', maxLines: 4),
     ]));
   }
 
-  Widget _domainSection({required String title, required String subtitle, required String rating, required List<String> options, required Map<String, String> labels, required Function(String) onRatingChanged, required TextEditingController observations, required TextEditingController strengths, required TextEditingController challenges}) {
+  Widget _domainSection({required String title, required String subtitle, required String rating, required List<String> options, required Map<String, String> labels, required Function(String) onRatingChanged, required TextEditingController observations, required TextEditingController strengths, required TextEditingController challenges, TextEditingController? ratingOther}) {
     final hasData = rating.trim().isNotEmpty || observations.text.trim().isNotEmpty || strengths.text.trim().isNotEmpty || challenges.text.trim().isNotEmpty;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -4323,6 +4338,14 @@ class _MgysdSocialInvestigationPageState
         subtitle: Text(subtitle, style: const TextStyle(color: Colors.blueGrey, height: 1.35, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
         children: [
           _dropdown(label: '$title rating', value: rating, options: options, labels: labels, onChanged: onRatingChanged),
+          // Domains that offer an "Other" rating capture the detail here.
+          if (ratingOther != null && rating.trim() == 'OTHER')
+            _input(
+              ratingOther,
+              'Please specify',
+              maxLines: 2,
+              validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null,
+            ),
           _input(observations, 'Observations / notes', maxLines: 4),
           _two(_input(strengths, 'Strengths', maxLines: 3), _input(challenges, 'Challenges', maxLines: 3)),
         ],
@@ -4361,19 +4384,39 @@ class _MgysdSocialInvestigationPageState
   Widget _part3() {
     return _surface(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _sectionTitle('Part 3: Social Investigation', 'Record amendments to intake data and comprehensive information about risks, strengths, opportunities and desired wellbeing outcomes.'),
-      _dropdown(label: 'Has the assessment changed since initial assessment?', value: _changedSinceInitialAssessment, options: _yesNoOptions, onChanged: (v) => setState(() => _changedSinceInitialAssessment = v)),
-      _input(_changesSinceInitialReasonController, 'Reason for any change from initial assessment', maxLines: 3),
-      _input(_changesSinceInitialObservationsController, 'Additional observations', maxLines: 3),
+      _dropdown(
+        label: 'Has the assessment changed since initial assessment?',
+        value: _changedSinceInitialAssessment,
+        options: _yesNoOptions,
+        labels: _yesNoLabels,
+        onChanged: (v) => setState(() {
+          _changedSinceInitialAssessment = v;
+          // Clear the change details when the answer is not Yes so stale text
+          // is never submitted for an unchanged assessment.
+          if (v != 'YES') {
+            _changesSinceInitialReasonController.clear();
+            _changesSinceInitialObservationsController.clear();
+          }
+        }),
+      ),
+      // Skip logic: only ask for change details when the assessment has changed.
+      if (_changedSinceInitialAssessment == 'YES') ...[
+        _input(_changesSinceInitialReasonController, 'Reason for any change from initial assessment', maxLines: 3),
+        _input(_changesSinceInitialObservationsController, 'Additional observations', maxLines: 3),
+      ],
       _domainSection(title: 'Client physical health', subtitle: 'Client access to health information and services, caregiver input, disability/rehabilitation barriers and support.', rating: _physicalHealthRating, options: _physicalHealthOptions, labels: _physicalHealthLabels, onRatingChanged: (v) => setState(() => _physicalHealthRating = v), observations: _physicalHealthObservationsController, strengths: _physicalHealthStrengthsController, challenges: _physicalHealthChallengesController),
       _domainSection(title: 'Client emotional health', subtitle: 'Emotional wellbeing, support, stressors, distress and protective factors.', rating: _emotionalHealthRating, options: _emotionalHealthOptions, labels: _emotionalHealthLabels, onRatingChanged: (v) => setState(() => _emotionalHealthRating = v), observations: _emotionalHealthObservationsController, strengths: _emotionalHealthStrengthsController, challenges: _emotionalHealthChallengesController),
-      _domainSection(title: 'Education', subtitle: 'Client and caregiver expectations, education support, learning development and barriers.', rating: _educationRating, options: _educationOptions, labels: _educationLabels, onRatingChanged: (v) => setState(() => _educationRating = v), observations: _educationObservationsController, strengths: _educationStrengthsController, challenges: _educationChallengesController),
+      _domainSection(title: 'Education', subtitle: 'Client and caregiver expectations, education support, learning development and barriers.', rating: _educationRating, options: _educationOptions, labels: _educationLabels, onRatingChanged: (v) => setState(() {
+        _educationRating = v;
+        if (v != 'OTHER') _educationRatingOtherController.clear();
+      }), observations: _educationObservationsController, strengths: _educationStrengthsController, challenges: _educationChallengesController, ratingOther: _educationRatingOtherController),
       _narrativeDomain(title: 'Emotional and behavioural development', subtitle: 'Attachments, discipline, guidance, feelings, behaviour, and support from family members.', observations: _behaviouralObservationsController, strengths: _behaviouralStrengthsController, challenges: _behaviouralChallengesController),
       _narrativeDomain(title: 'Identity', subtitle: 'Self-image, self-esteem, confidence, goals, aspirations, risk awareness and daily activities.', observations: _identityObservationsController, strengths: _identityStrengthsController, challenges: _identityChallengesController),
       _domainSection(title: 'Family background and composition', subtitle: 'Household composition, changes, disruption, risks, caring adults and economic support potential.', rating: _familyBackgroundRating, options: _familyBackgroundOptions, labels: _familyBackgroundLabels, onRatingChanged: (v) => setState(() => _familyBackgroundRating = v), observations: _familyBackgroundObservationsController, strengths: _familyBackgroundStrengthsController, challenges: _familyBackgroundChallengesController),
       _domainSection(title: 'Parent / caregiver / guardian health and wellbeing', subtitle: 'Health issues affecting capacity to protect and care for the client.', rating: _caregiverWellbeingRating, options: _caregiverWellbeingOptions, labels: _caregiverWellbeingLabels, onRatingChanged: (v) => setState(() => _caregiverWellbeingRating = v), observations: _caregiverWellbeingObservationsController, strengths: _caregiverWellbeingStrengthsController, challenges: _caregiverWellbeingChallengesController),
       _domainSection(title: 'Extended family relationships', subtitle: 'Extended family support, tensions, family mechanisms and positive role models.', rating: _extendedFamilyRating, options: _relationshipOptions, labels: _relationshipLabels, onRatingChanged: (v) => setState(() => _extendedFamilyRating = v), observations: _extendedFamilyObservationsController, strengths: _extendedFamilyStrengthsController, challenges: _extendedFamilyChallengesController),
       _domainSection(title: 'Client relationships with parents and siblings', subtitle: 'Care and support from parents/siblings, relationship stress, non-biological parents and sources of support.', rating: _parentSiblingRelationshipRating, options: _parentSiblingRelationshipOptions, labels: _parentSiblingRelationshipLabels, onRatingChanged: (v) => setState(() => _parentSiblingRelationshipRating = v), observations: _parentSiblingObservationsController, strengths: _parentSiblingStrengthsController, challenges: _parentSiblingChallengesController),
-      _narrativeDomain(title: 'Client relationship with peers and community', subtitle: 'Friendships, bullying, safe places, church/youth/community involvement and livelihood context.', observations: _peerRelationshipObservationsController, strengths: _peerRelationshipStrengthsController, challenges: _peerRelationshipChallengesController),
+      _domainSection(title: 'Client relationship with peers and community', subtitle: 'Friendships, bullying, safe places, church/youth/community involvement and livelihood context.', rating: _peerRelationshipRating, options: _relationshipOptions, labels: _relationshipLabels, onRatingChanged: (v) => setState(() => _peerRelationshipRating = v), observations: _peerRelationshipObservationsController, strengths: _peerRelationshipStrengthsController, challenges: _peerRelationshipChallengesController),
       _narrativeDomain(title: 'Client relationships if in alternative care', subtitle: 'Caregiving changes, permanency plan, voice in living arrangements and wellbeing impacts.', observations: _alternativeCareObservationsController, strengths: _alternativeCareStrengthsController, challenges: _alternativeCareChallengesController),
       _domainSection(title: 'Housing and environmental safety', subtitle: 'Housing type, safety, space, environment, recreation and accessibility.', rating: _housingRating, options: _housingOptions, labels: _housingLabels, onRatingChanged: (v) => setState(() => _housingRating = v), observations: _housingObservationsController, strengths: _housingStrengthsController, challenges: _housingChallengesController),
       _domainSection(title: 'Social, religious and cultural inclusion', subtitle: 'Community/religious interaction, social isolation, stigma and sources of community support.', rating: _socialInclusionRating, options: _socialInclusionOptions, labels: _socialInclusionLabels, onRatingChanged: (v) => setState(() => _socialInclusionRating = v), observations: _socialInclusionObservationsController, strengths: _socialInclusionStrengthsController, challenges: _socialInclusionChallengesController),
@@ -4981,20 +5024,9 @@ class _MgysdSocialInvestigationPageState
                   ),
                   _input(entry.socialWorkerSummaryNotesController, 'Summary notes', maxLines: 6),
 
-                  // ── Section L: Risk Level Assessment ──────────────────────────────
-                  _subHeading('Section L: Risk Level Assessment'),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Text('To be completed by Social Worker',
-                        style: const TextStyle(fontSize: 12, color: Colors.blueGrey, fontStyle: FontStyle.italic)),
-                  ),
-                  _dropdown(
-                    label: 'Risk Level',
-                    value: entry.riskLevel,
-                    options: _riskLevelOptions,
-                    labels: _riskLevelLabels,
-                    onChanged: (v) => setState(() => entry.riskLevel = v),
-                  ),
+                  // Section L (Risk Level Assessment) was removed from Part 4
+                  // (ToT workshop). Risk level is set during intake / initial
+                  // risk assessment, not per external informant.
 
                   // ── Section M: Confidentiality Statement ──────────────────────────
                   _subHeading('Section M: Confidentiality Statement'),
@@ -6324,7 +6356,7 @@ class _MgysdSocialInvestigationPageState
     return Row(children: [
       Expanded(child: OutlinedButton(onPressed: _saving ? null : () => _save('DRAFT'), style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14), side: BorderSide(color: widget.color), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13))), child: const Text('Save Draft'))),
       const SizedBox(width: 12),
-      Expanded(child: ElevatedButton(onPressed: _saving ? null : () => _save('COMPLETED'), style: ElevatedButton.styleFrom(backgroundColor: widget.color, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13))), child: Text(_saving ? 'Saving...' : 'Submit Investigation'))),
+      Expanded(child: ElevatedButton(onPressed: _saving ? null : () => _save('COMPLETED'), style: ElevatedButton.styleFrom(backgroundColor: widget.color, foregroundColor: Colors.white, disabledBackgroundColor: widget.color.withValues(alpha: 0.55), disabledForegroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13))), child: Text(_saving ? 'Saving...' : 'Submit Investigation', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)))),
     ]);
   }
 
