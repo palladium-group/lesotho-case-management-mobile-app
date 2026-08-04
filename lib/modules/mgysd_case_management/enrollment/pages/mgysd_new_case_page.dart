@@ -319,6 +319,13 @@ class _NextOfKinEntry {
 class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   final _formKey = GlobalKey<FormState>();
 
+  final GlobalKey _reasonForEnrolmentSectionKey = GlobalKey();
+  final GlobalKey _clientDemographicsSectionKey = GlobalKey();
+
+  bool _showMandatoryFieldErrors = false;
+  bool _forceOpenMandatorySections = false;
+  int _mandatoryExpansionRefresh = 0;
+
   final _fileNumberController = TextEditingController();
   final _districtController = TextEditingController();
   final _communityCouncilController = TextEditingController();
@@ -387,6 +394,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   bool _loadingOrgUnits = false;
   bool _loadingExistingCase = false;
   bool _countryPickerBusy = false;
+  bool _restoringCachedState = false;
+  bool _cacheWriteQueued = false;
 
   String _clientPhoneCountryCode = 'LS';
   String _clientAlternativePhoneCountryCode = 'LS';
@@ -1160,6 +1169,25 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
 
   int? get _clientAge => int.tryParse(_clientAgeController.text.trim());
 
+  bool get _isUnder18Client {
+    final age = _clientAge;
+    if (age != null) return age < 18;
+    return _clientCategory == 'Child';
+  }
+
+  bool get _showEmploymentQuestions {
+    return !_isUnder18Client && _isAdultOrElderly;
+  }
+
+  void _clearEmploymentFieldsForChild() {
+    if (!_isUnder18Client) return;
+
+    _isAdultEmployed = '';
+    _employerNameController.clear();
+    _employabilityBarriers.clear();
+    _employabilityBarrierOtherController.clear();
+  }
+
 
   Future<Map<String, String>> _loadAttributes(
       Database db,
@@ -1189,8 +1217,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       final rows = await db.query(
         'mgysd_household_member',
         columns: ['memberTei'],
-        where: 'householdTei = ? AND isPrimaryClient = ?',
-        whereArgs: [householdTei, 1],
+        where: 'householdTei = ? AND (isPrimaryClient = ? OR isPrimaryClient = ? OR isPrimaryClient = ?)',
+        whereArgs: [householdTei, 1, 'true', '1'],
         limit: 1,
       );
       if (rows.isNotEmpty) {
@@ -1213,6 +1241,824 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     target.addAll(
       raw.split(',').map((value) => value.trim()).where((value) => value.isNotEmpty),
     );
+  }
+
+
+  String _stringValue(dynamic value) => (value ?? '').toString();
+
+  List<String> _stringListValue(dynamic value) {
+    if (value is List) {
+      return value.map((item) => item.toString()).toList();
+    }
+    if (value is String && value.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is List) {
+          return decoded.map((item) => item.toString()).toList();
+        }
+      } catch (_) {}
+      return value
+          .split(',')
+          .map((item) => item.trim())
+          .where((item) => item.isNotEmpty)
+          .toList();
+    }
+    return <String>[];
+  }
+
+  Future<void> _ensureIntakeFormStateTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS mgysd_intake_form_state (
+        id TEXT PRIMARY KEY,
+        stateKey TEXT,
+        householdTei TEXT,
+        enrollment TEXT,
+        reportedEventId TEXT,
+        status TEXT,
+        payloadJson TEXT,
+        updatedAt TEXT,
+        syncStatus TEXT
+      )
+    ''');
+
+    final tableInfo = await db.rawQuery(
+      'PRAGMA table_info(mgysd_intake_form_state)',
+    );
+    final columns = tableInfo
+        .map((row) => (row['name'] ?? '').toString())
+        .where((name) => name.isNotEmpty)
+        .toSet();
+
+    Future<void> addColumn(String name) async {
+      if (columns.contains(name)) return;
+      try {
+        await db.execute(
+          'ALTER TABLE mgysd_intake_form_state ADD COLUMN $name TEXT',
+        );
+        columns.add(name);
+      } catch (_) {}
+    }
+
+    for (final column in <String>[
+      'stateKey',
+      'householdTei',
+      'enrollment',
+      'reportedEventId',
+      'status',
+      'payloadJson',
+      'updatedAt',
+      'syncStatus',
+    ]) {
+      await addColumn(column);
+    }
+  }
+
+  String _formStateKey({
+    String? householdTeiOverride,
+    String? enrollmentOverride,
+  }) {
+    final householdTei =
+    (householdTeiOverride ?? widget.existingHouseholdTei ?? '').trim();
+    final enrollment =
+    (enrollmentOverride ?? widget.existingAssessedEnrollment ?? '').trim();
+
+    if (householdTei.isNotEmpty && enrollment.isNotEmpty) {
+      return 'intake_edit_${householdTei}_$enrollment';
+    }
+
+    if (householdTei.isNotEmpty) {
+      return 'intake_edit_$householdTei';
+    }
+
+    final reportEventId = (widget.reportedEventId ?? '').trim();
+    if (reportEventId.isNotEmpty) {
+      return 'intake_report_$reportEventId';
+    }
+
+    return 'intake_new_case_draft';
+  }
+
+  List<Map<String, dynamic>> _dynamicTextPayload(List<_DynamicTextItem> items) {
+    return items
+        .map(
+          (item) => {
+        'id': item.id,
+        'value': item.controller.text.trim(),
+        'phoneCountryCode': item.phoneCountryCode,
+      },
+    )
+        .toList();
+  }
+
+  Map<String, dynamic> _householdMemberPayload(_HouseholdMemberEntry member) {
+    return {
+      'id': member.id,
+      'firstName': member.firstNameController.text.trim(),
+      'surname': member.surnameController.text.trim(),
+      'dob': member.dobController.text.trim(),
+      'age': member.ageController.text.trim(),
+      'occupation': member.occupationController.text.trim(),
+      'contacts': member.contactsController.text.trim(),
+      'contactsCountryCode': member.contactsCountryCode,
+      'disabilitySpecify': member.disabilitySpecifyController.text.trim(),
+      'relationshipOther': member.relationshipOtherController.text.trim(),
+      'sex': member.sex,
+      'relationshipToClient': member.relationshipToClient,
+      'hasDisability': member.hasDisability,
+      'isExpanded': member.isExpanded,
+    };
+  }
+
+  Map<String, dynamic> _caregiverPayload(_CaregiverEntry caregiver) {
+    return {
+      'id': caregiver.id,
+      'name': caregiver.nameController.text.trim(),
+      'surname': caregiver.surnameController.text.trim(),
+      'relationship': caregiver.relationshipController.text.trim(),
+      'dob': caregiver.dobController.text.trim(),
+      'occupation': caregiver.occupationController.text.trim(),
+      'phone': caregiver.phoneController.text.trim(),
+      'phoneCountryCode': caregiver.phoneCountryCode,
+      'sex': caregiver.sex,
+      'isExpanded': caregiver.isExpanded,
+    };
+  }
+
+  Map<String, dynamic> _nextOfKinPayload(_NextOfKinEntry nextOfKin) {
+    return {
+      'id': nextOfKin.id,
+      'firstName': nextOfKin.firstNameController.text.trim(),
+      'surname': nextOfKin.surnameController.text.trim(),
+      'phone': nextOfKin.phoneController.text.trim(),
+      'phoneCountryCode': nextOfKin.phoneCountryCode,
+      'physicalAddress': nextOfKin.physicalAddressController.text.trim(),
+      'relationshipOther': nextOfKin.relationshipOtherController.text.trim(),
+      'relationship': nextOfKin.relationship,
+      'isExpanded': nextOfKin.isExpanded,
+    };
+  }
+
+  Map<String, dynamic> _intakeFormStatePayload() {
+    return {
+      'fileNumber': _fileNumberController.text.trim(),
+      'district': _districtController.text.trim(),
+      'communityCouncil': _communityCouncilController.text.trim(),
+      'village': _villageController.text.trim(),
+      'physicalAddress': _physicalAddressController.text.trim(),
+      'selectedDistrictId': _selectedDistrictId,
+      'selectedDistrictName': _selectedDistrictName,
+      'selectedCommunityCouncilId': _selectedCommunityCouncilId,
+      'selectedCommunityCouncilName': _selectedCommunityCouncilName,
+
+      'identityNumber': _identityNumberController.text.trim(),
+      'clientFirstName': _clientFirstNameController.text.trim(),
+      'clientSurname': _clientSurnameController.text.trim(),
+      'clientDob': _clientDobController.text.trim(),
+      'clientAge': _clientAgeController.text.trim(),
+      'clientPhone': _phoneController.text.trim(),
+      'clientAlternativePhone': _alternativePhoneController.text.trim(),
+      'clientPhoneCountryCode': _clientPhoneCountryCode,
+      'clientAlternativePhoneCountryCode': _clientAlternativePhoneCountryCode,
+      'clientCategory': _clientCategory,
+      'isDisabled': _isDisabled,
+      'sex': _sex,
+      'nationality': _nationality,
+      'nationalityOther': _nationalityOtherController.text.trim(),
+      'homeLanguage': _homeLanguage,
+      'homeLanguageOther': _homeLanguageOtherController.text.trim(),
+
+      'isClientInSchool': _isClientInSchool,
+      'schoolName': _schoolNameController.text.trim(),
+      'grade': _grade,
+      'schoolLevel': _schoolLevel,
+      'schoolAttendanceStatus': _schoolAttendanceStatus,
+      'notInSchoolStatus': _notInSchoolStatus,
+      'highestLevelAchieved': _highestLevelAchieved,
+      'isAdultEmployed': _showEmploymentQuestions ? _isAdultEmployed : '',
+      'employerName': _showEmploymentQuestions
+          ? _employerNameController.text.trim()
+          : '',
+
+      'fatherFirstName': _fatherFirstNameController.text.trim(),
+      'fatherSurname': _fatherSurnameController.text.trim(),
+      'fatherDob': _fatherDobController.text.trim(),
+      'fatherOccupation': _fatherOccupationController.text.trim(),
+      'fatherWhyNotLiving': _fatherWhyNotLivingController.text.trim(),
+      'fatherPhone': _fatherPhoneController.text.trim(),
+      'fatherPhoneCountryCode': _fatherPhoneCountryCode,
+      'fatherAlive': _fatherAlive,
+      'fatherLivingWithChild': _fatherLivingWithChild,
+
+      'motherFirstName': _motherFirstNameController.text.trim(),
+      'motherSurname': _motherSurnameController.text.trim(),
+      'motherDob': _motherDobController.text.trim(),
+      'motherOccupation': _motherOccupationController.text.trim(),
+      'motherWhyNotLiving': _motherWhyNotLivingController.text.trim(),
+      'motherPhone': _motherPhoneController.text.trim(),
+      'motherPhoneCountryCode': _motherPhoneCountryCode,
+      'motherAlive': _motherAlive,
+      'motherLivingWithChild': _motherLivingWithChild,
+
+      'personalAssistantName': _personalAssistantNameController.text.trim(),
+      'personalAssistantSurname': _personalAssistantSurnameController.text.trim(),
+      'personalAssistantSex': _personalAssistantSex,
+      'personalAssistantRelationship':
+      _personalAssistantRelationshipController.text.trim(),
+      'personalAssistantDob': _personalAssistantDobController.text.trim(),
+      'personalAssistantOccupation':
+      _personalAssistantOccupationController.text.trim(),
+      'personalAssistantPhone': _personalAssistantPhoneController.text.trim(),
+      'personalAssistantPhoneCountryCode': _personalAssistantPhoneCountryCode,
+
+      'selectedReasonOptions': _selectedReasonOptions.toList(),
+      'reasonOther': _reasonOtherController.text.trim(),
+
+      'riskAssessmentDate': _riskAssessmentDateController.text.trim(),
+      'riskSocialWorker': _riskSocialWorkerController.text.trim(),
+      'riskReason': _riskReasonController.text.trim(),
+      'riskImmediateReferrals': _riskImmediateReferralsController.text.trim(),
+      'riskAdditionalNotes': _riskAdditionalNotesController.text.trim(),
+      'riskReportSource': _riskReportSource,
+      'riskHasActionTaken': _riskHasActionTaken,
+      'riskNoActionReason': _riskNoActionReason,
+      'riskFamilyBackground': _riskFamilyBackground,
+      'riskFamilyBackgroundNotes':
+      _riskFamilyBackgroundNotesController.text.trim(),
+      'riskCaregiverWellbeing': _riskCaregiverWellbeing,
+      'riskCaregiverWellbeingNotes':
+      _riskCaregiverWellbeingNotesController.text.trim(),
+      'riskExtendedFamilyRelationships': _riskExtendedFamilyRelationships,
+      'riskExtendedFamilyNotes':
+      _riskExtendedFamilyNotesController.text.trim(),
+      'riskClientRelationships': _riskClientRelationships,
+      'riskClientRelationshipsNotes':
+      _riskClientRelationshipsNotesController.text.trim(),
+      'riskLivingCircumstances': _riskLivingCircumstances,
+      'riskLivingCircumstancesNotes':
+      _riskLivingCircumstancesNotesController.text.trim(),
+      'riskHousing': _riskHousing,
+      'riskHousingNotes': _riskHousingNotesController.text.trim(),
+      'riskPhysicalHealth': _riskPhysicalHealth,
+      'riskPhysicalHealthNotes':
+      _riskPhysicalHealthNotesController.text.trim(),
+      'riskNutrition': _riskNutrition,
+      'riskNutritionNotes': _riskNutritionNotesController.text.trim(),
+      'riskEmotionalHealth': _riskEmotionalHealth,
+      'riskEmotionalHealthNotes':
+      _riskEmotionalHealthNotesController.text.trim(),
+      'riskSupervision': _riskSupervision,
+      'riskSupervisionNotes': _riskSupervisionNotesController.text.trim(),
+      'riskEducation': _riskEducation,
+      'riskEducationNotes': _riskEducationNotesController.text.trim(),
+      'riskLevel': _riskLevel,
+      'riskEmergencyActionsTaken': _riskEmergencyActionsTaken.toList(),
+      'riskServicesAccessed': _riskServicesAccessed.toList(),
+      'riskNextSteps': _riskNextSteps.toList(),
+      'riskEmergencyActionOther': _riskEmergencyActionOtherController.text.trim(),
+      'riskServicesAccessedOther': _riskServicesAccessedOtherController.text.trim(),
+
+      'selfCareIndependent': _selfCareIndependent,
+      'selfCareDomainsNeeded': _selfCareDomainsNeeded.toList(),
+      'selfCareOther': _selfCareOtherController.text.trim(),
+      'hasDisabilityDiagnosis': _hasDisabilityDiagnosis,
+      'disabilityTypes': _disabilityTypes.toList(),
+      'disabilityTypeOther': _disabilityTypeOtherController.text.trim(),
+      'usesAssistiveDevice': _usesAssistiveDevice,
+      'assistiveDevices': _assistiveDevices.toList(),
+      'assistiveDeviceOther': _assistiveDeviceOtherController.text.trim(),
+      'receivesRehabilitationServices': _receivesRehabilitationServices,
+      'rehabilitationServices': _rehabilitationServices.toList(),
+      'rehabilitationServiceOther':
+      _rehabilitationServiceOtherController.text.trim(),
+      'employabilityBarriers': _showEmploymentQuestions
+          ? _employabilityBarriers.toList()
+          : <String>[],
+      'employabilityBarrierOther': _showEmploymentQuestions
+          ? _employabilityBarrierOtherController.text.trim()
+          : '',
+      'skillsDevelopmentAreas': _skillsDevelopmentAreas.toList(),
+      'skillsDevelopmentOther': _skillsDevelopmentOtherController.text.trim(),
+
+      'contactedPhoneNumbers': _dynamicTextPayload(_contactedPhoneNumbers),
+      'servicesAlreadyProvided': _dynamicTextPayload(_servicesAlreadyProvided),
+      'otherHouseholdMembers':
+      _otherHouseholdMembers.map(_householdMemberPayload).toList(),
+      'caregivers': _caregivers.map(_caregiverPayload).toList(),
+      'nextOfKins': _nextOfKins.map(_nextOfKinPayload).toList(),
+    };
+  }
+
+  void _replaceDynamicItemsFromPayload(
+      List<_DynamicTextItem> target,
+      dynamic rawItems, {
+        required bool phoneItems,
+      }) {
+    for (final item in target) {
+      item.dispose();
+    }
+    target.clear();
+
+    if (rawItems is List) {
+      for (final raw in rawItems) {
+        if (raw is Map) {
+          final map = Map<String, dynamic>.from(raw);
+          target.add(
+            _DynamicTextItem(
+              id: _stringValue(map['id']).isEmpty
+                  ? _newId()
+                  : _stringValue(map['id']),
+              value: _stringValue(map['value']),
+              phoneCountryCode: _stringValue(map['phoneCountryCode']).isEmpty
+                  ? 'LS'
+                  : _stringValue(map['phoneCountryCode']),
+            ),
+          );
+        } else {
+          target.add(
+            _DynamicTextItem(
+              id: _newId(),
+              value: _stringValue(raw),
+              phoneCountryCode: 'LS',
+            ),
+          );
+        }
+      }
+    }
+
+    if (target.isEmpty) {
+      target.add(_DynamicTextItem(id: _newId()));
+    }
+
+    if (!phoneItems) {
+      for (final item in target) {
+        item.phoneCountryCode = 'LS';
+      }
+    }
+  }
+
+  void _replaceHouseholdMembersFromPayload(dynamic rawItems) {
+    for (final item in _otherHouseholdMembers) {
+      item.dispose();
+    }
+    _otherHouseholdMembers.clear();
+
+    if (rawItems is! List) return;
+
+    for (final raw in rawItems) {
+      if (raw is! Map) continue;
+      final map = Map<String, dynamic>.from(raw);
+      final entry = _HouseholdMemberEntry(
+        id: _stringValue(map['id']).isEmpty
+            ? _newId()
+            : _stringValue(map['id']),
+        sex: _stringValue(map['sex']),
+        relationshipToClient: _stringValue(map['relationshipToClient']),
+        hasDisability: _stringValue(map['hasDisability']),
+        contactsCountryCode: _stringValue(map['contactsCountryCode']).isEmpty
+            ? 'LS'
+            : _stringValue(map['contactsCountryCode']),
+        isExpanded: map['isExpanded'] is bool ? map['isExpanded'] as bool : true,
+      );
+      entry.firstNameController.text = _stringValue(map['firstName']);
+      entry.surnameController.text = _stringValue(map['surname']);
+      entry.dobController.text = _stringValue(map['dob']);
+      entry.ageController.text = _stringValue(map['age']);
+      entry.occupationController.text = _stringValue(map['occupation']);
+      entry.contactsController.text = _stringValue(map['contacts']);
+      entry.disabilitySpecifyController.text =
+          _stringValue(map['disabilitySpecify']);
+      entry.relationshipOtherController.text =
+          _stringValue(map['relationshipOther']);
+      _otherHouseholdMembers.add(entry);
+    }
+  }
+
+  void _replaceCaregiversFromPayload(dynamic rawItems) {
+    for (final item in _caregivers) {
+      item.dispose();
+    }
+    _caregivers.clear();
+
+    if (rawItems is! List) return;
+
+    for (final raw in rawItems) {
+      if (raw is! Map) continue;
+      final map = Map<String, dynamic>.from(raw);
+      final entry = _CaregiverEntry(
+        id: _stringValue(map['id']).isEmpty
+            ? _newId()
+            : _stringValue(map['id']),
+        sex: _stringValue(map['sex']),
+        phoneCountryCode: _stringValue(map['phoneCountryCode']).isEmpty
+            ? 'LS'
+            : _stringValue(map['phoneCountryCode']),
+        isExpanded: map['isExpanded'] is bool ? map['isExpanded'] as bool : true,
+      );
+      entry.nameController.text = _stringValue(map['name']);
+      entry.surnameController.text = _stringValue(map['surname']);
+      entry.relationshipController.text = _stringValue(map['relationship']);
+      entry.dobController.text = _stringValue(map['dob']);
+      entry.occupationController.text = _stringValue(map['occupation']);
+      entry.phoneController.text = _stringValue(map['phone']);
+      _caregivers.add(entry);
+    }
+  }
+
+  void _replaceNextOfKinsFromPayload(dynamic rawItems) {
+    for (final item in _nextOfKins) {
+      item.dispose();
+    }
+    _nextOfKins.clear();
+
+    if (rawItems is! List) return;
+
+    for (final raw in rawItems) {
+      if (raw is! Map) continue;
+      final map = Map<String, dynamic>.from(raw);
+      final entry = _NextOfKinEntry(
+        id: _stringValue(map['id']).isEmpty
+            ? _newId()
+            : _stringValue(map['id']),
+        relationship: _stringValue(map['relationship']),
+        phoneCountryCode: _stringValue(map['phoneCountryCode']).isEmpty
+            ? 'LS'
+            : _stringValue(map['phoneCountryCode']),
+        isExpanded: map['isExpanded'] is bool ? map['isExpanded'] as bool : true,
+      );
+      entry.firstNameController.text = _stringValue(map['firstName']);
+      entry.surnameController.text = _stringValue(map['surname']);
+      entry.phoneController.text = _stringValue(map['phone']);
+      entry.physicalAddressController.text =
+          _stringValue(map['physicalAddress']);
+      entry.relationshipOtherController.text =
+          _stringValue(map['relationshipOther']);
+      _nextOfKins.add(entry);
+    }
+  }
+
+  void _applyIntakeFormStatePayload(Map<String, dynamic> payload) {
+    _restoringCachedState = true;
+
+    _fileNumberController.text = _stringValue(payload['fileNumber']);
+    _districtController.text = _stringValue(payload['district']);
+    _communityCouncilController.text =
+        _stringValue(payload['communityCouncil']);
+    _villageController.text = _stringValue(payload['village']);
+    _physicalAddressController.text = _stringValue(payload['physicalAddress']);
+    _selectedDistrictId = _stringValue(payload['selectedDistrictId']);
+    _selectedDistrictName = _stringValue(payload['selectedDistrictName']);
+    _selectedCommunityCouncilId =
+        _stringValue(payload['selectedCommunityCouncilId']);
+    _selectedCommunityCouncilName =
+        _stringValue(payload['selectedCommunityCouncilName']);
+
+    _identityNumberController.text = _stringValue(payload['identityNumber']);
+    _clientFirstNameController.text = _stringValue(payload['clientFirstName']);
+    _clientSurnameController.text = _stringValue(payload['clientSurname']);
+    _clientDobController.text = _stringValue(payload['clientDob']);
+    _clientAgeController.text = _stringValue(payload['clientAge']);
+    _phoneController.text = _stringValue(payload['clientPhone']);
+    _alternativePhoneController.text =
+        _stringValue(payload['clientAlternativePhone']);
+    _clientPhoneCountryCode = _stringValue(payload['clientPhoneCountryCode']).isEmpty
+        ? 'LS'
+        : _stringValue(payload['clientPhoneCountryCode']);
+    _clientAlternativePhoneCountryCode =
+    _stringValue(payload['clientAlternativePhoneCountryCode']).isEmpty
+        ? 'LS'
+        : _stringValue(payload['clientAlternativePhoneCountryCode']);
+    _clientCategory = _stringValue(payload['clientCategory']);
+    _isDisabled = _stringValue(payload['isDisabled']);
+    _sex = _stringValue(payload['sex']);
+    _nationality = _stringValue(payload['nationality']);
+    _nationalityOtherController.text = _stringValue(payload['nationalityOther']);
+    _homeLanguage = _stringValue(payload['homeLanguage']);
+    _homeLanguageOtherController.text =
+        _stringValue(payload['homeLanguageOther']);
+
+    _isClientInSchool = _stringValue(payload['isClientInSchool']);
+    _schoolNameController.text = _stringValue(payload['schoolName']);
+    _grade = _stringValue(payload['grade']);
+    _schoolLevel = _stringValue(payload['schoolLevel']);
+    _schoolAttendanceStatus = _stringValue(payload['schoolAttendanceStatus']);
+    _notInSchoolStatus = _stringValue(payload['notInSchoolStatus']);
+    _highestLevelAchieved = _stringValue(payload['highestLevelAchieved']);
+    _isAdultEmployed = _stringValue(payload['isAdultEmployed']);
+    _employerNameController.text = _stringValue(payload['employerName']);
+
+    _fatherFirstNameController.text = _stringValue(payload['fatherFirstName']);
+    _fatherSurnameController.text = _stringValue(payload['fatherSurname']);
+    _fatherDobController.text = _stringValue(payload['fatherDob']);
+    _fatherOccupationController.text =
+        _stringValue(payload['fatherOccupation']);
+    _fatherWhyNotLivingController.text =
+        _stringValue(payload['fatherWhyNotLiving']);
+    _fatherPhoneController.text = _stringValue(payload['fatherPhone']);
+    _fatherPhoneCountryCode =
+    _stringValue(payload['fatherPhoneCountryCode']).isEmpty
+        ? 'LS'
+        : _stringValue(payload['fatherPhoneCountryCode']);
+    _fatherAlive = _stringValue(payload['fatherAlive']);
+    _fatherLivingWithChild = _stringValue(payload['fatherLivingWithChild']);
+
+    _motherFirstNameController.text = _stringValue(payload['motherFirstName']);
+    _motherSurnameController.text = _stringValue(payload['motherSurname']);
+    _motherDobController.text = _stringValue(payload['motherDob']);
+    _motherOccupationController.text =
+        _stringValue(payload['motherOccupation']);
+    _motherWhyNotLivingController.text =
+        _stringValue(payload['motherWhyNotLiving']);
+    _motherPhoneController.text = _stringValue(payload['motherPhone']);
+    _motherPhoneCountryCode =
+    _stringValue(payload['motherPhoneCountryCode']).isEmpty
+        ? 'LS'
+        : _stringValue(payload['motherPhoneCountryCode']);
+    _motherAlive = _stringValue(payload['motherAlive']);
+    _motherLivingWithChild = _stringValue(payload['motherLivingWithChild']);
+
+    _personalAssistantNameController.text =
+        _stringValue(payload['personalAssistantName']);
+    _personalAssistantSurnameController.text =
+        _stringValue(payload['personalAssistantSurname']);
+    _personalAssistantSex = _stringValue(payload['personalAssistantSex']);
+    _personalAssistantRelationshipController.text =
+        _stringValue(payload['personalAssistantRelationship']);
+    _personalAssistantDobController.text =
+        _stringValue(payload['personalAssistantDob']);
+    _personalAssistantOccupationController.text =
+        _stringValue(payload['personalAssistantOccupation']);
+    _personalAssistantPhoneController.text =
+        _stringValue(payload['personalAssistantPhone']);
+    _personalAssistantPhoneCountryCode =
+    _stringValue(payload['personalAssistantPhoneCountryCode']).isEmpty
+        ? 'LS'
+        : _stringValue(payload['personalAssistantPhoneCountryCode']);
+
+    _selectedReasonOptions
+      ..clear()
+      ..addAll(_stringListValue(payload['selectedReasonOptions']));
+    _reasonOtherController.text = _stringValue(payload['reasonOther']);
+
+    _riskAssessmentDateController.text =
+        _stringValue(payload['riskAssessmentDate']);
+    _riskSocialWorkerController.text = _stringValue(payload['riskSocialWorker']);
+    _riskReasonController.text = _stringValue(payload['riskReason']);
+    _riskImmediateReferralsController.text =
+        _stringValue(payload['riskImmediateReferrals']);
+    _riskAdditionalNotesController.text =
+        _stringValue(payload['riskAdditionalNotes']);
+    _riskReportSource = _stringValue(payload['riskReportSource']);
+    _riskHasActionTaken = _stringValue(payload['riskHasActionTaken']);
+    _riskNoActionReason = _stringValue(payload['riskNoActionReason']);
+    _riskFamilyBackground = _stringValue(payload['riskFamilyBackground']);
+    _riskFamilyBackgroundNotesController.text =
+        _stringValue(payload['riskFamilyBackgroundNotes']);
+    _riskCaregiverWellbeing = _stringValue(payload['riskCaregiverWellbeing']);
+    _riskCaregiverWellbeingNotesController.text =
+        _stringValue(payload['riskCaregiverWellbeingNotes']);
+    _riskExtendedFamilyRelationships =
+        _stringValue(payload['riskExtendedFamilyRelationships']);
+    _riskExtendedFamilyNotesController.text =
+        _stringValue(payload['riskExtendedFamilyNotes']);
+    _riskClientRelationships = _stringValue(payload['riskClientRelationships']);
+    _riskClientRelationshipsNotesController.text =
+        _stringValue(payload['riskClientRelationshipsNotes']);
+    _riskLivingCircumstances = _stringValue(payload['riskLivingCircumstances']);
+    _riskLivingCircumstancesNotesController.text =
+        _stringValue(payload['riskLivingCircumstancesNotes']);
+    _riskHousing = _stringValue(payload['riskHousing']);
+    _riskHousingNotesController.text = _stringValue(payload['riskHousingNotes']);
+    _riskPhysicalHealth = _stringValue(payload['riskPhysicalHealth']);
+    _riskPhysicalHealthNotesController.text =
+        _stringValue(payload['riskPhysicalHealthNotes']);
+    _riskNutrition = _stringValue(payload['riskNutrition']);
+    _riskNutritionNotesController.text =
+        _stringValue(payload['riskNutritionNotes']);
+    _riskEmotionalHealth = _stringValue(payload['riskEmotionalHealth']);
+    _riskEmotionalHealthNotesController.text =
+        _stringValue(payload['riskEmotionalHealthNotes']);
+    _riskSupervision = _stringValue(payload['riskSupervision']);
+    _riskSupervisionNotesController.text =
+        _stringValue(payload['riskSupervisionNotes']);
+    _riskEducation = _stringValue(payload['riskEducation']);
+    _riskEducationNotesController.text =
+        _stringValue(payload['riskEducationNotes']);
+    _riskLevel = _stringValue(payload['riskLevel']);
+
+    _riskEmergencyActionsTaken
+      ..clear()
+      ..addAll(_stringListValue(payload['riskEmergencyActionsTaken']));
+    _riskServicesAccessed
+      ..clear()
+      ..addAll(_stringListValue(payload['riskServicesAccessed']));
+    _riskNextSteps
+      ..clear()
+      ..addAll(_stringListValue(payload['riskNextSteps']));
+    _riskEmergencyActionOtherController.text =
+        _stringValue(payload['riskEmergencyActionOther']);
+    _riskServicesAccessedOtherController.text =
+        _stringValue(payload['riskServicesAccessedOther']);
+
+    _selfCareIndependent = _stringValue(payload['selfCareIndependent']);
+    _selfCareDomainsNeeded
+      ..clear()
+      ..addAll(_stringListValue(payload['selfCareDomainsNeeded']));
+    _selfCareOtherController.text = _stringValue(payload['selfCareOther']);
+    _hasDisabilityDiagnosis = _stringValue(payload['hasDisabilityDiagnosis']);
+    _disabilityTypes
+      ..clear()
+      ..addAll(_stringListValue(payload['disabilityTypes']));
+    _disabilityTypeOtherController.text =
+        _stringValue(payload['disabilityTypeOther']);
+    _usesAssistiveDevice = _stringValue(payload['usesAssistiveDevice']);
+    _assistiveDevices
+      ..clear()
+      ..addAll(_stringListValue(payload['assistiveDevices']));
+    _assistiveDeviceOtherController.text =
+        _stringValue(payload['assistiveDeviceOther']);
+    _receivesRehabilitationServices =
+        _stringValue(payload['receivesRehabilitationServices']);
+    _rehabilitationServices
+      ..clear()
+      ..addAll(_stringListValue(payload['rehabilitationServices']));
+    _rehabilitationServiceOtherController.text =
+        _stringValue(payload['rehabilitationServiceOther']);
+    _employabilityBarriers
+      ..clear()
+      ..addAll(_stringListValue(payload['employabilityBarriers']));
+    _employabilityBarrierOtherController.text =
+        _stringValue(payload['employabilityBarrierOther']);
+    _skillsDevelopmentAreas
+      ..clear()
+      ..addAll(_stringListValue(payload['skillsDevelopmentAreas']));
+    _skillsDevelopmentOtherController.text =
+        _stringValue(payload['skillsDevelopmentOther']);
+
+    _clearEmploymentFieldsForChild();
+
+    _replaceDynamicItemsFromPayload(
+      _contactedPhoneNumbers,
+      payload['contactedPhoneNumbers'],
+      phoneItems: true,
+    );
+    _replaceDynamicItemsFromPayload(
+      _servicesAlreadyProvided,
+      payload['servicesAlreadyProvided'],
+      phoneItems: false,
+    );
+    _replaceHouseholdMembersFromPayload(payload['otherHouseholdMembers']);
+    _replaceCaregiversFromPayload(payload['caregivers']);
+    _replaceNextOfKinsFromPayload(payload['nextOfKins']);
+
+    _syncDisabilityStatus();
+    _removeHiddenReasonOptions();
+
+    _restoringCachedState = false;
+  }
+
+  Future<void> _saveFormState({
+    String status = 'DRAFT',
+    bool showToast = false,
+    String? householdTeiOverride,
+    String? enrollmentOverride,
+    String? stateKeyOverride,
+  }) async {
+    if (_restoringCachedState) return;
+
+    try {
+      final db = await _db();
+      await _ensureIntakeFormStateTable(db);
+
+      final stateKey = stateKeyOverride ??
+          _formStateKey(
+            householdTeiOverride: householdTeiOverride,
+            enrollmentOverride: enrollmentOverride,
+          );
+      final nowIso = DateTime.now().toIso8601String();
+
+      await db.insert(
+        'mgysd_intake_form_state',
+        {
+          'id': stateKey,
+          'stateKey': stateKey,
+          'householdTei':
+          (householdTeiOverride ?? widget.existingHouseholdTei ?? '').trim(),
+          'enrollment':
+          (enrollmentOverride ?? widget.existingAssessedEnrollment ?? '').trim(),
+          'reportedEventId': (widget.reportedEventId ?? '').trim(),
+          'status': status,
+          'payloadJson': jsonEncode(_intakeFormStatePayload()),
+          'updatedAt': nowIso,
+          'syncStatus': 'not-synced',
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      if (showToast) {
+        AppUtil.showToastMessage(
+          message: status == 'SAVED'
+              ? 'Intake form state saved.'
+              : 'Draft cached on this device.',
+        );
+      }
+    } catch (e) {
+      if (showToast) {
+        AppUtil.showToastMessage(message: 'Failed to cache draft: $e');
+      }
+    }
+  }
+
+  Future<void> _deleteFormStateByKey(String stateKey) async {
+    if (stateKey.trim().isEmpty) return;
+    try {
+      final db = await _db();
+      await _ensureIntakeFormStateTable(db);
+      await db.delete(
+        'mgysd_intake_form_state',
+        where: 'stateKey = ? OR id = ?',
+        whereArgs: [stateKey, stateKey],
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _loadFormStateIfAvailable() async {
+    try {
+      final db = await _db();
+      await _ensureIntakeFormStateTable(db);
+
+      final key = _formStateKey();
+      List<Map<String, Object?>> rows = await db.query(
+        'mgysd_intake_form_state',
+        where: 'stateKey = ? OR id = ?',
+        whereArgs: [key, key],
+        orderBy: 'updatedAt DESC',
+        limit: 1,
+      );
+
+      if (rows.isEmpty) {
+        final householdTei = (widget.existingHouseholdTei ?? '').trim();
+        final enrollment = (widget.existingAssessedEnrollment ?? '').trim();
+        final reportEventId = (widget.reportedEventId ?? '').trim();
+
+        if (householdTei.isNotEmpty ||
+            enrollment.isNotEmpty ||
+            reportEventId.isNotEmpty) {
+          final whereParts = <String>[];
+          final whereArgs = <Object?>[];
+
+          if (householdTei.isNotEmpty) {
+            whereParts.add('householdTei = ?');
+            whereArgs.add(householdTei);
+          }
+          if (enrollment.isNotEmpty) {
+            whereParts.add('enrollment = ?');
+            whereArgs.add(enrollment);
+          }
+          if (reportEventId.isNotEmpty) {
+            whereParts.add('reportedEventId = ?');
+            whereArgs.add(reportEventId);
+          }
+
+          rows = await db.query(
+            'mgysd_intake_form_state',
+            where: whereParts.join(' OR '),
+            whereArgs: whereArgs,
+            orderBy: 'updatedAt DESC',
+            limit: 1,
+          );
+        }
+      }
+
+      if (rows.isEmpty) return;
+
+      final payloadText = (rows.first['payloadJson'] ?? '').toString().trim();
+      if (payloadText.isEmpty) return;
+
+      final decoded = jsonDecode(payloadText);
+      if (decoded is! Map) return;
+
+      if (!mounted) return;
+      setState(() {
+        _applyIntakeFormStatePayload(Map<String, dynamic>.from(decoded));
+      });
+    } catch (_) {}
+  }
+
+  void _scheduleCacheSave() {
+    if (_restoringCachedState || _saving || _loadingExistingCase) return;
+    if (_cacheWriteQueued) return;
+
+    _cacheWriteQueued = true;
+
+    Future<void>.delayed(const Duration(milliseconds: 900), () async {
+      _cacheWriteQueued = false;
+      if (!mounted || _restoringCachedState || _saving) return;
+      await _saveFormState(status: 'DRAFT');
+    });
+  }
+
+  Future<void> _saveDraftCacheManually() async {
+    await _saveFormState(status: 'DRAFT', showToast: true);
   }
 
   Future<void> _loadExistingCase() async {
@@ -1396,6 +2242,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         household[attRiskNextSteps] ?? client[attRiskNextSteps] ?? '',
       );
 
+      _clearEmploymentFieldsForChild();
+
       if (mounted) setState(() {});
     } catch (e) {
       AppUtil.showToastMessage(
@@ -1421,9 +2269,15 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _addContactedPhoneNumber();
     _addServiceProvided();
     _loadLocationTree();
+    _restoreSavedOrCachedState();
+  }
+
+  Future<void> _restoreSavedOrCachedState() async {
     if (widget.isEditing) {
-      _loadExistingCase();
+      await _loadExistingCase();
     }
+
+    await _loadFormStateIfAvailable();
   }
 
   @override
@@ -1924,10 +2778,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         _clientDobController.text = _formatDate(picked);
         _clientAgeController.text = age.toString();
         _clientCategory = age < 18 ? 'Child' : 'Adult';
-        if (!_isAdultOrElderly) {
-          _isAdultEmployed = '';
-          _employerNameController.clear();
-        }
+        _clearEmploymentFieldsForChild();
         if (_isAdultOrElderly) _grade = '';
         _removeHiddenReasonOptions();
       });
@@ -2189,6 +3040,12 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required String teiTypeId,
     required String orgUnit,
   }) async {
+    await db.delete(
+      'tracked_entity_instance',
+      where: 'trackedEntityInstance = ?',
+      whereArgs: [teiId],
+    );
+
     await db.insert(
       'tracked_entity_instance',
       {
@@ -2209,7 +3066,16 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required String value,
   }) async {
     final v = value.trim();
-    if (v.isEmpty || attribute.startsWith('ATTR_') || attribute.length != 11) return;
+    if (attribute.startsWith('ATTR_') || attribute.length != 11) return;
+
+    await db.delete(
+      'tracked_entity_instance_attribute',
+      where: 'trackedEntityInstance = ? AND attribute = ?',
+      whereArgs: [teiId, attribute],
+    );
+
+    if (v.isEmpty) return;
+
     await db.insert(
       'tracked_entity_instance_attribute',
       {
@@ -2243,6 +3109,12 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required String fromTei,
     required String toTei,
   }) async {
+    await db.delete(
+      'tei_relationships',
+      where: 'relationshipType = ? AND fromTei = ? AND toTei = ?',
+      whereArgs: [relationshipTypeCode, fromTei, toTei],
+    );
+
     await db.insert(
       'tei_relationships',
       {
@@ -2263,6 +3135,12 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required String memberRole,
     required bool isPrimaryClient,
   }) async {
+    await db.delete(
+      'mgysd_household_member',
+      where: 'householdTei = ? AND memberTei = ?',
+      whereArgs: [householdTei, memberTei],
+    );
+
     await db.insert(
       'mgysd_household_member',
       {
@@ -2286,6 +3164,13 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required String searchableValue,
   }) async {
     final nowIso = DateTime.now().toIso8601String();
+
+    await db.delete(
+      'enrollment',
+      where: 'enrollment = ?',
+      whereArgs: [enrollmentId],
+    );
+
     await db.insert(
       'enrollment',
       {
@@ -2428,37 +3313,130 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     return memberTeiId;
   }
 
-  Future<void> _saveCase() async {
+
+  void _expandMandatorySectionsForValidation() {
+    _forceOpenMandatorySections = true;
+    _showMandatoryFieldErrors = true;
+    _mandatoryExpansionRefresh++;
+    _clearEmploymentFieldsForChild();
+
+    for (final nextOfKin in _nextOfKins) {
+      nextOfKin.isExpanded = true;
+    }
+
+    for (final caregiver in _caregivers) {
+      caregiver.isExpanded = true;
+    }
+
+    for (final member in _otherHouseholdMembers) {
+      member.isExpanded = true;
+    }
+  }
+
+  Future<void> _scrollToKey(GlobalKey key) async {
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+
+    final targetContext = key.currentContext;
+    if (targetContext == null) return;
+
+    await Scrollable.ensureVisible(
+      targetContext,
+      duration: const Duration(milliseconds: 550),
+      curve: Curves.easeInOut,
+      alignment: 0.12,
+    );
+  }
+
+  Future<void> _scrollToFirstInvalidFormField() async {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final formContext = _formKey.currentContext;
+      if (formContext == null) return;
+
+      FormFieldState<dynamic>? firstInvalidField;
+
+      void visit(Element element) {
+        if (firstInvalidField != null) return;
+
+        if (element is StatefulElement) {
+          final state = element.state;
+          if (state is FormFieldState<dynamic> && state.hasError) {
+            firstInvalidField = state;
+            return;
+          }
+        }
+
+        element.visitChildElements(visit);
+      }
+
+      (formContext as Element).visitChildElements(visit);
+
+      final invalidContext = firstInvalidField?.context;
+      if (invalidContext == null) return;
+
+      await Scrollable.ensureVisible(
+        invalidContext,
+        duration: const Duration(milliseconds: 550),
+        curve: Curves.easeInOut,
+        alignment: 0.12,
+      );
+
+    });
+  }
+
+  Future<bool> _validateBeforeSavingAndGoToFirstMissingField() async {
+    setState(_expandMandatorySectionsForValidation);
+
+    // Wait for collapsed Part sections and dynamic cards to rebuild in expanded mode
+    // before the validators run. This makes hidden mandatory fields visible first.
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+
     final isValid = _formKey.currentState?.validate() ?? false;
-    if (!isValid) return;
+    if (!isValid) {
+      _scrollToFirstInvalidFormField();
+      AppUtil.showToastMessage(
+        message: 'Please complete the highlighted mandatory field.',
+      );
+      return false;
+    }
 
     if (_selectedReasonOptions.isEmpty) {
+      await _scrollToKey(_reasonForEnrolmentSectionKey);
       AppUtil.showToastMessage(
         message: 'Please select at least one reason for enrolment.',
       );
-      return;
+      return false;
     }
 
     if (_reasonOtherSelected && _reasonOtherController.text.trim().isEmpty) {
+      await _scrollToKey(_reasonForEnrolmentSectionKey);
       AppUtil.showToastMessage(
         message: 'Please specify the other reason for enrolment.',
       );
-      return;
+      return false;
     }
 
     if (_clientCategory.trim().isEmpty) {
+      await _scrollToKey(_clientDemographicsSectionKey);
       AppUtil.showToastMessage(
         message: 'Please enter the client\'s date of birth to determine client category.',
       );
-      return;
+      return false;
     }
 
     if (_riskLevel.trim().isEmpty) {
+      _scrollToFirstInvalidFormField();
       AppUtil.showToastMessage(
         message: 'Please select the initial risk level.',
       );
-      return;
+      return false;
     }
+
+    return true;
+  }
+
+  Future<void> _saveCase() async {
+    final canSave = await _validateBeforeSavingAndGoToFirstMissingField();
+    if (!canSave) return;
 
     setState(() => _saving = true);
 
@@ -2591,8 +3569,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         attSchoolName: _schoolNameController.text,
         attGrade: _grade,
         attSchoolAttendanceStatus: _schoolAttendanceStatus,
-        attIsAdultEmployed: _isAdultEmployed,
-        attEmployerName: _employerNameController.text,
+        attIsAdultEmployed: _showEmploymentQuestions ? _isAdultEmployed : '',
+        attEmployerName:
+        _showEmploymentQuestions ? _employerNameController.text : '',
         // Parent/caregiver/person details are NOT stored on the client TEI.
         // They are saved below as their own separate TEIs using the same generic
         // person attributes: firstName, lastName, dob, sex, occupation, phone.
@@ -2771,7 +3750,18 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       if (widget.isEditing) {
         // Edit mode is update-only. The existing Household TEI, primary Client
         // TEI and Assessed Household enrollment have already been updated above.
-        // Do not create relationships, household-member records or person TEIs.
+        // Do not create duplicate relationships, household-member records or person TEIs.
+        final savedStateKey = _formStateKey(
+          householdTeiOverride: householdTeiId,
+          enrollmentOverride: assessedHouseholdEnrollmentId,
+        );
+        await _saveFormState(
+          status: 'SAVED',
+          householdTeiOverride: householdTeiId,
+          enrollmentOverride: assessedHouseholdEnrollmentId,
+          stateKeyOverride: savedStateKey,
+        );
+
         AppUtil.showToastMessage(
           message: 'Intake and Initial Risk Assessment updated.',
         );
@@ -2945,6 +3935,22 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             attDisabilitySpecify: member.disabilitySpecifyController.text,
           },
         );
+      }
+
+      final savedStateKey = _formStateKey(
+        householdTeiOverride: householdTeiId,
+        enrollmentOverride: assessedHouseholdEnrollmentId,
+      );
+      await _saveFormState(
+        status: 'SAVED',
+        householdTeiOverride: householdTeiId,
+        enrollmentOverride: assessedHouseholdEnrollmentId,
+        stateKeyOverride: savedStateKey,
+      );
+
+      final currentDraftKey = _formStateKey();
+      if (currentDraftKey != savedStateKey) {
+        await _deleteFormStateByKey(currentDraftKey);
       }
 
       AppUtil.showToastMessage(
@@ -3598,90 +4604,105 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     final visibleSingleReasons =
     singleReasons.where(_isVisibleSingleReason).toList();
 
-    return MaterialCard(
-      body: Container(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _titleRow(
-              color: primary,
-              title: 'Reason for Enrolment',
-              subtitle: 'Select all applicable reasons for this case.',
-              icon: Icons.fact_check_outlined,
-            ),
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: primary.withOpacity(0.10),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: primary.withOpacity(0.16)),
+    return KeyedSubtree(
+      key: _reasonForEnrolmentSectionKey,
+      child: MaterialCard(
+        body: Container(
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _titleRow(
+                color: primary,
+                title: 'Reason for Enrolment',
+                subtitle: 'Select all applicable reasons for this case.',
+                icon: Icons.fact_check_outlined,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Identified Concerns',
-                    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'These are the specific concerns identified for this client.',
-                    style: TextStyle(color: Colors.blueGrey, fontSize: 12.5, height: 1.3),
-                  ),
-                  const SizedBox(height: 12),
-                  ..._visibleGroupedReasons().map(_reasonGroupCard).toList(),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.blueGrey.withOpacity(0.18)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Other enrolment reasons',
-                    style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w800,
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: primary.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: primary.withOpacity(0.16)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Identified Concerns',
+                      style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children:
-                    visibleSingleReasons.map(_reasonChoiceChip).toList(),
-                  ),
-                  if (_reasonOtherSelected) ...[
+                    const SizedBox(height: 4),
+                    const Text(
+                      'These are the specific concerns identified for this client.',
+                      style: TextStyle(color: Colors.blueGrey, fontSize: 12.5, height: 1.3),
+                    ),
                     const SizedBox(height: 12),
-                    _Input(
-                      controller: _reasonOtherController,
-                      label: 'Specify other reason',
-                      hint: 'Describe other reason for enrolment',
-                      maxLines: 3,
-                      validator: (v) {
-                        if (_reasonOtherSelected &&
-                            (v == null || v.trim().isEmpty)) {
-                          return 'Please specify other reason';
-                        }
-                        return null;
-                      },
-                    ),
+                    ..._visibleGroupedReasons().map(_reasonGroupCard).toList(),
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.blueGrey.withOpacity(0.18)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Other enrolment reasons',
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children:
+                      visibleSingleReasons.map(_reasonChoiceChip).toList(),
+                    ),
+                    if (_showMandatoryFieldErrors &&
+                        _selectedReasonOptions.isEmpty) ...[
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Please select at least one reason for enrolment.',
+                        style: TextStyle(
+                          color: Colors.red,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ],
+                    if (_reasonOtherSelected) ...[
+                      const SizedBox(height: 12),
+                      _Input(
+                        controller: _reasonOtherController,
+                        label: 'Specify other reason',
+                        hint: 'Describe other reason for enrolment',
+                        maxLines: 3,
+                        validator: (v) {
+                          if (_reasonOtherSelected &&
+                              (v == null || v.trim().isEmpty)) {
+                            return 'Please specify other reason';
+                          }
+                          return null;
+                        },
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -4228,7 +5249,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             _titleRow(
               color: primary,
               title: 'Additional Assessment',
-              subtitle: 'Self-care, disability, assistive devices, rehabilitation and employability.',
+              subtitle: _showEmploymentQuestions
+                  ? 'Self-care, disability, assistive devices, rehabilitation and employability.'
+                  : 'Self-care, disability, assistive devices and rehabilitation.',
               icon: Icons.accessible_outlined,
             ),
             const SizedBox(height: 12),
@@ -4278,56 +5301,58 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               selectedValues: _rehabilitationServices,
               otherController: _rehabilitationServiceOtherController,
             ),
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFEFF4F8),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.blueGrey.withOpacity(0.22)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Employability',
-                    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'What barriers does the client face in finding a job?',
-                    style: TextStyle(color: Colors.blueGrey, fontSize: 12.5, height: 1.3),
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: employabilityBarrierOptions
-                        .map((option) => _riskChoiceChip(
-                      option: option,
-                      selectedValues: _employabilityBarriers,
-                    ))
-                        .toList(),
-                  ),
-                  if (_employabilityBarriers.contains('OTHER')) ...[
-                    const SizedBox(height: 10),
-                    _Input(
-                      controller: _employabilityBarrierOtherController,
-                      label: 'Specify other',
-                      hint: 'Enter other barrier',
-                      validator: (v) {
-                        if (_employabilityBarriers.contains('OTHER') &&
-                            (v == null || v.trim().isEmpty)) {
-                          return 'Please specify';
-                        }
-                        return null;
-                      },
+            if (_showEmploymentQuestions)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF4F8),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.blueGrey.withOpacity(0.22)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Employability',
+                      style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
                     ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'What barriers does the client face in finding a job?',
+                      style: TextStyle(color: Colors.blueGrey, fontSize: 12.5, height: 1.3),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: employabilityBarrierOptions
+                          .map((option) => _riskChoiceChip(
+                        option: option,
+                        selectedValues: _employabilityBarriers,
+                      ))
+                          .toList(),
+                    ),
+                    if (_employabilityBarriers.contains('OTHER')) ...[
+                      const SizedBox(height: 10),
+                      _Input(
+                        controller: _employabilityBarrierOtherController,
+                        label: 'Specify other',
+                        hint: 'Enter other barrier',
+                        validator: (v) {
+                          if (_showEmploymentQuestions &&
+                              _employabilityBarriers.contains('OTHER') &&
+                              (v == null || v.trim().isEmpty)) {
+                            return 'Please specify';
+                          }
+                          return null;
+                        },
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
@@ -5146,7 +6171,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       body: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          initiallyExpanded: initiallyExpanded,
+          key: ValueKey('part_${title}_$_mandatoryExpansionRefresh'),
+          initiallyExpanded: initiallyExpanded || _forceOpenMandatorySections,
           tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
           leading: CircleAvatar(
@@ -5193,6 +6219,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
+          key: ValueKey('subpart_${title}_$_mandatoryExpansionRefresh'),
+          initiallyExpanded: _forceOpenMandatorySections,
           tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
           leading: Icon(icon, color: color, size: 20),
@@ -5241,6 +6269,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             margin: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 10.0),
             child: Form(
               key: _formKey,
+              onChanged: _scheduleCacheSave,
               child: Column(
                 children: [
                   if ((widget.reportedEventId ?? '').trim().isNotEmpty)
@@ -5385,218 +6414,221 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      MaterialCard(
-                        body: Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _titleRow(
-                                color: primary,
-                                title: 'Demographics and Reporting Information',
-                                subtitle:
-                                'Capture the main client information for this case.',
-                                icon: Icons.person_outline,
-                              ),
-                              const SizedBox(height: 12),
-                              _Input(
-                                controller: _identityNumberController,
-                                label: 'Identity Number',
-                                hint: 'National ID / document number',
-                                keyboardType: TextInputType.text,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.allow(
-                                    RegExp(r'[A-Za-z0-9\s-]'),
-                                  ),
-                                ],
-                                autovalidateMode: AutovalidateMode.onUserInteraction,
-                                validator: _identityNumberValidator,
-                              ),
-                              const SizedBox(height: 10),
-                              _row2(
+                      KeyedSubtree(
+                        key: _clientDemographicsSectionKey,
+                        child: MaterialCard(
+                          body: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _titleRow(
+                                  color: primary,
+                                  title: 'Demographics and Reporting Information',
+                                  subtitle:
+                                  'Capture the main client information for this case.',
+                                  icon: Icons.person_outline,
+                                ),
+                                const SizedBox(height: 12),
                                 _Input(
-                                  controller: _clientFirstNameController,
-                                  label: 'First name',
-                                  hint: 'Client first name',
-                                  validator: (v) =>
-                                  (v == null || v.trim().isEmpty)
-                                      ? 'First name is required'
-                                      : null,
-                                ),
-                                _Input(
-                                  controller: _clientSurnameController,
-                                  label: 'Surname',
-                                  hint: 'Client surname',
-                                  validator: (v) =>
-                                  (v == null || v.trim().isEmpty)
-                                      ? 'Surname is required'
-                                      : null,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              _row2(
-                                GestureDetector(
-                                  onTap: _pickDobForClient,
-                                  child: AbsorbPointer(
-                                    child: _Input(
-                                      controller: _clientDobController,
-                                      label: 'Date of Birth',
-                                      hint: 'Pick date',
-                                      suffixIcon: const Icon(Icons.date_range),
-                                      validator: (v) =>
-                                      (v == null || v.trim().isEmpty)
-                                          ? 'Date of birth is required'
-                                          : null,
-                                    ),
-                                  ),
-                                ),
-                                _Input(
-                                  controller: _clientAgeController,
-                                  label: 'Age',
-                                  hint: 'Auto-calculated',
-                                  readOnly: true,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              _dropdown(
-                                label: 'Sex',
-                                value: _sex,
-                                options: sexOptions,
-                                requiredField: true,
-                                onChanged: (v) {
-                                  setState(() {
-                                    _sex = v ?? '';
-                                    _removeHiddenReasonOptions();
-                                  });
-                                },
-                              ),
-                              const SizedBox(height: 10),
-                              _dropdown(
-                                label: 'Nationality',
-                                value: _nationality,
-                                options: nationalityOptions,
-                                requiredField: true,
-                                onChanged: (v) {
-                                  setState(() {
-                                    _nationality = v ?? '';
-                                    if (_nationality != 'OTHER') {
-                                      _nationalityOtherController.clear();
-                                    }
-                                  });
-                                },
-                              ),
-                              if (_nationality == 'OTHER') ...[
-                                const SizedBox(height: 10),
-                                _Input(
-                                  controller: _nationalityOtherController,
-                                  label: 'Specify other nationality',
-                                  hint: 'Enter nationality',
-                                  validator: (v) {
-                                    if (_nationality == 'OTHER' &&
-                                        (v == null || v.trim().isEmpty)) {
-                                      return 'Please specify nationality';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                              ],
-                              const SizedBox(height: 10),
-                              _dropdown(
-                                label: 'Home Language',
-                                value: _homeLanguage,
-                                options: homeLanguageOptions,
-                                requiredField: true,
-                                onChanged: (v) {
-                                  setState(() {
-                                    _homeLanguage = v ?? '';
-                                    if (_homeLanguage != 'OTHER') {
-                                      _homeLanguageOtherController.text = '';
-                                    }
-                                  });
-                                },
-                              ),
-                              if (_homeLanguage == 'OTHER') ...[
-                                const SizedBox(height: 10),
-                                _Input(
-                                  controller: _homeLanguageOtherController,
-                                  label: 'Specify other language',
-                                  hint: 'Enter language',
-                                ),
-                              ],
-                              const SizedBox(height: 10),
-                              _row2(
-                                _phoneInputField(
-                                  controller: _phoneController,
-                                  label: 'Phone Number',
-                                  countryCode: _clientPhoneCountryCode,
-                                  requiredField: false,
-                                  onCountryChanged: (value) {
-                                    setState(() => _clientPhoneCountryCode = value ?? 'LS');
-                                    _formatPhoneControllerForSelectedCountry(
-                                      _phoneController,
-                                      _clientPhoneCountryCode,
-                                    );
-                                  },
-                                ),
-                                _phoneInputField(
-                                  controller: _alternativePhoneController,
-                                  label: 'Alternative Phone Number',
-                                  countryCode: _clientAlternativePhoneCountryCode,
-                                  requiredField: false,
-                                  onCountryChanged: (value) {
-                                    setState(() => _clientAlternativePhoneCountryCode = value ?? 'LS');
-                                    _formatPhoneControllerForSelectedCountry(
-                                      _alternativePhoneController,
-                                      _clientAlternativePhoneCountryCode,
-                                    );
-                                  },
-                                ),
-                              ),
-
-                              const SizedBox(height: 10),
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFE7EEF4),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: Colors.blueGrey.withOpacity(0.22)),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      _clientCategory.isEmpty
-                                          ? Icons.info_outline
-                                          : Icons.check_circle_outline,
-                                      color: Colors.blueGrey,
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          const Text(
-                                            'Client category',
-                                            style: TextStyle(color: Colors.blueGrey, fontSize: 12.5),
-                                          ),
-                                          const SizedBox(height: 3),
-                                          Text(
-                                            _clientCategory.isEmpty
-                                                ? 'Not yet determined — pick the Date of Birth above'
-                                                : (_isChild ? 'Child' : 'Adult / Elderly Person'),
-                                            style: const TextStyle(
-                                              fontSize: 14.5,
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                                  controller: _identityNumberController,
+                                  label: 'Identity Number',
+                                  hint: 'National ID / document number',
+                                  keyboardType: TextInputType.text,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.allow(
+                                      RegExp(r'[A-Za-z0-9\s-]'),
                                     ),
                                   ],
+                                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                                  validator: _identityNumberValidator,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 10),
+                                _row2(
+                                  _Input(
+                                    controller: _clientFirstNameController,
+                                    label: 'First name',
+                                    hint: 'Client first name',
+                                    validator: (v) =>
+                                    (v == null || v.trim().isEmpty)
+                                        ? 'First name is required'
+                                        : null,
+                                  ),
+                                  _Input(
+                                    controller: _clientSurnameController,
+                                    label: 'Surname',
+                                    hint: 'Client surname',
+                                    validator: (v) =>
+                                    (v == null || v.trim().isEmpty)
+                                        ? 'Surname is required'
+                                        : null,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                _row2(
+                                  GestureDetector(
+                                    onTap: _pickDobForClient,
+                                    child: AbsorbPointer(
+                                      child: _Input(
+                                        controller: _clientDobController,
+                                        label: 'Date of Birth',
+                                        hint: 'Pick date',
+                                        suffixIcon: const Icon(Icons.date_range),
+                                        validator: (v) =>
+                                        (v == null || v.trim().isEmpty)
+                                            ? 'Date of birth is required'
+                                            : null,
+                                      ),
+                                    ),
+                                  ),
+                                  _Input(
+                                    controller: _clientAgeController,
+                                    label: 'Age',
+                                    hint: 'Auto-calculated',
+                                    readOnly: true,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                _dropdown(
+                                  label: 'Sex',
+                                  value: _sex,
+                                  options: sexOptions,
+                                  requiredField: true,
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _sex = v ?? '';
+                                      _removeHiddenReasonOptions();
+                                    });
+                                  },
+                                ),
+                                const SizedBox(height: 10),
+                                _dropdown(
+                                  label: 'Nationality',
+                                  value: _nationality,
+                                  options: nationalityOptions,
+                                  requiredField: true,
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _nationality = v ?? '';
+                                      if (_nationality != 'OTHER') {
+                                        _nationalityOtherController.clear();
+                                      }
+                                    });
+                                  },
+                                ),
+                                if (_nationality == 'OTHER') ...[
+                                  const SizedBox(height: 10),
+                                  _Input(
+                                    controller: _nationalityOtherController,
+                                    label: 'Specify other nationality',
+                                    hint: 'Enter nationality',
+                                    validator: (v) {
+                                      if (_nationality == 'OTHER' &&
+                                          (v == null || v.trim().isEmpty)) {
+                                        return 'Please specify nationality';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                ],
+                                const SizedBox(height: 10),
+                                _dropdown(
+                                  label: 'Home Language',
+                                  value: _homeLanguage,
+                                  options: homeLanguageOptions,
+                                  requiredField: true,
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _homeLanguage = v ?? '';
+                                      if (_homeLanguage != 'OTHER') {
+                                        _homeLanguageOtherController.text = '';
+                                      }
+                                    });
+                                  },
+                                ),
+                                if (_homeLanguage == 'OTHER') ...[
+                                  const SizedBox(height: 10),
+                                  _Input(
+                                    controller: _homeLanguageOtherController,
+                                    label: 'Specify other language',
+                                    hint: 'Enter language',
+                                  ),
+                                ],
+                                const SizedBox(height: 10),
+                                _row2(
+                                  _phoneInputField(
+                                    controller: _phoneController,
+                                    label: 'Phone Number',
+                                    countryCode: _clientPhoneCountryCode,
+                                    requiredField: false,
+                                    onCountryChanged: (value) {
+                                      setState(() => _clientPhoneCountryCode = value ?? 'LS');
+                                      _formatPhoneControllerForSelectedCountry(
+                                        _phoneController,
+                                        _clientPhoneCountryCode,
+                                      );
+                                    },
+                                  ),
+                                  _phoneInputField(
+                                    controller: _alternativePhoneController,
+                                    label: 'Alternative Phone Number',
+                                    countryCode: _clientAlternativePhoneCountryCode,
+                                    requiredField: false,
+                                    onCountryChanged: (value) {
+                                      setState(() => _clientAlternativePhoneCountryCode = value ?? 'LS');
+                                      _formatPhoneControllerForSelectedCountry(
+                                        _alternativePhoneController,
+                                        _clientAlternativePhoneCountryCode,
+                                      );
+                                    },
+                                  ),
+                                ),
+
+                                const SizedBox(height: 10),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE7EEF4),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(color: Colors.blueGrey.withOpacity(0.22)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        _clientCategory.isEmpty
+                                            ? Icons.info_outline
+                                            : Icons.check_circle_outline,
+                                        color: Colors.blueGrey,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Text(
+                                              'Client category',
+                                              style: TextStyle(color: Colors.blueGrey, fontSize: 12.5),
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              _clientCategory.isEmpty
+                                                  ? 'Not yet determined — pick the Date of Birth above'
+                                                  : (_isChild ? 'Child' : 'Adult / Elderly Person'),
+                                              style: const TextStyle(
+                                                fontSize: 14.5,
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -5731,7 +6763,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                           ),
                         ),
                       ),
-                      if (_isAdultOrElderly) ...[
+                      if (_showEmploymentQuestions) ...[
                         const SizedBox(height: 12),
                         MaterialCard(
                           body: Padding(
@@ -5823,6 +6855,32 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                   ),
                   const SizedBox(height: 12),
                   const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: (_saving || _loadingExistingCase)
+                            ? null
+                            : _saveDraftCacheManually,
+                        icon: const Icon(Icons.cloud_done_outlined),
+                        label: const Text('Save Draft / Cache'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: primary,
+                          side: BorderSide(color: primary.withOpacity(0.55)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: SizedBox(
