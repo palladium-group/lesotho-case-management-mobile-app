@@ -90,27 +90,41 @@ class _GoalReviewControllers {
 class _PersonInterviewedEntry {
   final String localId;
   final TextEditingController nameController;
-  final TextEditingController roleController;
+  final TextEditingController roleOtherController;
   final TextEditingController purposeController;
+  String role;
 
   _PersonInterviewedEntry({
     required this.localId,
     String name = '',
-    String role = '',
+    this.role = '',
+    String roleOther = '',
     String purpose = '',
   })  : nameController = TextEditingController(text: name),
-        roleController = TextEditingController(text: role),
+        roleOtherController = TextEditingController(text: roleOther),
         purposeController = TextEditingController(text: purpose);
+
+  bool get requiresRoleSpecification =>
+      role == 'Other stakeholder (specify)' ||
+          role == 'Other member of the HH (specify)' ||
+          role == 'OTHER';
+
+  String get resolvedRole {
+    final specified = roleOtherController.text.trim();
+    return requiresRoleSpecification && specified.isNotEmpty ? specified : role;
+  }
 
   void dispose() {
     nameController.dispose();
-    roleController.dispose();
+    roleOtherController.dispose();
     purposeController.dispose();
   }
 
   Map<String, dynamic> toJson() => {
     'name': nameController.text.trim(),
-    'roleOrRelationship': roleController.text.trim(),
+    'roleOrRelationship': role,
+    'roleOrRelationshipOther': roleOtherController.text.trim(),
+    'roleOrRelationshipDisplay': resolvedRole,
     'purposeOfInterview': purposeController.text.trim(),
   };
 }
@@ -139,7 +153,7 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
   final TextEditingController _nextVisitDateController = TextEditingController();
 
   final TextEditingController _reassessmentReasonController = TextEditingController();
-  final TextEditingController _reassessmentRiskLevelController = TextEditingController();
+  String _reassessmentRiskLevel = '';
   final TextEditingController _reassessmentFindingsController = TextEditingController();
   final TextEditingController _reassessmentImmediateActionsController = TextEditingController();
 
@@ -175,6 +189,32 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
     'NEEDS_REASSESSMENT': 'Needs reassessment',
   };
 
+  static const List<String> _riskLevels = [
+    'LOW',
+    'MEDIUM',
+    'HIGH',
+  ];
+
+  static const Map<String, String> _riskLevelLabels = {
+    'LOW': 'Low',
+    'MEDIUM': 'Medium',
+    'HIGH': 'High',
+  };
+
+  static const List<String> _personInterviewRoleOptions = [
+    'Parent(s)',
+    'Teacher',
+    'Nurse',
+    'Area Chief',
+    'Community Health Worker',
+    'Neighbour',
+    'Caregiver/Personal assistant',
+    'Community counsellor',
+    'Other stakeholder (specify)',
+    'Other member of the HH (specify)',
+    'OTHER',
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -192,7 +232,6 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
     _nextActionsController.dispose();
     _nextVisitDateController.dispose();
     _reassessmentReasonController.dispose();
-    _reassessmentRiskLevelController.dispose();
     _reassessmentFindingsController.dispose();
     _reassessmentImmediateActionsController.dispose();
     for (final review in _goalReviews.values) {
@@ -502,7 +541,7 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
         _nextActionsController.text = _text(payload['nextActions']);
         _nextVisitDateController.text = _text(payload['nextVisitDate']);
         _reassessmentReasonController.text = _text(payload['reassessmentReason']);
-        _reassessmentRiskLevelController.text = _text(payload['reassessmentRiskLevel']);
+        _reassessmentRiskLevel = _normaliseRiskLevel(_text(payload['reassessmentRiskLevel']));
         _reassessmentFindingsController.text = _text(payload['reassessmentFindings']);
         _reassessmentImmediateActionsController.text = _text(payload['reassessmentImmediateActions']);
 
@@ -512,10 +551,20 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
           _personsInterviewed.clear();
           for (final item in list) {
             final m = item as Map<String, dynamic>;
+            final savedRole = _text(m['roleOrRelationship']);
+            final savedRoleOther = _text(m['roleOrRelationshipOther']);
+            final normalisedRole = _normaliseInterviewRole(savedRole);
             _personsInterviewed.add(_PersonInterviewedEntry(
               localId: DateTime.now().microsecondsSinceEpoch.toString(),
               name: _text(m['name']),
-              role: _text(m['roleOrRelationship']),
+              role: normalisedRole,
+              roleOther: savedRoleOther.isNotEmpty
+                  ? savedRoleOther
+                  : normalisedRole == 'OTHER' &&
+                  savedRole.isNotEmpty &&
+                  savedRole.toUpperCase() != 'OTHER'
+                  ? savedRole
+                  : '',
               purpose: _text(m['purposeOfInterview']),
             ));
           }
@@ -580,6 +629,34 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
     });
   }
 
+  String _normaliseInterviewRole(String value) {
+    if (_personInterviewRoleOptions.contains(value)) return value;
+    return value.trim().isEmpty ? '' : 'OTHER';
+  }
+
+  String _normaliseRiskLevel(String value) {
+    final normalised = value.trim().toUpperCase().replaceAll('_', ' ');
+    switch (normalised) {
+      case 'LOW':
+      case 'LOW RISK':
+        return 'LOW';
+      case 'MEDIUM':
+      case 'MEDIUM RISK':
+      case 'MODERATE':
+      case 'MODERATE RISK':
+        return 'MEDIUM';
+      case 'HIGH':
+      case 'HIGH RISK':
+        return 'HIGH';
+      default:
+        return '';
+    }
+  }
+
+  bool _goalNeedsFollowup(String status) {
+    return status != 'ACHIEVED' && status != 'NO_LONGER_RELEVANT';
+  }
+
   Map<String, dynamic> _payload(String status) {
     return {
       'id': _monitoringId,
@@ -596,7 +673,7 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
       'nextActions': _nextActionsController.text.trim(),
       'nextVisitDate': _nextVisitDateController.text.trim(),
       'reassessmentReason': _reassessmentReasonController.text.trim(),
-      'reassessmentRiskLevel': _reassessmentRiskLevelController.text.trim(),
+      'reassessmentRiskLevel': _reassessmentRiskLevel,
       'reassessmentFindings': _reassessmentFindingsController.text.trim(),
       'reassessmentImmediateActions': _reassessmentImmediateActionsController.text.trim(),
       // CHANGE 6 — include personsInterviewed in payload
@@ -620,6 +697,15 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
 
   Future<void> _save(String status) async {
     if (!_formKey.currentState!.validate()) return;
+
+    if (!_goalNeedsFollowup(_overallProgressStatus)) {
+      _nextVisitDateController.clear();
+    }
+    for (final review in _goalReviews.values) {
+      if (!_goalNeedsFollowup(review.progressStatus)) {
+        review.nextFollowupDate.clear();
+      }
+    }
 
     if (_householdTei.isEmpty) {
       _showSnack('Household TEI not found. Please refresh the case and try again.');
@@ -780,7 +866,7 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
           'source': 'REASSESSMENT_MONITORING',
           'createdFromMonitoringId': _monitoringId,
           'reassessmentReason': _reassessmentReasonController.text.trim(),
-          'reassessmentRiskLevel': _reassessmentRiskLevelController.text.trim(),
+          'reassessmentRiskLevel': _reassessmentRiskLevel,
           'reassessmentFindings': _reassessmentFindingsController.text.trim(),
           'reassessmentImmediateActions': _reassessmentImmediateActionsController.text.trim(),
         }),
@@ -1111,11 +1197,33 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
                     style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 8),
-                  _two(
-                    _input(entry.nameController, 'First name'),
-                    _input(entry.roleController, 'Role / Relationship'),
+                  _input(entry.nameController, 'First name'),
+                  _dropdown(
+                    label: 'Role / Relationship',
+                    value: entry.role,
+                    options: _personInterviewRoleOptions,
+                    onChanged: (value) {
+                      setState(() {
+                        entry.role = value;
+                        if (!entry.requiresRoleSpecification) {
+                          entry.roleOtherController.clear();
+                        }
+                      });
+                    },
                   ),
-                  _input(entry.purposeController, 'Purpose of interview', maxLines: 2),
+                  if (entry.requiresRoleSpecification)
+                    _input(
+                      entry.roleOtherController,
+                      'Specify role / relationship',
+                      validator: (value) => (value ?? '').trim().isEmpty
+                          ? 'Please specify the role / relationship'
+                          : null,
+                    ),
+                  _input(
+                    entry.purposeController,
+                    'Purpose of interview',
+                    maxLines: 2,
+                  ),
                   if (_personsInterviewed.length > 1)
                     Align(
                       alignment: Alignment.centerRight,
@@ -1185,12 +1293,25 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
             value: _overallProgressStatus,
             options: _progressStatuses,
             labels: _progressLabels,
-            onChanged: (v) => setState(() => _overallProgressStatus = v),
+            onChanged: (v) {
+              setState(() {
+                _overallProgressStatus = v;
+                if (!_goalNeedsFollowup(v)) {
+                  _nextVisitDateController.clear();
+                }
+              });
+            },
           ),
           _input(_summaryController, 'Overall progress summary', maxLines: 4),
           _input(_overallChallengesController, 'Overall challenges / barriers', maxLines: 4),
           _input(_nextActionsController, 'Next actions required', maxLines: 4),
-          _input(_nextVisitDateController, 'Next visit date', readOnly: true, onTap: () => _pickDate(_nextVisitDateController)),
+          if (_goalNeedsFollowup(_overallProgressStatus))
+            _input(
+              _nextVisitDateController,
+              'Next visit date',
+              readOnly: true,
+              onTap: () => _pickDate(_nextVisitDateController),
+            ),
         ],
       ),
     );
@@ -1211,7 +1332,14 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
             if (_monitoringReason == 'REASSESSMENT' && (v ?? '').trim().isEmpty) return 'Required';
             return null;
           }),
-          _input(_reassessmentRiskLevelController, 'Updated risk level', maxLines: 1),
+          _dropdown(
+            label: 'Updated risk level',
+            value: _reassessmentRiskLevel,
+            options: _riskLevels,
+            labels: _riskLevelLabels,
+            requiredField: true,
+            onChanged: (value) => setState(() => _reassessmentRiskLevel = value),
+          ),
           _input(_reassessmentFindingsController, 'Key reassessment findings', maxLines: 5),
           _input(_reassessmentImmediateActionsController, 'Immediate actions required', maxLines: 4),
         ],
@@ -1326,12 +1454,25 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
             value: review.progressStatus,
             options: _progressStatuses,
             labels: _progressLabels,
-            onChanged: (v) => setState(() => review.progressStatus = v),
+            onChanged: (v) {
+              setState(() {
+                review.progressStatus = v;
+                if (!_goalNeedsFollowup(v)) {
+                  review.nextFollowupDate.clear();
+                }
+              });
+            },
           ),
           _input(review.progressNotes, 'Progress observed', maxLines: 4),
           _input(review.challenges, 'Challenges still present', maxLines: 3),
           _input(review.recommendation, 'Recommendation / next action for this goal', maxLines: 3),
-          _input(review.nextFollowupDate, 'Goal follow-up date', readOnly: true, onTap: () => _pickDate(review.nextFollowupDate)),
+          if (_goalNeedsFollowup(review.progressStatus))
+            _input(
+              review.nextFollowupDate,
+              'Goal follow-up date',
+              readOnly: true,
+              onTap: () => _pickDate(review.nextFollowupDate),
+            ),
         ],
       ),
     );
