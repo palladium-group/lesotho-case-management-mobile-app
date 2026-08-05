@@ -1419,6 +1419,7 @@ class _MgysdSocialInvestigationPageState
   final TextEditingController _supervisorReviewDateController = TextEditingController();
   String _investigationOutcome = '';
   String _supervisorDecision = '';
+  String _initialRiskLevel = '';
 
   static const List<String> _investigationOutcomeOptions = [
     'CONTINUE_INVESTIGATION',
@@ -1442,6 +1443,38 @@ class _MgysdSocialInvestigationPageState
     'RETURN_FOR_REVISION': 'Return for Revision',
     'REJECT': 'Reject',
   };
+
+  String _normaliseRiskLevel(String value) {
+    final normalised = value.trim().toUpperCase().replaceAll('_', ' ');
+
+    switch (normalised) {
+      case 'NO RISK':
+      case 'NONE':
+        return 'NO RISK';
+      case 'LOW':
+      case 'LOW RISK':
+        return 'LOW RISK';
+      case 'MEDIUM':
+      case 'MEDIUM RISK':
+      case 'MODERATE':
+      case 'MODERATE RISK':
+        return 'MEDIUM RISK';
+      case 'HIGH':
+      case 'HIGH RISK':
+        return 'HIGH RISK';
+      default:
+        return '';
+    }
+  }
+
+  bool get _isHighRisk => _normaliseRiskLevel(_initialRiskLevel) == 'HIGH RISK';
+
+  bool get _supervisorApprovalRequired => !_isHighRisk;
+
+  bool get _eligibleForEnrollment {
+    return _investigationOutcome == 'ELIGIBLE' &&
+        (!_supervisorApprovalRequired || _supervisorDecision == 'APPROVE');
+  }
 
   final List<_PersonSummary> _familyMembers = [];
 
@@ -2716,8 +2749,10 @@ class _MgysdSocialInvestigationPageState
       }
 
       await _loadOfflineOrgUnits(db);
+      _initialRiskLevel = '';
       await _loadHouseholdSummary(db);
       await _loadIntakeSummary(db);
+      _initialRiskLevel = await _resolveCurrentInitialRiskLevel(db);
       await _loadSavedForm(db);
       await _loadCurrentUserIntoSocialWorker(db);
     } catch (e) {
@@ -2727,10 +2762,117 @@ class _MgysdSocialInvestigationPageState
     }
   }
 
+  Future<String> _loadInitialRiskLevelFromEvent(Database db) async {
+    try {
+      if (_householdTei.trim().isEmpty) return '';
+
+      final eventRows = await db.query(
+        'events',
+        columns: ['event'],
+        where: 'trackedEntityInstance = ? AND programStage = ?',
+        whereArgs: [
+          _householdTei,
+          MgysdDhis2Uids.initialRiskAssessmentStage,
+        ],
+        orderBy: 'eventDate DESC',
+        limit: 1,
+      );
+
+      if (eventRows.isEmpty) return '';
+
+      final eventId = _text(eventRows.first['event']);
+      if (eventId.isEmpty) return '';
+
+      final valueRows = await db.query(
+        'event_data_value',
+        columns: ['value'],
+        where: 'event = ? AND dataElement = ?',
+        whereArgs: [eventId, MgysdDhis2Uids.deRiskLevel],
+        limit: 1,
+      );
+
+      if (valueRows.isEmpty) return '';
+
+      return _normaliseRiskLevel(_text(valueRows.first['value']));
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<String> _loadInitialRiskLevelFromIntakeState(Database db) async {
+    try {
+      if (_householdTei.trim().isEmpty) return '';
+
+      final rows = await db.query(
+        'mgysd_intake_form_state',
+        columns: ['payloadJson'],
+        where: 'householdTei = ?',
+        whereArgs: [_householdTei],
+        orderBy: 'updatedAt DESC',
+        limit: 1,
+      );
+
+      if (rows.isEmpty) return '';
+
+      final rawPayload = _text(rows.first['payloadJson']);
+      if (rawPayload.isEmpty) return '';
+
+      final decoded = jsonDecode(rawPayload);
+      if (decoded is! Map) return '';
+
+      return _normaliseRiskLevel(_text(decoded['riskLevel']));
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<String> _resolveCurrentInitialRiskLevel(Database db) async {
+    String currentRiskLevel = await _loadInitialRiskLevelFromEvent(db);
+
+    if (currentRiskLevel.isEmpty) {
+      currentRiskLevel = await _loadInitialRiskLevelFromIntakeState(db);
+    }
+
+    if (currentRiskLevel.isEmpty && _householdTei.trim().isNotEmpty) {
+      final householdAttrs = await _loadAttrs(db, _householdTei);
+      currentRiskLevel = _normaliseRiskLevel(
+        householdAttrs[MgysdDhis2Uids.attRiskLevel] ?? '',
+      );
+    }
+
+    if (currentRiskLevel.isEmpty && _clientTei.trim().isNotEmpty) {
+      final clientAttrs = await _loadAttrs(db, _clientTei);
+      currentRiskLevel = _normaliseRiskLevel(
+        clientAttrs[MgysdDhis2Uids.attRiskLevel] ?? '',
+      );
+    }
+
+    return currentRiskLevel;
+  }
+
+  Future<void> _refreshInitialRiskLevel() async {
+    try {
+      final db = await _db();
+      final currentRiskLevel = await _resolveCurrentInitialRiskLevel(db);
+
+      if (!mounted) return;
+      setState(() {
+        _initialRiskLevel = currentRiskLevel;
+      });
+    } catch (_) {}
+  }
+
   Future<void> _loadHouseholdSummary(Database db) async {
     if (_householdTei.trim().isEmpty) return;
 
     final attrs = await _loadAttrs(db, _householdTei);
+    final householdRiskLevel = _normaliseRiskLevel(
+      attrs[MgysdDhis2Uids.attRiskLevel] ?? '',
+    );
+    if (householdRiskLevel.isNotEmpty) {
+      _initialRiskLevel = householdRiskLevel;
+    }
+
     _householdFileNumberController.text = attrs[MgysdDhis2Uids.attHouseholdFileNumber] ?? '';
     _householdDistrictController.text = attrs[MgysdDhis2Uids.attHouseholdDistrict] ?? '';
     _householdCommunityCouncilController.text = attrs[MgysdDhis2Uids.attHouseholdCommunityCouncil] ?? '';
@@ -2742,6 +2884,16 @@ class _MgysdSocialInvestigationPageState
     _familyMembers.clear();
     if (_clientTei.isNotEmpty) {
       final attrs = await _loadAttrs(db, _clientTei);
+
+      if (_initialRiskLevel.isEmpty) {
+        final clientRiskLevel = _normaliseRiskLevel(
+          attrs[MgysdDhis2Uids.attRiskLevel] ?? '',
+        );
+        if (clientRiskLevel.isNotEmpty) {
+          _initialRiskLevel = clientRiskLevel;
+        }
+      }
+
       _familyMembers.add(_personFromAttrs(tei: _clientTei, role: 'CLIENT', isPrimaryClient: true, attrs: attrs));
     }
     if (_householdTei.isEmpty) return;
@@ -3404,12 +3556,12 @@ class _MgysdSocialInvestigationPageState
       },
       'supervisorReview': {
         'investigationOutcome': _investigationOutcome,
+        'initialRiskLevel': _initialRiskLevel,
+        'supervisorApprovalRequired': _supervisorApprovalRequired,
         'decision': _supervisorDecision,
         'remarks': _supervisorRemarksController.text.trim(),
         'reviewDate': _supervisorReviewDateController.text.trim(),
-        'approvedForEnrollment':
-        _investigationOutcome == 'ELIGIBLE' &&
-            _supervisorDecision == 'APPROVE',
+        'approvedForEnrollment': _eligibleForEnrollment,
       },
       'part2': {
         'incidentPattern': _incidentPattern,
@@ -3615,9 +3767,7 @@ class _MgysdSocialInvestigationPageState
   }
 
   Future<void> _ensureCarePlanForSocialInvestigation(Database db, String status) async {
-    if (status != 'COMPLETED' ||
-        _investigationOutcome != 'ELIGIBLE' ||
-        _supervisorDecision != 'APPROVE') {
+    if (status != 'COMPLETED' || !_eligibleForEnrollment) {
       return;
     }
 
@@ -3666,8 +3816,7 @@ class _MgysdSocialInvestigationPageState
   }
 
   Future<void> _enrollApprovedEligibleHousehold(Database db) async {
-    if (_investigationOutcome != 'ELIGIBLE' ||
-        _supervisorDecision != 'APPROVE') {
+    if (!_eligibleForEnrollment) {
       return;
     }
 
@@ -3701,7 +3850,7 @@ class _MgysdSocialInvestigationPageState
       _householdDistrictController.text.trim(),
       _householdCommunityCouncilController.text.trim(),
       _householdVillageController.text.trim(),
-      'Approved eligible',
+      _isHighRisk ? 'High risk eligible' : 'Approved eligible',
     ].where((value) => value.isNotEmpty).join(' | ');
 
     await db.insert(
@@ -3723,6 +3872,7 @@ class _MgysdSocialInvestigationPageState
   }
 
   Future<void> _save(String status) async {
+    await _refreshInitialRiskLevel();
     final isDraft = status == 'DRAFT';
 
     // Drafts can be incomplete. Full validation runs only on submission.
@@ -3743,15 +3893,20 @@ class _MgysdSocialInvestigationPageState
       _showSnack('Please select the investigation outcome.');
       return;
     }
-    if (!isDraft && _supervisorDecision.isEmpty) {
+    if (!isDraft &&
+        _supervisorApprovalRequired &&
+        _supervisorDecision.isEmpty) {
       _showSnack('Please select the supervisor decision.');
       return;
     }
-    if (!isDraft && _supervisorRemarksController.text.trim().isEmpty) {
+    if (!isDraft &&
+        _supervisorApprovalRequired &&
+        _supervisorRemarksController.text.trim().isEmpty) {
       _showSnack('Supervisor remarks are required before submission.');
       return;
     }
     if (!isDraft &&
+        _supervisorApprovalRequired &&
         (_supervisorFirstNameController.text.trim().isEmpty ||
             _supervisorSurnameController.text.trim().isEmpty)) {
       _showSnack('Supervisor name and surname are required.');
@@ -3789,13 +3944,14 @@ class _MgysdSocialInvestigationPageState
 
       if (!mounted) return;
       setState(() => _savedStatus = status);
-      final enrolled = status == 'COMPLETED' &&
-          _investigationOutcome == 'ELIGIBLE' &&
-          _supervisorDecision == 'APPROVE';
+      final enrolled =
+          status == 'COMPLETED' && _eligibleForEnrollment;
       _showSnack(
         status == 'COMPLETED'
             ? (enrolled
-            ? 'Investigation approved. Household enrolled successfully.'
+            ? (_isHighRisk
+            ? 'High-risk investigation completed. Household enrolled successfully.'
+            : 'Investigation approved. Household enrolled successfully.')
             : 'Social Investigation submitted successfully.')
             : 'Social Investigation saved as draft.',
       );
@@ -4079,6 +4235,7 @@ class _MgysdSocialInvestigationPageState
     required String subtitle,
     required IconData icon,
     required Widget child,
+    Future<void> Function()? onExpand,
   }) {
     final expanded = _expandedParts.contains(id);
     return Container(
@@ -4099,13 +4256,19 @@ class _MgysdSocialInvestigationPageState
         children: [
           InkWell(
             borderRadius: BorderRadius.circular(20),
-            onTap: () => setState(() {
-              if (expanded) {
-                _expandedParts.remove(id);
-              } else {
-                _expandedParts.add(id);
+            onTap: () {
+              final willExpand = !expanded;
+              setState(() {
+                if (expanded) {
+                  _expandedParts.remove(id);
+                } else {
+                  _expandedParts.add(id);
+                }
+              });
+              if (willExpand) {
+                onExpand?.call();
               }
-            }),
+            },
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Row(
@@ -6290,7 +6453,9 @@ class _MgysdSocialInvestigationPageState
         children: [
           _sectionTitle(
             'Eligibility and Supervisor Review',
-            'Enrollment occurs only when the investigation outcome is Eligible and the supervisor decision is Approve.',
+            _isHighRisk
+                ? 'High Risk cases do not require supervisor approval. Enrollment occurs when the investigation outcome is Eligible.'
+                : 'Enrollment occurs only when the investigation outcome is Eligible and the supervisor decision is Approve.',
           ),
           _dropdown(
             label: 'Investigation Outcome',
@@ -6302,32 +6467,53 @@ class _MgysdSocialInvestigationPageState
               _investigationOutcome = value;
             }),
           ),
-          _dropdown(
-            label: 'Supervisor Decision',
-            value: _supervisorDecision,
-            options: _supervisorDecisionOptions,
-            labels: _supervisorDecisionLabels,
-            requiredField: true,
-            onChanged: (value) => setState(() {
-              _supervisorDecision = value;
-            }),
-          ),
-          _input(
-            _supervisorReviewDateController,
-            'Supervisor Review Date',
-            readOnly: true,
-            onTap: () => _pickDate(_supervisorReviewDateController),
-          ),
-          _input(
-            _supervisorRemarksController,
-            'Supervisor Remarks',
-            maxLines: 5,
-            validator: (value) => (value ?? '').trim().isEmpty
-                ? 'Supervisor remarks are required'
-                : null,
-          ),
-          if (_investigationOutcome == 'ELIGIBLE' &&
-              _supervisorDecision == 'APPROVE')
+          if (_isHighRisk)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(13),
+                border: Border.all(
+                  color: Colors.orange.withValues(alpha: 0.22),
+                ),
+              ),
+              child: const Text(
+                'Initial risk level: High Risk. Supervisor approval is not required.',
+                style: TextStyle(
+                  color: Colors.deepOrange,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          if (_supervisorApprovalRequired) ...[
+            _dropdown(
+              label: 'Supervisor Decision',
+              value: _supervisorDecision,
+              options: _supervisorDecisionOptions,
+              labels: _supervisorDecisionLabels,
+              requiredField: true,
+              onChanged: (value) => setState(() {
+                _supervisorDecision = value;
+              }),
+            ),
+            _input(
+              _supervisorReviewDateController,
+              'Supervisor Review Date',
+              readOnly: true,
+              onTap: () => _pickDate(_supervisorReviewDateController),
+            ),
+            _input(
+              _supervisorRemarksController,
+              'Supervisor Remarks',
+              maxLines: 5,
+              validator: (value) => (value ?? '').trim().isEmpty
+                  ? 'Supervisor remarks are required'
+                  : null,
+            ),
+          ],
+          if (_eligibleForEnrollment)
             Container(
               width: double.infinity,
               margin: const EdgeInsets.only(top: 4),
@@ -6407,6 +6593,7 @@ class _MgysdSocialInvestigationPageState
               subtitle: 'Outcome,  supervisor remarks and final approval decision.',
               icon: Icons.verified_user_outlined,
               child: _supervisorReviewSection(),
+              onExpand: _refreshInitialRiskLevel,
             ),
             _actions(),
             const SizedBox(height: 26),
