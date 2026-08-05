@@ -1188,6 +1188,29 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _employabilityBarrierOtherController.clear();
   }
 
+  List<String> _socialInvestigationNextSteps() {
+    return const ['OPEN_SOCIAL_INVESTIGATION'];
+  }
+
+  String _riskPriorityLabel() {
+    switch (_riskLevel.trim().toUpperCase()) {
+      case 'HIGH RISK':
+      case 'HIGH_RISK':
+        return 'High priority social investigation';
+      case 'MEDIUM RISK':
+      case 'MEDIUM_RISK':
+        return 'Medium priority social investigation';
+      case 'LOW RISK':
+      case 'LOW_RISK':
+        return 'Routine social investigation';
+      case 'NO RISK':
+      case 'NO_RISK':
+        return 'Routine social investigation';
+      default:
+        return 'Select risk level to determine social investigation priority';
+    }
+  }
+
 
   Future<Map<String, String>> _loadAttributes(
       Database db,
@@ -1477,7 +1500,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       'riskSocialWorker': _riskSocialWorkerController.text.trim(),
       'riskReason': _riskReasonController.text.trim(),
       'riskImmediateReferrals': _riskImmediateReferralsController.text.trim(),
-      'riskAdditionalNotes': _riskAdditionalNotesController.text.trim(),
+      'riskAdditionalNotes': '',
       'riskReportSource': _riskReportSource,
       'riskHasActionTaken': _riskHasActionTaken,
       'riskNoActionReason': _riskNoActionReason,
@@ -1513,7 +1536,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       'riskLevel': _riskLevel,
       'riskEmergencyActionsTaken': _riskEmergencyActionsTaken.toList(),
       'riskServicesAccessed': _riskServicesAccessed.toList(),
-      'riskNextSteps': _riskNextSteps.toList(),
+      'riskNextSteps': _socialInvestigationNextSteps(),
       'riskEmergencyActionOther': _riskEmergencyActionOtherController.text.trim(),
       'riskServicesAccessedOther': _riskServicesAccessedOtherController.text.trim(),
 
@@ -1805,8 +1828,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _riskReasonController.text = _stringValue(payload['riskReason']);
     _riskImmediateReferralsController.text =
         _stringValue(payload['riskImmediateReferrals']);
-    _riskAdditionalNotesController.text =
-        _stringValue(payload['riskAdditionalNotes']);
+    _riskAdditionalNotesController.clear();
     _riskReportSource = _stringValue(payload['riskReportSource']);
     _riskHasActionTaken = _stringValue(payload['riskHasActionTaken']);
     _riskNoActionReason = _stringValue(payload['riskNoActionReason']);
@@ -1853,7 +1875,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       ..addAll(_stringListValue(payload['riskServicesAccessed']));
     _riskNextSteps
       ..clear()
-      ..addAll(_stringListValue(payload['riskNextSteps']));
+      ..addAll(_socialInvestigationNextSteps());
     _riskEmergencyActionOtherController.text =
         _stringValue(payload['riskEmergencyActionOther']);
     _riskServicesAccessedOtherController.text =
@@ -2220,10 +2242,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           household[attRiskImmediateReferrals] ??
               client[attRiskImmediateReferrals] ??
               '';
-      _riskAdditionalNotesController.text =
-          household[attRiskAdditionalNotes] ??
-              client[attRiskAdditionalNotes] ??
-              '';
+      _riskAdditionalNotesController.clear();
 
       _setJsonSet(
         _riskEmergencyActionsTaken,
@@ -2237,10 +2256,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             client[attRiskAssessmentServicesAccessed] ??
             '',
       );
-      _setJsonSet(
-        _riskNextSteps,
-        household[attRiskNextSteps] ?? client[attRiskNextSteps] ?? '',
-      );
+      _riskNextSteps
+        ..clear()
+        ..addAll(_socialInvestigationNextSteps());
 
       _clearEmploymentFieldsForChild();
 
@@ -3431,6 +3449,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       return false;
     }
 
+    _riskNextSteps
+      ..clear()
+      ..addAll(_socialInvestigationNextSteps());
+
     return true;
   }
 
@@ -3532,8 +3554,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           attRiskLevel: _riskLevel,
           attRiskReason: _riskReasonController.text,
           attRiskImmediateReferrals: _riskImmediateReferralsController.text,
-          attRiskNextSteps: jsonEncode(_riskNextSteps.toList()),
-          attRiskAdditionalNotes: _riskAdditionalNotesController.text,
+          attRiskNextSteps: jsonEncode(_socialInvestigationNextSteps()),
+          attRiskAdditionalNotes: '',
         },
       );
 
@@ -3625,8 +3647,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         attRiskLevel: _riskLevel,
         attRiskReason: _riskReasonController.text,
         attRiskImmediateReferrals: _riskImmediateReferralsController.text,
-        attRiskNextSteps: jsonEncode(_riskNextSteps.toList()),
-        attRiskAdditionalNotes: _riskAdditionalNotesController.text,
+        attRiskNextSteps: jsonEncode(_socialInvestigationNextSteps()),
+        attRiskAdditionalNotes: '',
       };
 
       await _saveAttrsOffline(db: db, teiId: clientTeiId, attrs: clientAttrs);
@@ -3647,6 +3669,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         _selectedCommunityCouncilName.trim(),
         _villageController.text.trim(),
         'risk:$_riskLevel',
+        'social_investigation:required',
+        'priority:${_riskPriorityLabel()}',
         widget.reportedEventId == null
             ? ''
             : 'reportEvent:${widget.reportedEventId}',
@@ -5081,6 +5105,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   }
 
   Widget _buildInitialRiskAssessmentSection(Color primary) {
+    final socialInvestigationPriority = _riskPriorityLabel();
+
     return MaterialCard(
       body: Padding(
         padding: const EdgeInsets.all(12.0),
@@ -5143,7 +5169,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               notesController: _riskExtendedFamilyNotesController,
             ),
             _riskDomainItem(
-              title: 'Client relationships',
+              title: 'Client relationship with HH members',
               value: _riskClientRelationships,
               options: riskRelationshipOptions,
               onChanged: (v) => setState(() => _riskClientRelationships = v ?? ''),
@@ -5198,13 +5224,20 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               onChanged: (v) => setState(() => _riskEducation = v ?? ''),
               notesController: _riskEducationNotesController,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             _dropdown(
               label: 'Decision on level of risk *',
               value: _riskLevel,
               options: riskLevelOptions,
               requiredField: true,
-              onChanged: (v) => setState(() => _riskLevel = v ?? ''),
+              onChanged: (v) {
+                setState(() {
+                  _riskLevel = v ?? '';
+                  _riskNextSteps
+                    ..clear()
+                    ..addAll(_socialInvestigationNextSteps());
+                });
+              },
             ),
             const SizedBox(height: 10),
             _Input(
@@ -5214,24 +5247,52 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               maxLines: 3,
             ),
             const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: primary.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: primary.withOpacity(0.18)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.travel_explore_outlined, color: primary, size: 21),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Social Investigation required for all cases',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 13.5,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          socialInvestigationPriority,
+                          style: const TextStyle(
+                            color: Colors.blueGrey,
+                            fontSize: 12.5,
+                            height: 1.3,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
             _Input(
               controller: _riskImmediateReferralsController,
               label: 'Immediate referrals',
               hint: 'Record immediate referrals needed or made',
               maxLines: 3,
-            ),
-            const SizedBox(height: 12),
-            _riskMultiSelect(
-              title: 'Next steps',
-              options: riskNextStepOptions,
-              selectedValues: _riskNextSteps,
-            ),
-            const SizedBox(height: 12),
-            _Input(
-              controller: _riskAdditionalNotesController,
-              label: 'Additional notes',
-              hint: 'Any additional initial risk notes',
-              maxLines: 4,
             ),
           ],
         ),
@@ -6292,39 +6353,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                     ),
                   const SizedBox(height: 12),
                   _partTile(
-                    title: 'Part 1: Risk Assessment and Reasons for Enrolment',
-                    subtitle: 'Start with assessment, then confirm why the client is enrolled.',
-                    icon: Icons.fact_check_outlined,
-                    color: primary,
-                    initiallyExpanded: true,
-                    children: [
-                      _subPartTile(
-                        title: '1.1 Initial Assessment',
-                        subtitle: 'Capture risk level and key assessment domains.',
-                        icon: Icons.health_and_safety_outlined,
-                        color: primary,
-                        child: _buildInitialRiskAssessmentSection(primary),
-                      ),
-                      _subPartTile(
-                        title: '1.2 Reasons for Enrolment',
-                        subtitle: 'Select only the reason(s) that apply.',
-                        icon: Icons.assignment_late_outlined,
-                        color: primary,
-                        child: _buildReasonSection(primary),
-                      ),
-                      _subPartTile(
-                        title: '1.3 Additional Assessment',
-                        subtitle: 'Disability, self-care, rehabilitation and employability.',
-                        icon: Icons.accessibility_new_outlined,
-                        color: primary,
-                        child: _buildAdditionalAssessmentSection(primary),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  _partTile(
-                    title: 'Part 2: Household, Client and Education',
-                    subtitle: 'Location, client identity, school and employment details.',
+                    title: 'Part 1: Demographics, Household and Education',
+                    subtitle: 'Capture household location, client demographics, education and applicable adult employment details.',
                     icon: Icons.home_work_outlined,
                     color: primary,
                     initiallyExpanded: true,
@@ -6809,10 +6839,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  const SizedBox(height: 12),
                   _partTile(
-                    title: 'Part 3: Family and Household Members',
-                    subtitle: 'Next of kin, parents, caregivers and household members.',
+                    title: 'Part 2: Family and Household Members',
+                    subtitle: 'Capture next of kin, parents, caregivers and household members after demographics.',
                     icon: Icons.family_restroom_outlined,
                     color: primary,
                     children: [
@@ -6851,6 +6880,36 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                       _buildFamilyInformationSection(primary),
                       const SizedBox(height: 12),
                       _buildOtherHouseholdMembersSection(primary),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _partTile(
+                    title: 'Part 3: Initial Risk Assessment and Referrals',
+                    subtitle: 'Complete initial risk assessment, reasons for enrolment, then additional assessment.',
+                    icon: Icons.fact_check_outlined,
+                    color: primary,
+                    children: [
+                      _subPartTile(
+                        title: '3.1 Initial Risk Assessment',
+                        subtitle: 'Record assessment domains, decision on risk level, risk reason and referrals.',
+                        icon: Icons.health_and_safety_outlined,
+                        color: primary,
+                        child: _buildInitialRiskAssessmentSection(primary),
+                      ),
+                      _subPartTile(
+                        title: '3.2 Reasons for Enrolment',
+                        subtitle: 'Select only the reason(s) that apply.',
+                        icon: Icons.assignment_late_outlined,
+                        color: primary,
+                        child: _buildReasonSection(primary),
+                      ),
+                      _subPartTile(
+                        title: '3.3 Additional Assessment',
+                        subtitle: 'Disability, self-care, rehabilitation and employability.',
+                        icon: Icons.accessibility_new_outlined,
+                        color: primary,
+                        child: _buildAdditionalAssessmentSection(primary),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
