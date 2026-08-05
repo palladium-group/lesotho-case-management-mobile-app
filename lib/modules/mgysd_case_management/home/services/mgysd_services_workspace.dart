@@ -47,14 +47,14 @@ class _ServiceMember {
   final String latestServiceDate;
 
   String get searchableText => <String>[
-        name,
-        role,
-        sex,
-        age,
-        disability,
-        '$serviceCount',
-        latestServiceDate,
-      ].join(' ').toLowerCase();
+    name,
+    role,
+    sex,
+    age,
+    disability,
+    '$serviceCount',
+    latestServiceDate,
+  ].join(' ').toLowerCase();
 }
 
 class _ServiceHousehold {
@@ -87,12 +87,12 @@ class _ServiceHousehold {
   bool get hasServices => totalServices > 0;
 
   String get searchableText => <String>[
-        fileNumber,
-        clientName,
-        location,
-        enrollmentDate,
-        ...members.map((_ServiceMember item) => item.searchableText),
-      ].join(' ').toLowerCase();
+    fileNumber,
+    clientName,
+    location,
+    enrollmentDate,
+    ...members.map((_ServiceMember item) => item.searchableText),
+  ].join(' ').toLowerCase();
 }
 
 class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
@@ -139,7 +139,7 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
   Future<List<String>> _columns(Database db, String table) async {
     try {
       final List<Map<String, Object?>> rows =
-          await db.rawQuery('PRAGMA table_info($table)');
+      await db.rawQuery('PRAGMA table_info($table)');
       return rows
           .map((Map<String, Object?> row) => '${row['name'] ?? ''}')
           .where((String value) => value.trim().isNotEmpty)
@@ -150,10 +150,10 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
   }
 
   Future<String?> _firstColumn(
-    Database db,
-    String table,
-    List<String> candidates,
-  ) async {
+      Database db,
+      String table,
+      List<String> candidates,
+      ) async {
     final List<String> columns = await _columns(db, table);
     for (final String candidate in candidates) {
       if (columns.contains(candidate)) return candidate;
@@ -162,9 +162,9 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
   }
 
   Future<Map<String, String>> _attributes(
-    Database db,
-    String tei,
-  ) async {
+      Database db,
+      String tei,
+      ) async {
     final Map<String, String> values = <String, String>{};
 
     if (tei.trim().isEmpty ||
@@ -190,9 +190,9 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
   }
 
   String _first(
-    Map<String, String> values,
-    List<String> keys,
-  ) {
+      Map<String, String> values,
+      List<String> keys,
+      ) {
     for (final String key in keys) {
       final String value = (values[key] ?? '').trim();
       if (value.isNotEmpty && value.toLowerCase() != 'null') {
@@ -203,9 +203,9 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
   }
 
   String _displayName(
-    Map<String, String> values, {
-    required String fallback,
-  }) {
+      Map<String, String> values, {
+        required String fallback,
+      }) {
     final String firstName = _first(values, <String>[
       MgysdDhis2Uids.attFirstName,
       'ATTR_P_FIRSTNAME',
@@ -226,9 +226,9 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
   }
 
   Future<String> _memberEnrollment(
-    Database db,
-    String memberTei,
-  ) async {
+      Database db,
+      String memberTei,
+      ) async {
     if (memberTei.trim().isEmpty || !await _tableExists(db, 'enrollment')) {
       return '';
     }
@@ -253,48 +253,66 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
   }
 
   Future<Map<String, Object>> _serviceSummary(
-    Database db,
-    String memberTei,
-  ) async {
-    if (memberTei.trim().isEmpty || !await _tableExists(db, 'events')) {
+      Database db,
+      String memberTei,
+      ) async {
+    if (memberTei.trim().isEmpty) {
       return <String, Object>{
         'count': 0,
         'latestDate': '',
       };
     }
 
-    try {
-      final List<Map<String, Object?>> rows = await db.query(
-        'events',
-        where: 'trackedEntityInstance = ? AND programStage = ?',
-        whereArgs: <Object?>[
-          memberTei,
-          MgysdDhis2Uids.familyServiceProvisionStage,
-        ],
-        orderBy: 'eventDate DESC',
-      );
+    if (await _tableExists(db, 'mgysd_service_provision')) {
+      try {
+        final List<Map<String, Object?>> rows = await db.query(
+          'mgysd_service_provision',
+          where: 'memberTei = ?',
+          whereArgs: <Object?>[memberTei],
+          orderBy: 'serviceDate DESC, updatedAt DESC',
+        );
 
-      String latestDate = '';
-      if (rows.isNotEmpty) {
-        latestDate = '${rows.first['eventDate'] ?? ''}'.trim();
-      }
-
-      return <String, Object>{
-        'count': rows.length,
-        'latestDate': latestDate,
-      };
-    } catch (_) {
-      return <String, Object>{
-        'count': 0,
-        'latestDate': '',
-      };
+        if (rows.isNotEmpty) {
+          return <String, Object>{
+            'count': rows.length,
+            'latestDate': '${rows.first['serviceDate'] ?? ''}'.trim(),
+          };
+        }
+      } catch (_) {}
     }
+
+    // Backward compatibility for service records stored only as stage events.
+    if (await _tableExists(db, 'events')) {
+      try {
+        final List<Map<String, Object?>> rows = await db.query(
+          'events',
+          where: 'trackedEntityInstance = ? AND programStage = ?',
+          whereArgs: <Object?>[
+            memberTei,
+            MgysdDhis2Uids.familyServiceProvisionStage,
+          ],
+          orderBy: 'eventDate DESC',
+        );
+
+        return <String, Object>{
+          'count': rows.length,
+          'latestDate': rows.isEmpty
+              ? ''
+              : '${rows.first['eventDate'] ?? ''}'.trim(),
+        };
+      } catch (_) {}
+    }
+
+    return <String, Object>{
+      'count': 0,
+      'latestDate': '',
+    };
   }
 
   Future<String?> _primaryClientTei(
-    Database db,
-    String householdTei,
-  ) async {
+      Database db,
+      String householdTei,
+      ) async {
     if (!await _tableExists(db, 'mgysd_household_member')) return null;
 
     try {
@@ -322,9 +340,9 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
   }
 
   Future<List<_ServiceMember>> _members(
-    Database db,
-    String householdTei,
-  ) async {
+      Database db,
+      String householdTei,
+      ) async {
     if (!await _tableExists(db, 'mgysd_household_member')) {
       return <_ServiceMember>[];
     }
@@ -347,9 +365,9 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
             .replaceAll('_', ' ');
 
         final Map<String, String> attributes =
-            await _attributes(db, memberTei);
+        await _attributes(db, memberTei);
         final Map<String, Object> serviceSummary =
-            await _serviceSummary(db, memberTei);
+        await _serviceSummary(db, memberTei);
 
         result.add(
           _ServiceMember(
@@ -374,11 +392,11 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
               'disability',
             ]),
             isPrimary:
-                '${row['isPrimaryClient'] ?? ''}'.toLowerCase() == 'true' ||
-                    '${row['memberRole'] ?? ''}'.toUpperCase() == 'CLIENT',
+            '${row['isPrimaryClient'] ?? ''}'.toLowerCase() == 'true' ||
+                '${row['memberRole'] ?? ''}'.toUpperCase() == 'CLIENT',
             serviceCount: serviceSummary['count'] as int,
             latestServiceDate:
-                '${serviceSummary['latestDate'] ?? ''}'.trim(),
+            '${serviceSummary['latestDate'] ?? ''}'.trim(),
           ),
         );
       }
@@ -421,11 +439,11 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
       );
 
       final Map<String, Map<String, Object?>> latestByHousehold =
-          <String, Map<String, Object?>>{};
+      <String, Map<String, Object?>>{};
 
       for (final Map<String, Object?> row in enrollmentRows) {
         final String householdTei =
-            '${row['trackedEntityInstance'] ?? ''}'.trim();
+        '${row['trackedEntityInstance'] ?? ''}'.trim();
         if (householdTei.isEmpty) continue;
 
         latestByHousehold.putIfAbsent(householdTei, () => row);
@@ -434,18 +452,18 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
       final List<_ServiceHousehold> households = <_ServiceHousehold>[];
 
       for (final MapEntry<String, Map<String, Object?>> entry
-          in latestByHousehold.entries) {
+      in latestByHousehold.entries) {
         final String householdTei = entry.key;
         final Map<String, Object?> enrollment = entry.value;
         final Map<String, String> householdAttributes =
-            await _attributes(db, householdTei);
+        await _attributes(db, householdTei);
 
         final String? primaryClientTei =
-            await _primaryClientTei(db, householdTei);
+        await _primaryClientTei(db, householdTei);
         final Map<String, String> primaryAttributes =
-            primaryClientTei == null
-                ? <String, String>{}
-                : await _attributes(db, primaryClientTei);
+        primaryClientTei == null
+            ? <String, String>{}
+            : await _attributes(db, primaryClientTei);
 
         final String fileNumber = _first(
           householdAttributes,
@@ -483,10 +501,10 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
         households.add(
           _ServiceHousehold(
             enrollmentId:
-                '${enrollment['enrollment'] ?? enrollment['id'] ?? ''}',
+            '${enrollment['enrollment'] ?? enrollment['id'] ?? ''}',
             householdTei: householdTei,
             fileNumber:
-                fileNumber.isEmpty ? householdTei : fileNumber,
+            fileNumber.isEmpty ? householdTei : fileNumber,
             clientName: _displayName(
               primaryAttributes,
               fallback: 'Household client',
@@ -528,7 +546,7 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
     final String query = _searchController.text.trim().toLowerCase();
 
     final List<_ServiceHousehold> filtered =
-        _items.where((_ServiceHousehold item) {
+    _items.where((_ServiceHousehold item) {
       if (_filter == 'WITH_SERVICES' && !item.hasServices) return false;
       if (_filter == 'NO_SERVICES' && item.hasServices) return false;
       if (_filter == 'MEMBERS_PENDING' &&
@@ -697,9 +715,9 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
   }
 
   Future<void> _openServices(
-    _ServiceHousehold household,
-    _ServiceMember member,
-  ) async {
+      _ServiceHousehold household,
+      _ServiceMember member,
+      ) async {
     try {
       final Database db = await _db();
       final String eventId = _newServiceId(household);
@@ -779,8 +797,8 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
   }
 
   Future<void> _openHouseholdServices(
-    _ServiceHousehold household,
-  ) async {
+      _ServiceHousehold household,
+      ) async {
     try {
       final Database db = await _db();
       final String eventId =
@@ -837,8 +855,8 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
   }
 
   Future<void> _openHouseholdMonitoring(
-    _ServiceHousehold household,
-  ) async {
+      _ServiceHousehold household,
+      ) async {
     final MgysdCase householdCase = MgysdCase(
       id: household.enrollmentId,
       caseNo: household.fileNumber,
@@ -866,9 +884,9 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
   }
 
   Widget _memberTile(
-    _ServiceHousehold household,
-    _ServiceMember member,
-  ) {
+      _ServiceHousehold household,
+      _ServiceMember member,
+      ) {
     final List<String> details = <String>[
       if (member.role.trim().isNotEmpty) member.role,
       if (member.sex.trim().isNotEmpty) member.sex,
@@ -975,7 +993,7 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
 
   Widget _householdCard(_ServiceHousehold household) {
     final Color statusColor =
-        household.hasServices ? Colors.green : Colors.orange;
+    household.hasServices ? Colors.green : Colors.orange;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
@@ -1000,7 +1018,7 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
         child: ExpansionTile(
           tilePadding: const EdgeInsets.fromLTRB(14, 7, 12, 7),
           childrenPadding:
-              const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          const EdgeInsets.fromLTRB(14, 0, 14, 14),
           leading: CircleAvatar(
             radius: 23,
             backgroundColor: statusColor.withOpacity(0.11),
@@ -1120,7 +1138,7 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
               ),
               const SizedBox(height: 8),
               ...household.members.map(
-                (_ServiceMember member) =>
+                    (_ServiceMember member) =>
                     _memberTile(household, member),
               ),
             ],
@@ -1175,8 +1193,8 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
         _items.where((_ServiceHousehold item) => item.hasServices).length;
     final int totalServices = _items.fold<int>(
       0,
-      (int total, _ServiceHousehold item) =>
-          total + item.totalServices,
+          (int total, _ServiceHousehold item) =>
+      total + item.totalServices,
     );
 
     return RefreshIndicator(
@@ -1250,7 +1268,7 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
                             hintText: 'Search this device',
                             prefixIcon: Tooltip(
                               message:
-                                  'Offline search: searches households and members stored on this device',
+                              'Offline search: searches households and members stored on this device',
                               child: Padding(
                                 padding: const EdgeInsets.all(15),
                                 child: Icon(
@@ -1262,22 +1280,22 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
                             ),
                             suffixIcon: _searchController.text.isEmpty
                                 ? const Tooltip(
-                                    message:
-                                        'Online search will use the globe icon in a later update',
-                                    child: Icon(
-                                      Icons.public_outlined,
-                                      color: Colors.blueGrey,
-                                      size: 20,
-                                    ),
-                                  )
+                              message:
+                              'Online search will use the globe icon in a later update',
+                              child: Icon(
+                                Icons.public_outlined,
+                                color: Colors.blueGrey,
+                                size: 20,
+                              ),
+                            )
                                 : IconButton(
-                                    onPressed: () {
-                                      _searchController.clear();
-                                      setState(() {});
-                                      _applyFilters();
-                                    },
-                                    icon: const Icon(Icons.close),
-                                  ),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {});
+                                _applyFilters();
+                              },
+                              icon: const Icon(Icons.close),
+                            ),
                             filled: true,
                             fillColor: Colors.white,
                             border: OutlineInputBorder(
@@ -1381,7 +1399,7 @@ class _MgysdServicesWorkspaceState extends State<MgysdServicesWorkspace> {
           else
             SliverList(
               delegate: SliverChildBuilderDelegate(
-                (BuildContext context, int index) {
+                    (BuildContext context, int index) {
                   return _householdCard(_filtered[index]);
                 },
                 childCount: _filtered.length,
