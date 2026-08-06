@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lncmis_mobile_app/core/offline_db/offline_db_provider.dart';
 import 'package:lncmis_mobile_app/core/utils/app_util.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
@@ -172,7 +173,7 @@ class _ExternalInformantEntry {
     String relationshipToClientOther = '',
     this.occupation = '',
     String occupationOther = '',
-    this.contactCountryCode = '',
+    this.contactCountryCode = '+266',
     String contactCountryCodeOther = '',
     String contactNumber = '',
     String physicalAddress = '',
@@ -1126,12 +1127,390 @@ class _CourtReportEntry {
 // Self-contained phone input with searchable country picker.
 // Owns its own State so the bottom sheet never touches the parent's setState.
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Phone number validation, ported from the Report Case / New Case form so both
+// forms enforce identical rules: allowed network prefixes are checked before
+// length, so an invalid prefix is reported while the user is still typing.
+// ─────────────────────────────────────────────────────────────────────────────
+class _MgysdCountryCodeOption {
+  final String code;
+  final String label;
+  final String dialCode;
+  final String flag;
+  final int minNationalDigits;
+  final int maxNationalDigits;
+  final List<String> allowedNationalPrefixes;
+  final List<String> disallowedNationalPrefixes;
+  final String prefixHint;
+  final bool useNanpRules;
+
+  const _MgysdCountryCodeOption({
+    required this.code,
+    required this.label,
+    required this.dialCode,
+    this.flag = '🌍',
+    this.minNationalDigits = 7,
+    this.maxNationalDigits = 12,
+    this.allowedNationalPrefixes = const [],
+    this.disallowedNationalPrefixes = const [],
+    this.prefixHint = '',
+    this.useNanpRules = false,
+  });
+}
+
+class _MgysdPhoneNumberInputFormatter extends TextInputFormatter {
+  final _MgysdCountryCodeOption country;
+
+  const _MgysdPhoneNumberInputFormatter(this.country);
+
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue,
+      TextEditingValue newValue,
+      ) {
+    final formatted = country.code == 'INTL'
+        ? _formatInternationalNumber(newValue.text)
+        : _formatNationalNumber(newValue.text);
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+      composing: TextRange.empty,
+    );
+  }
+
+  String _formatInternationalNumber(String value) {
+    final trimmed = value.trim();
+    final hasLeadingPlus = trimmed.startsWith('+');
+    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+    final limitedDigits = digits.length > country.maxNationalDigits
+        ? digits.substring(0, country.maxNationalDigits)
+        : digits;
+
+    if (limitedDigits.isEmpty) return hasLeadingPlus ? '+' : '';
+    return hasLeadingPlus ? '+$limitedDigits' : limitedDigits;
+  }
+
+  String _formatNationalNumber(String value) {
+    final dialDigits = country.dialCode.replaceAll('+', '');
+    var digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+
+    if (digits.startsWith(dialDigits) && digits.length > dialDigits.length) {
+      digits = digits.substring(dialDigits.length);
+    }
+
+    if (digits.startsWith('0')) {
+      final withoutLeadingZeros = digits.replaceFirst(RegExp(r'^0+'), '');
+      if (withoutLeadingZeros.isNotEmpty) digits = withoutLeadingZeros;
+    }
+
+    if (digits.length > country.maxNationalDigits) {
+      digits = digits.substring(0, country.maxNationalDigits);
+    }
+
+    return digits;
+  }
+}
+
+const List<_MgysdCountryCodeOption> _phoneCountryOptions = [
+  _MgysdCountryCodeOption(
+    code: 'LS',
+    label: 'Lesotho (+266)',
+    dialCode: '+266',
+    flag: '🇱🇸',
+    minNationalDigits: 8,
+    maxNationalDigits: 8,
+    allowedNationalPrefixes: ['2', '5', '6'],
+    disallowedNationalPrefixes: ['54', '55'],
+    prefixHint: 'Lesotho numbers must start with 2, 5 or 6. Prefixes 54 and 55 are not allowed',
+  ),
+  _MgysdCountryCodeOption(
+    code: 'ZA',
+    label: 'South Africa (+27)',
+    dialCode: '+27',
+    flag: '🇿🇦',
+    minNationalDigits: 9,
+    maxNationalDigits: 9,
+    allowedNationalPrefixes: [
+      '60', '61', '62', '63', '64', '65', '66', '67', '68',
+      '71', '72', '73', '74', '76', '78', '79', '81', '82', '83', '84',
+    ],
+    prefixHint: 'South African mobile numbers usually start with 6, 7 or 8 ranges such as 60, 71 or 82',
+  ),
+  _MgysdCountryCodeOption(
+    code: 'ZW',
+    label: 'Zimbabwe (+263)',
+    dialCode: '+263',
+    flag: '🇿🇼',
+    minNationalDigits: 9,
+    maxNationalDigits: 9,
+    allowedNationalPrefixes: ['71', '73', '77', '78'],
+    prefixHint: 'Zimbabwe mobile numbers must start with 71, 73, 77 or 78',
+  ),
+  _MgysdCountryCodeOption(
+    code: 'MZ',
+    label: 'Mozambique (+258)',
+    dialCode: '+258',
+    flag: '🇲🇿',
+    minNationalDigits: 8,
+    maxNationalDigits: 9,
+    allowedNationalPrefixes: ['82', '83', '84', '85', '86', '87'],
+    prefixHint: 'Mozambique mobile numbers must start with 82, 83, 84, 85, 86 or 87',
+  ),
+  _MgysdCountryCodeOption(
+    code: 'BW',
+    label: 'Botswana (+267)',
+    dialCode: '+267',
+    flag: '🇧🇼',
+    minNationalDigits: 8,
+    maxNationalDigits: 8,
+    allowedNationalPrefixes: ['71', '72', '73', '74', '75', '76'],
+    prefixHint: 'Botswana mobile numbers must start with 71, 72, 73, 74, 75 or 76',
+  ),
+  _MgysdCountryCodeOption(
+    code: 'NA',
+    label: 'Namibia (+264)',
+    dialCode: '+264',
+    flag: '🇳🇦',
+    minNationalDigits: 9,
+    maxNationalDigits: 9,
+    allowedNationalPrefixes: ['81', '82', '83', '84', '85'],
+    prefixHint: 'Namibia mobile numbers must start with 81, 82, 83, 84 or 85',
+  ),
+  _MgysdCountryCodeOption(
+    code: 'SZ',
+    label: 'Eswatini (+268)',
+    dialCode: '+268',
+    flag: '🇸🇿',
+    minNationalDigits: 8,
+    maxNationalDigits: 8,
+    allowedNationalPrefixes: ['75', '76', '77', '78', '79'],
+    prefixHint: 'Eswatini mobile numbers must start with 75, 76, 77, 78 or 79',
+  ),
+  _MgysdCountryCodeOption(
+    code: 'ZM',
+    label: 'Zambia (+260)',
+    dialCode: '+260',
+    flag: '🇿🇲',
+    minNationalDigits: 9,
+    maxNationalDigits: 9,
+    allowedNationalPrefixes: ['76', '77', '95', '96', '97'],
+    prefixHint: 'Zambia mobile numbers must start with 76, 77, 95, 96 or 97',
+  ),
+  _MgysdCountryCodeOption(
+    code: 'MW',
+    label: 'Malawi (+265)',
+    dialCode: '+265',
+    flag: '🇲🇼',
+    minNationalDigits: 7,
+    maxNationalDigits: 9,
+    allowedNationalPrefixes: ['1', '3', '7', '8', '9'],
+    prefixHint: 'Malawi numbers must start with an allocated range such as 1, 3, 7, 8 or 9',
+  ),
+  _MgysdCountryCodeOption(
+    code: 'US',
+    label: 'USA/Canada (+1)',
+    dialCode: '+1',
+    flag: '🇺🇸',
+    minNationalDigits: 10,
+    maxNationalDigits: 10,
+    useNanpRules: true,
+    prefixHint: 'USA/Canada numbers must follow NANP format: area code and exchange code start with 2-9',
+  ),
+  _MgysdCountryCodeOption(
+    code: 'GB',
+    label: 'United Kingdom (+44)',
+    dialCode: '+44',
+    flag: '🇬🇧',
+    minNationalDigits: 10,
+    maxNationalDigits: 10,
+    allowedNationalPrefixes: ['7'],
+    prefixHint: 'UK mobile numbers must start with 7 after the +44 country code',
+  ),
+  _MgysdCountryCodeOption(
+    code: 'INTL',
+    label: 'Other country (use + code)',
+    dialCode: '+',
+    minNationalDigits: 8,
+    maxNationalDigits: 15,
+  ),
+];
+
+/// Resolves a country by its dial code, e.g. '+266'.
+///
+/// The picker offers more countries than we hold detailed rules for. Those
+/// fall back to a permissive national profile - a sensible digit range with no
+/// prefix restrictions - rather than the international profile, which would
+/// wrongly demand a leading '+'.
+_MgysdCountryCodeOption _phoneCountryByDialCode(String dialCode) {
+  final code = dialCode.trim();
+  for (final option in _phoneCountryOptions) {
+    if (option.dialCode == code) return option;
+  }
+
+  if (code.isEmpty || code == '+') return _phoneCountryOptions.last;
+
+  return _MgysdCountryCodeOption(
+    code: 'GEN',
+    label: 'Selected country ($code)',
+    dialCode: code,
+    minNationalDigits: 6,
+    maxNationalDigits: 12,
+  );
+}
+
+String _digitsOnly(String value) => value.replaceAll(RegExp(r'[^0-9]'), '');
+
+bool _hasInvalidPhoneCharacters(String value) =>
+    RegExp(r'[^0-9+\s\-\(\)]').hasMatch(value);
+
+bool _hasValidNationalLength(String nationalDigits, _MgysdCountryCodeOption country) {
+  return nationalDigits.length >= country.minNationalDigits &&
+      nationalDigits.length <= country.maxNationalDigits;
+}
+
+bool _hasDisallowedNationalPrefix(String nationalDigits, _MgysdCountryCodeOption country) {
+  if (country.code == 'INTL' || nationalDigits.isEmpty) return false;
+  return country.disallowedNationalPrefixes.any(nationalDigits.startsWith);
+}
+
+bool _hasPossibleNetworkPrefix(String nationalDigits, _MgysdCountryCodeOption country) {
+  if (country.code == 'INTL' || nationalDigits.isEmpty) return true;
+  if (_hasDisallowedNationalPrefix(nationalDigits, country)) return false;
+
+  if (country.useNanpRules) {
+    if (!RegExp(r'^[2-9]').hasMatch(nationalDigits)) return false;
+    if (nationalDigits.length >= 4 &&
+        !RegExp(r'^[2-9][0-9]{2}[2-9]').hasMatch(nationalDigits)) {
+      return false;
+    }
+    return true;
+  }
+
+  if (country.allowedNationalPrefixes.isEmpty) return true;
+
+  // Allow partial typing while the digits can still become a valid prefix.
+  return country.allowedNationalPrefixes.any((prefix) =>
+  prefix.startsWith(nationalDigits) || nationalDigits.startsWith(prefix));
+}
+
+bool _hasValidNetworkPrefix(String nationalDigits, _MgysdCountryCodeOption country) {
+  if (country.code == 'INTL') return true;
+  if (_hasDisallowedNationalPrefix(nationalDigits, country)) return false;
+
+  if (country.useNanpRules) {
+    return RegExp(r'^[2-9][0-9]{2}[2-9][0-9]{6}$').hasMatch(nationalDigits);
+  }
+
+  if (country.allowedNationalPrefixes.isEmpty) return true;
+  return country.allowedNationalPrefixes.any(nationalDigits.startsWith);
+}
+
+String _phonePrefixMessage(_MgysdCountryCodeOption country) {
+  return country.prefixHint.isNotEmpty
+      ? country.prefixHint
+      : 'Phone number prefix does not match selected country';
+}
+
+String _phoneLengthMessage(_MgysdCountryCodeOption country) {
+  if (country.minNationalDigits == country.maxNationalDigits) {
+    return '${country.label} numbers must have ${country.maxNationalDigits} digits after ${country.dialCode}';
+  }
+  return '${country.label} numbers must have ${country.minNationalDigits} to ${country.maxNationalDigits} digits after ${country.dialCode}';
+}
+
+void _validateNationalPhoneDigits(String nationalDigits, _MgysdCountryCodeOption country) {
+  // Prefix before length, so an invalid prefix such as Lesotho 54 or 55 is
+  // reported immediately rather than after eight digits have been typed.
+  if (!_hasPossibleNetworkPrefix(nationalDigits, country)) {
+    throw FormatException(_phonePrefixMessage(country));
+  }
+  if (!_hasValidNationalLength(nationalDigits, country)) {
+    throw FormatException(_phoneLengthMessage(country));
+  }
+  if (!_hasValidNetworkPrefix(nationalDigits, country)) {
+    throw FormatException(_phonePrefixMessage(country));
+  }
+}
+
+String _normalisePhoneByDialCode(String value, String dialCode) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) return '';
+
+  final country = _phoneCountryByDialCode(dialCode);
+  final compact = trimmed.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+  final digits = _digitsOnly(compact);
+
+  if (digits.isEmpty) {
+    throw const FormatException('Phone number must contain digits');
+  }
+
+  if (country.code == 'INTL') {
+    if (!compact.startsWith('+')) {
+      throw const FormatException('International numbers must start with +');
+    }
+    if (digits.length < 8 || digits.length > 15) {
+      throw const FormatException('International numbers must have 8 to 15 digits');
+    }
+    return '+$digits';
+  }
+
+  final dialDigits = country.dialCode.replaceAll('+', '');
+
+  if (compact.startsWith('+')) {
+    if (!digits.startsWith(dialDigits)) {
+      throw const FormatException('Phone number country code does not match selected country');
+    }
+    final nationalDigits = digits.substring(dialDigits.length);
+    _validateNationalPhoneDigits(nationalDigits, country);
+    return '+$digits';
+  }
+
+  if (digits.startsWith(dialDigits)) {
+    final nationalDigits = digits.substring(dialDigits.length);
+    _validateNationalPhoneDigits(nationalDigits, country);
+    return '+$digits';
+  }
+
+  final localDigits = digits.replaceFirst(RegExp(r'^0+'), '');
+  _validateNationalPhoneDigits(localDigits, country);
+  return '${country.dialCode}$localDigits';
+}
+
+String? _phoneValidator(String? value, {required bool requiredField, required String dialCode}) {
+  final text = (value ?? '').trim();
+  if (!requiredField && text.isEmpty) return null;
+  if (text.isEmpty) return 'Required';
+
+  // No country captured (older saved rows): nothing to validate against.
+  if (dialCode.trim().isEmpty) return null;
+
+  if (_hasInvalidPhoneCharacters(text)) return 'Use numbers only';
+
+  final country = _phoneCountryByDialCode(dialCode);
+
+  try {
+    _normalisePhoneByDialCode(text, dialCode);
+    return null;
+  } on FormatException catch (e) {
+    if (country.code == 'INTL') {
+      return e.message.isNotEmpty ? e.message : 'Start with + country code, e.g. +266...';
+    }
+    return e.message.isNotEmpty ? e.message : 'Enter a valid ${country.label} phone number';
+  } catch (_) {
+    if (country.code == 'INTL') return 'Start with + country code, e.g. +266...';
+    return 'Enter a valid ${country.label} phone number';
+  }
+}
+
 class _PhoneInputField extends StatefulWidget {
   final TextEditingController controller;
   final String countryCode;
   final List<Map<String, dynamic>> countries;
   final Color accentColor;
   final void Function(String code) onCountryChanged;
+  final String? label;
+  final bool requiredField;
 
   const _PhoneInputField({
     required this.controller,
@@ -1139,6 +1518,8 @@ class _PhoneInputField extends StatefulWidget {
     required this.countries,
     required this.accentColor,
     required this.onCountryChanged,
+    this.label,
+    this.requiredField = false,
   });
 
   @override
@@ -1146,28 +1527,20 @@ class _PhoneInputField extends StatefulWidget {
 }
 
 class _PhoneInputFieldState extends State<_PhoneInputField> {
-  // Validate a phone number against the selected country's rules
-  String? _validatePhone(String number, String dialCode) {
-    if (number.trim().isEmpty) return null;
-    Map<String, dynamic>? country;
-    try {
-      country = widget.countries.firstWhere(
-              (c) => c['code'] == dialCode && c['name'] != 'Other');
-    } catch (_) {
-      return null;
+  // Validation is delegated to the shared engine ported from Report Case so
+  // both forms report identical prefix and length errors.
+  _MgysdCountryCodeOption get _rules => _phoneCountryByDialCode(widget.countryCode);
+
+  /// Keeps any caller-supplied label (e.g. "Phone Number of Social Worker's
+  /// Supervisor") and appends the expected digit count for the country.
+  String get _fieldLabel {
+    final base = (widget.label ?? '').trim().isEmpty ? 'Phone Number' : widget.label!.trim();
+    final rules = _rules;
+    if (rules.code == 'INTL') return '$base (start with + country code)';
+    if (rules.minNationalDigits == rules.maxNationalDigits) {
+      return '$base (${rules.maxNationalDigits} digits)';
     }
-    final digits = number.trim().replaceAll(RegExp(r'\D'), '');
-    final expectedDigits = country['digits'] as int;
-    final validPrefixes = country['validPrefixes'] as List<dynamic>;
-    if (validPrefixes.isNotEmpty &&
-        !validPrefixes.any((p) => digits.startsWith(p.toString()))) {
-      final prefixList = validPrefixes.map((p) => p.toString()).join(', ');
-      return '${country['name']} numbers must start with $prefixList';
-    }
-    if (expectedDigits > 0 && digits.length != expectedDigits) {
-      return '${country['name']} numbers must be $expectedDigits digits';
-    }
-    return null;
+    return '$base (${rules.minNationalDigits}-${rules.maxNationalDigits} digits)';
   }
 
   Map<String, dynamic>? get _selectedCountry {
@@ -1303,10 +1676,15 @@ class _PhoneInputFieldState extends State<_PhoneInputField> {
       },
     );
 
-    searchCtrl.dispose();
-    filteredNotifier.dispose();
+    // The sheet's exit animation is still running at this point, so its
+    // ListView can still be listening. Disposing now leaves inherited widgets
+    // with live dependents and trips '_dependents.isEmpty' in framework.dart.
+    // Defer disposal until the route has fully left the tree.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      searchCtrl.dispose();
+      filteredNotifier.dispose();
+    });
 
-    // Sheet is fully gone. Now it is safe to update state.
     if (picked != null && mounted) {
       // Update local display
       setState(() {});
@@ -1357,14 +1735,18 @@ class _PhoneInputFieldState extends State<_PhoneInputField> {
           Expanded(
             child: TextFormField(
               controller: widget.controller,
-              keyboardType: TextInputType.phone,
-              validator: (v) =>
-                  _validatePhone(v ?? '', widget.countryCode),
+              keyboardType: _rules.code == 'INTL'
+                  ? TextInputType.phone
+                  : TextInputType.number,
+              inputFormatters: [_MgysdPhoneNumberInputFormatter(_rules)],
+              validator: (v) => _phoneValidator(
+                v,
+                requiredField: widget.requiredField,
+                dialCode: widget.countryCode,
+              ),
               autovalidateMode: AutovalidateMode.onUserInteraction,
               decoration: InputDecoration(
-                labelText: country != null
-                    ? 'Phone Number (${country['digits']} digits)'
-                    : 'Phone Number',
+                labelText: _fieldLabel,
                 filled: true,
                 fillColor: const Color(0xFFF9FBFD),
                 border:
@@ -1415,6 +1797,8 @@ class _MgysdSocialInvestigationPageState
   final TextEditingController _supervisorFirstNameController = TextEditingController();
   final TextEditingController _supervisorSurnameController = TextEditingController();
   final TextEditingController _supervisorPhoneController = TextEditingController();
+  // Country selection for the supervisor phone, validated like Report Case.
+  String _supervisorPhoneCountryCode = '+266';
   final TextEditingController _supervisorRemarksController = TextEditingController();
   final TextEditingController _supervisorReviewDateController = TextEditingController();
   String _investigationOutcome = '';
@@ -2818,6 +3202,8 @@ class _MgysdSocialInvestigationPageState
     _supervisorFirstNameController.text = _text(part1['supervisorFirstName']);
     _supervisorSurnameController.text = _text(part1['supervisorSurname']);
     _supervisorPhoneController.text = _text(part1['supervisorPhone']);
+    final savedSupervisorCountry = _text(part1['supervisorPhoneCountryCode']);
+    if (savedSupervisorCountry.isNotEmpty) _supervisorPhoneCountryCode = savedSupervisorCountry;
 
     // Part 1 "Other" specifications are stored in the investigation payload
     // rather than as tracked entity attributes, so overlay them onto the
@@ -3392,6 +3778,7 @@ class _MgysdSocialInvestigationPageState
         'supervisorFirstName': _supervisorFirstNameController.text.trim(),
         'supervisorSurname': _supervisorSurnameController.text.trim(),
         'supervisorPhone': _supervisorPhoneController.text.trim(),
+        'supervisorPhoneCountryCode': _supervisorPhoneCountryCode,
         'householdSummary': {
           'tei': _householdTei,
           'fileNumber': _householdFileNumberController.text.trim(),
@@ -3918,7 +4305,7 @@ class _MgysdSocialInvestigationPageState
     );
   }
 
-  Widget _input(TextEditingController controller, String label, {int maxLines = 1, TextInputType keyboardType = TextInputType.text, bool readOnly = false, VoidCallback? onTap, String? Function(String?)? validator, TextInputAction? textInputAction}) {
+  Widget _input(TextEditingController controller, String label, {int maxLines = 1, TextInputType keyboardType = TextInputType.text, bool readOnly = false, VoidCallback? onTap, String? Function(String?)? validator, TextInputAction? textInputAction, List<TextInputFormatter>? inputFormatters, AutovalidateMode? autovalidateMode}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: TextFormField(
@@ -3928,6 +4315,8 @@ class _MgysdSocialInvestigationPageState
         readOnly: readOnly,
         onTap: onTap,
         validator: validator,
+        inputFormatters: inputFormatters,
+        autovalidateMode: autovalidateMode,
         textInputAction: textInputAction ?? (maxLines > 1 ? TextInputAction.newline : TextInputAction.next),
         decoration: InputDecoration(labelText: label, filled: true, fillColor: const Color(0xFFF9FBFD), border: OutlineInputBorder(borderRadius: BorderRadius.circular(13)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
       ),
@@ -4154,7 +4543,15 @@ class _MgysdSocialInvestigationPageState
       ),
       _input(_socialWorkerPhoneController, 'Phone Number of Social Worker Allocated to case', keyboardType: TextInputType.phone, readOnly: true),
       _two(_capitalizedInput(_supervisorFirstNameController, "Name of Social Worker's Supervisor"), _capitalizedInput(_supervisorSurnameController, "Surname of Social Worker's Supervisor")),
-      _input(_supervisorPhoneController, "Phone Number of Social Worker's Supervisor", keyboardType: TextInputType.phone),
+      _PhoneInputField(
+        controller: _supervisorPhoneController,
+        countryCode: _supervisorPhoneCountryCode,
+        countries: _countries,
+        accentColor: widget.color,
+        label: "Phone Number of Social Worker's Supervisor",
+        requiredField: true,
+        onCountryChanged: (code) => setState(() => _supervisorPhoneCountryCode = code),
+      ),
       const SizedBox(height: 10),
       _householdSummaryCard(),
       const SizedBox(height: 10),
@@ -6404,7 +6801,7 @@ class _MgysdSocialInvestigationPageState
             _collapsiblePart(
               id: 'supervisorReview',
               title: 'Eligibility and Supervisor Review',
-              subtitle: 'Outcome,  supervisor remarks and final approval decision.',
+              subtitle: 'Outcome, supervisor remarks and final approval decision.',
               icon: Icons.verified_user_outlined,
               child: _supervisorReviewSection(),
             ),
