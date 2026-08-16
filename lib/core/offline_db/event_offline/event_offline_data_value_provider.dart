@@ -5,28 +5,85 @@ import 'package:sqflite/sqflite.dart';
 
 class EventOfflineDataValueProvider extends OfflineDbProvider {
   final String table = 'event_data_value';
-  //columns
+
+  // columns
   final String id = 'id';
   final String event = 'event';
   final String dataElement = 'dataElement';
   final String value = 'value';
 
+  static const Set<String> _dhis2BooleanDataElementIds = {
+    // Initial Risk Assessment - Rehabilitation services
+    'aNCWaj2uiNT',
+  };
+
+  String _normaliseEventDataValue(String dataElementId, String rawValue) {
+    final cleanDataElementId = dataElementId.trim();
+    final cleanValue = rawValue.trim();
+
+    if (cleanValue.isEmpty || cleanValue == 'null') {
+      return '';
+    }
+
+    if (!_dhis2BooleanDataElementIds.contains(cleanDataElementId)) {
+      return cleanValue;
+    }
+
+    final upperValue = cleanValue.toUpperCase();
+
+    switch (upperValue) {
+      case 'YES':
+      case 'Y':
+      case 'TRUE':
+      case '1':
+        return 'true';
+
+      case 'NO':
+      case 'N':
+      case 'FALSE':
+      case '0':
+        return 'false';
+
+      default:
+      // This prevents DHIS2 value_not_bool errors.
+      // If this field has an unexpected value, do not upload it.
+        return '';
+    }
+  }
+
   addOrUpdateEventDataValues(Events eventData) async {
     var dbClient = await db;
+
     try {
       List dataValues = eventData.dataValues ?? [];
-      String? event = eventData.event;
+      String? eventId = eventData.event;
+
       for (Map dataValue in dataValues) {
-        if ('${dataValue[value]}' != 'null') {
-          String? dataElement = dataValue['dataElement'];
-          Map data = <String, dynamic>{};
-          data['id'] = '$event-$dataElement';
-          data['event'] = event;
-          data['dataElement'] = dataElement;
-          data['value'] = dataValue['value'] ?? '';
-          await dbClient!.insert(table, data as Map<String, Object?>,
-              conflictAlgorithm: ConflictAlgorithm.replace);
+        final dataElementId = '${dataValue['dataElement'] ?? ''}'.trim();
+        final rawValue = '${dataValue['value'] ?? ''}'.trim();
+
+        if (dataElementId.isEmpty || eventId == null || eventId.isEmpty) {
+          continue;
         }
+
+        final normalisedValue =
+        _normaliseEventDataValue(dataElementId, rawValue);
+
+        if (normalisedValue.isEmpty || normalisedValue == 'null') {
+          continue;
+        }
+
+        Map data = <String, dynamic>{};
+        data['id'] = '$eventId-$dataElementId';
+        data['event'] = eventId;
+        data['dataElement'] = dataElementId;
+        data['value'] = normalisedValue;
+
+        await dbClient!.insert(
+          table,
+          data as Map<String, Object?>,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
       }
     } catch (e) {
       //
@@ -34,36 +91,57 @@ class EventOfflineDataValueProvider extends OfflineDbProvider {
   }
 
   Future<List> getEventDataValuesByEventId(
-    String? eventId,
-  ) async {
+      String? eventId,
+      ) async {
     List dataValues = [];
+
     try {
       var dbClient = await db;
+
       List<Map> maps = await dbClient!.query(
         table,
         columns: [dataElement, value],
         where: '$event = ?',
         whereArgs: [eventId],
       );
+
       if (maps.isNotEmpty) {
         for (Map map in maps) {
-          if ('${map[value]}'.isNotEmpty && '${map[value]}' != 'null') {
-            dataValues.add(map);
+          final dataElementId = '${map[dataElement] ?? ''}'.trim();
+          final rawValue = '${map[value] ?? ''}'.trim();
+
+          if (dataElementId.isEmpty) {
+            continue;
           }
+
+          final normalisedValue =
+          _normaliseEventDataValue(dataElementId, rawValue);
+
+          if (normalisedValue.isEmpty || normalisedValue == 'null') {
+            continue;
+          }
+
+          dataValues.add({
+            'dataElement': dataElementId,
+            'value': normalisedValue,
+          });
         }
       }
     } catch (e) {
       //
     }
+
     return dataValues;
   }
 
   Future<void> reduceDeviceInformationDataValues() async {
     var deviceInfoId = UserAccountReference.appAndDeviceTrackingDataElement;
+
     try {
       var dbClient = await db;
+
       await dbClient!.rawUpdate(
-        'UPDATE $table SET $value = SUBSTR($value, 0, 1190)  WHERE $dataElement = ? AND LENGTH($value) > 1199',
+        'UPDATE $table SET $value = SUBSTR($value, 0, 1190) WHERE $dataElement = ? AND LENGTH($value) > 1199',
         [deviceInfoId],
       );
     } catch (e) {

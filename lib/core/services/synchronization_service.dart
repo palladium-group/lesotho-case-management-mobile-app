@@ -1,4 +1,3 @@
-
 // ============================
 // SynchronizationService.dart
 // ============================
@@ -621,19 +620,27 @@ class SynchronizationService {
   }
 
   Future<bool> uploadEnrollmentsToTheServer(
-      List<Enrollment> teiEnrollments,
-      ) async {
+      List<Enrollment> teiEnrollments, {
+        bool ignoreUnsyncedTeiFilter = false,
+      }) async {
     List<String?>? syncedIds = [];
     String url = 'api/enrollments';
     bool conflictOnImport = false;
     List<TrackedEntityInstance> unsyncedTeis = await getTeisFromOfflineDb();
-    var enrollments = teiEnrollments
+    var enrollments = ignoreUnsyncedTeiFilter
+        ? teiEnrollments
+        : teiEnrollments
         .where((enrollment) =>
     unsyncedTeis.indexWhere((tei) =>
     tei.trackedEntityInstance ==
         enrollment.trackedEntityInstance) ==
         -1)
         .toList();
+
+    if (enrollments.isEmpty) {
+      return false;
+    }
+
     Map body = {};
     body['enrollments'] = enrollments
         .map((enrollment) => enrollment.toOffline(enrollment))
@@ -677,6 +684,107 @@ class SynchronizationService {
     return conflictOnImport;
   }
 
+
+  static const Set<String> _dhis2BooleanAttributeIds = {
+    'qplFRHPhrMJ',
+    'doT78HXVVtZ',
+    'jfjsu5QL6Ce',
+  };
+
+  static const Set<String> _organisationUnitAttributeIds = {
+    'mUd3nLq2yWs',
+    'QEFKNkxgAPJ',
+  };
+
+  bool _looksLikeDhis2Uid(String value) {
+    return RegExp(r'^[A-Za-z][A-Za-z0-9]{10}$').hasMatch(value.trim());
+  }
+
+  String _normaliseTrackedEntityAttributeValue(
+      String attribute,
+      String value,
+      ) {
+    final cleanValue = value.trim();
+
+    if (!_dhis2BooleanAttributeIds.contains(attribute)) {
+      return cleanValue;
+    }
+
+    switch (cleanValue.toUpperCase()) {
+      case 'YES':
+      case 'TRUE':
+        return 'true';
+      case 'NO':
+      case 'FALSE':
+        return 'false';
+      default:
+        return cleanValue;
+    }
+  }
+
+  bool _canUploadTrackedEntityAttribute(
+      String attribute,
+      String value,
+      ) {
+    final cleanAttribute = attribute.trim();
+    final cleanValue = value.trim();
+
+    if (cleanAttribute.isEmpty || cleanAttribute.startsWith('ATTR_')) {
+      return false;
+    }
+
+    if (cleanValue.isEmpty ||
+        cleanValue == 'null' ||
+        cleanValue == '[]' ||
+        cleanValue == '{}') {
+      return false;
+    }
+
+    if (_organisationUnitAttributeIds.contains(cleanAttribute) &&
+        !_looksLikeDhis2Uid(cleanValue)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  List _cleanTrackedEntityAttributes(
+      dynamic attributes, {
+        String? orgUnit,
+      }) {
+    if (attributes is! List) return [];
+
+    return attributes
+        .map((dynamic rawAttribute) {
+      if (rawAttribute is! Map) return null;
+
+      final attribute =
+      (rawAttribute['attribute'] ?? '').toString().trim();
+      var value = (rawAttribute['value'] ?? '').toString().trim();
+
+      if (attribute == 'QEFKNkxgAPJ' &&
+          !_looksLikeDhis2Uid(value) &&
+          _looksLikeDhis2Uid((orgUnit ?? '').trim())) {
+        value = orgUnit!.trim();
+      }
+
+      value = _normaliseTrackedEntityAttributeValue(attribute, value);
+
+      if (!_canUploadTrackedEntityAttribute(attribute, value)) {
+        return null;
+      }
+
+      return {
+        ...rawAttribute,
+        'attribute': attribute,
+        'value': value,
+      };
+    })
+        .where((attribute) => attribute != null)
+        .cast<Map>()
+        .toList();
+  }
+
   Future<bool> uploadTeisToTheServer(
       List<TrackedEntityInstance> teis,
       ) async {
@@ -686,8 +794,10 @@ class SynchronizationService {
     Map body = {};
     body['trackedEntityInstances'] = teis.map((tei) {
       var data = tei.toOffline(tei);
-      data['attributes'] =
-          data['attributes'].where((att) => att['value'] != 'null').toList();
+      data['attributes'] = _cleanTrackedEntityAttributes(
+        data['attributes'],
+        orgUnit: (data['orgUnit'] ?? '').toString(),
+      );
       return data;
     }).toList();
 
@@ -734,6 +844,57 @@ class SynchronizationService {
 
 
 
+  Future<List<String>> _getEventBatchTrackedEntityIds(
+      List<Events> teiEvents,
+      ) async {
+    final directTeiIds = teiEvents
+        .map((event) => (event.trackedEntityInstance ?? '').toString().trim())
+        .where((teiId) => teiId.isNotEmpty)
+        .toList();
+
+    final eventIds = teiEvents
+        .map((event) => (event.event ?? '').toString().trim())
+        .where((eventId) => eventId.isNotEmpty)
+        .toList();
+
+    List<String> storedTeiIds = [];
+    if (eventIds.isNotEmpty) {
+      storedTeiIds = await EventOfflineProvider()
+          .getTrackedEntityInstanceIdsByIds(eventIds);
+    }
+
+    return <String>{
+      ...directTeiIds,
+      ...storedTeiIds.map((teiId) => teiId.toString().trim()),
+    }.where((teiId) => teiId.isNotEmpty).toList();
+  }
+
+  Future<void> _uploadBeneficiariesAndEnrollmentsForEventBatch(
+      List<Events> teiEvents,
+      ) async {
+    final cleanTeiIds = await _getEventBatchTrackedEntityIds(teiEvents);
+
+    if (cleanTeiIds.isEmpty) return;
+
+    final relatedTeis = await TrackedEntityInstanceOfflineProvider()
+        .getTrackedEntityInstanceByIds(cleanTeiIds);
+
+    if (relatedTeis.isNotEmpty) {
+      await uploadTeisToTheServer(relatedTeis);
+    }
+
+    final relatedEnrollments = await EnrollmentOfflineProvider()
+        .getEnrollmentsFromTeiList(cleanTeiIds);
+
+    if (relatedEnrollments.isNotEmpty) {
+      await uploadEnrollmentsToTheServer(
+        relatedEnrollments,
+        ignoreUnsyncedTeiFilter: true,
+      );
+    }
+  }
+
+
   Future<bool> uploadTeiEventsToTheServer(
       List<Events> teiEvents, {
         bool checkEnrollments = true,
@@ -750,6 +911,10 @@ class SynchronizationService {
           v.contains('_UID');
     }
 
+    if (checkEnrollments && teiEvents.isNotEmpty) {
+      await _uploadBeneficiariesAndEnrollmentsForEventBatch(teiEvents);
+    }
+
     Map body = {};
 
     body['events'] = teiEvents.map((Events event) {
@@ -764,6 +929,11 @@ class SynchronizationService {
       if (data['trackedEntityInstance'] == null ||
           data['trackedEntityInstance'].toString().trim().isEmpty) {
         data.remove('trackedEntityInstance');
+      }
+
+      if (data['enrollment'] == null ||
+          data['enrollment'].toString().trim().isEmpty) {
+        data.remove('enrollment');
       }
 
       if (data['dataValues'] != null) {
@@ -868,23 +1038,37 @@ class SynchronizationService {
       ...unsyncedDueMissingBeneficiary,
       ...unsyncedDueToEnrollment
     ];
+
+    if (unsyncedEventIds.isEmpty &&
+        referenceIds['hasEnrollmentConflict'] == true) {
+      unsyncedEventIds = teiEvents
+          .map((event) => event.event)
+          .where((eventId) => eventId != null && eventId.trim().isNotEmpty)
+          .toList();
+    }
+
     if (unsyncedEventIds.isNotEmpty && checkEnrollments) {
-      List<String> teiIds = await EventOfflineProvider()
-          .getTrackedEntityInstanceIdsByIds(unsyncedEventIds);
+      final unsyncedTeiEvents = teiEvents
+          .where((Events eventData) =>
+          unsyncedEventIds.contains(eventData.event ?? ""))
+          .toList();
+
+      final teiIds = await _getEventBatchTrackedEntityIds(unsyncedTeiEvents);
+
       List<Enrollment> unsyncedTeiEnrollments =
       await EnrollmentOfflineProvider().getEnrollmentsFromTeiList(teiIds);
       List<TrackedEntityInstance> unsyncedTeis =
       await TrackedEntityInstanceOfflineProvider()
           .getTrackedEntityInstanceByIds(teiIds);
-      List<Events> unsyncedTeiEvents = teiEvents
-          .where((Events eventData) =>
-          unsyncedEventIds.contains(eventData.event ?? ""))
-          .toList();
+
       if (unsyncedTeis.isNotEmpty) {
         await uploadTeisToTheServer(unsyncedTeis);
       }
       if (unsyncedTeiEnrollments.isNotEmpty) {
-        await uploadEnrollmentsToTheServer(unsyncedTeiEnrollments);
+        await uploadEnrollmentsToTheServer(
+          unsyncedTeiEnrollments,
+          ignoreUnsyncedTeiFilter: true,
+        );
       }
       if (unsyncedTeiEvents.isNotEmpty) {
         await uploadTeiEventsToTheServer(
@@ -1014,6 +1198,26 @@ class SynchronizationService {
     List<String?> unsyncedDueToEnrollment = [];
     List<String?> unsyncedDueMissingBeneficiary = [];
     bool conflictOnImport = false;
+    bool hasEnrollmentConflict = false;
+
+    bool isNotEnrolledMessage(String? message) {
+      final text = (message ?? '').toLowerCase();
+      return text.contains('is not enrolled') ||
+          text.contains('not enrolled to intervention') ||
+          text.contains('beneficiaries not enrolled');
+    }
+
+    bool isMissingTrackedEntityMessage(String? message) {
+      final text = (message ?? '').toLowerCase();
+      return text.contains(
+        'event.trackedentityinstance does not point to a valid tracked entity instance',
+      );
+    }
+
+    void addUnique(List<String?> list, String? value) {
+      if (value == null || value.trim().isEmpty) return;
+      if (!list.contains(value)) list.add(value);
+    }
 
     try {
       var bodyResponse = body['response'] ?? {};
@@ -1023,27 +1227,41 @@ class SynchronizationService {
             importSummary['reference'] != null) {
           syncedIds.add(importSummary['reference']);
         } else if (!skipErrorLogs) {
+          final reference = importSummary['reference']?.toString();
+          final description = importSummary['description']?.toString();
+
+          if (isNotEnrolledMessage(description)) {
+            hasEnrollmentConflict = true;
+            addUnique(unsyncedDueToEnrollment, reference);
+          } else if (isMissingTrackedEntityMessage(description)) {
+            addUnique(unsyncedDueMissingBeneficiary, reference);
+          }
+
           if (importSummary['conflicts'] != null) {
             for (var conflict in importSummary['conflicts']) {
+              final object = conflict['object']?.toString() ?? '';
+              final value = conflict['value']?.toString() ?? '';
+              final message = '$object: $value'.trim();
+
+              if (isNotEnrolledMessage(message)) {
+                hasEnrollmentConflict = true;
+                addUnique(unsyncedDueToEnrollment, reference);
+              } else if (isMissingTrackedEntityMessage(message)) {
+                addUnique(unsyncedDueMissingBeneficiary, reference);
+              }
+
               AppLogs log = AppLogs(
-                  type: AppLogsConstants.errorLogType,
-                  message: "${conflict['object']}: ${conflict['value']}");
+                type: AppLogsConstants.errorLogType,
+                message: message,
+              );
               await AppLogsOfflineProvider().addLogs(log);
             }
             conflictOnImport = true;
-          } else if (importSummary['description'] != null) {
-            if ("${importSummary['description']}"
-                .toLowerCase()
-                .contains('is not enrolled')) {
-              unsyncedDueToEnrollment.add(importSummary['reference']);
-            } else if ("${importSummary['description']}".toLowerCase().contains(
-                'Event.trackedEntityInstance does not point to a valid tracked entity instance'
-                    .toLowerCase())) {
-              unsyncedDueMissingBeneficiary.add(importSummary['reference']);
-            }
+          } else if (description != null) {
             AppLogs log = AppLogs(
-                type: AppLogsConstants.errorLogType,
-                message: importSummary['description']);
+              type: AppLogsConstants.errorLogType,
+              message: description,
+            );
             await AppLogsOfflineProvider().addLogs(log);
             conflictOnImport = true;
           }
@@ -1062,7 +1280,7 @@ class SynchronizationService {
     referenceIds['unsyncedDueMissingBeneficiary'] =
         unsyncedDueMissingBeneficiary;
     referenceIds['conflictOnImport'] = conflictOnImport;
+    referenceIds['hasEnrollmentConflict'] = hasEnrollmentConflict;
     return referenceIds;
   }
 }
-

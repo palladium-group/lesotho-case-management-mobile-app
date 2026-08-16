@@ -487,15 +487,15 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
           label: 'Exclusion/inclusion error (ISSN/NISSA)',
         ),
         MgysdOption(code: 'Work exploitation', label: 'Work exploitation'),
-        MgysdOption(code: 'EMOTIONAL', label: 'Emotional violence'),
-        MgysdOption(code: 'CHILD_MARRIAGE', label: 'Child marriage'),
-        MgysdOption(code: 'FINANCIAL', label: 'Financial exploitation'),
-        MgysdOption(code: 'SPECIAL_NEEDS', label: 'Special needs'),
-        MgysdOption(code: 'GRIEVANCE', label: 'Grievance'),
-        MgysdOption(code: 'MENTAL_HEALTH', label: 'Mental Health'),
-        MgysdOption(code: 'HEALTH', label: 'Health'),
+        MgysdOption(code: 'Emotional violence', label: 'Emotional violence'),
+        MgysdOption(code: 'Child marriage', label: 'Child marriage'),
+        MgysdOption(code: 'Financial Exploitation', label: 'Financial Exploitation'),
+        MgysdOption(code: 'SPECIAL_NEEDS', label: 'Special Needs'),
+        MgysdOption(code: 'Grievance', label: 'Grievance'),
+        MgysdOption(code: 'Mental Health', label: 'Mental Health'),
+        MgysdOption(code: 'Health', label: 'Health'),
         MgysdOption(code: 'SUBSTANCE', label: 'Substance abuse'),
-        MgysdOption(code: 'SAFETY_SECURITY', label: 'Safety and Security'),
+        MgysdOption(code: 'Security', label: 'Security'),
         MgysdOption(code: 'OTHER', label: 'Other'),
       ],
     ),
@@ -700,7 +700,10 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     final saved = (_values[deConcernReason] ?? '').trim();
     if (saved.isNotEmpty) {
       _selectedConcernReasons.addAll(
-        saved.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty),
+        saved
+            .split(',')
+            .map(_normaliseConcernReasonCode)
+            .where((s) => s.isNotEmpty),
       );
     }
 
@@ -950,7 +953,7 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
         ..addAll(
           (_values[deConcernReason] ?? '')
               .split(',')
-              .map((s) => s.trim())
+              .map(_normaliseConcernReasonCode)
               .where((s) => s.isNotEmpty),
         );
       _concernOtherController.text =
@@ -1251,6 +1254,57 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       return _normalisePhoneByCountryCode(trimmed, countryCode);
     } catch (_) {
       return trimmed;
+    }
+  }
+
+  String _normaliseConcernReasonCode(String value) {
+    final cleanValue = value.trim();
+    if (cleanValue.isEmpty) return '';
+
+    switch (cleanValue.toUpperCase()) {
+      case 'PHYSICAL':
+      case 'PHYSICAL_VIOLENCE':
+        return 'Physical violence';
+      case 'SEXUAL':
+      case 'SEXUAL_VIOLENCE':
+        return 'Sexual violence';
+      case 'LOW_SOCIO_ECONOMIC_STATUS':
+      case 'LOW SOCIO-ECONOMIC STATUS':
+        return 'Low socio-economic status';
+      case 'EXCLUSION_INCLUSION_ERROR':
+      case 'EXCLUSION_INCLUSION_ERROR_ISSN_NISSA':
+        return 'Exclusion/inclusion error(ISSN/NISSA)';
+      case 'WORK_EXPLOITATION':
+        return 'Work exploitation';
+      case 'EMOTIONAL':
+      case 'EMOTIONAL_VIOLENCE':
+        return 'Emotional violence';
+      case 'CHILD_MARRIAGE':
+        return 'Child marriage';
+      case 'FINANCIAL_EXPLOITATION':
+      case 'FINANCIAL EXPLOITATION':
+        return 'Financial Exploitation';
+      case 'GRIEVANCE':
+        return 'Grievance';
+      case 'HEALTH':
+        return 'Health';
+      case 'MENTAL_HEALTH':
+      case 'MENTAL HEALTH':
+        return 'Mental Health';
+      case 'SECURITY':
+      case 'SAFETY_AND_SECURITY':
+      case 'SAFETY AND SECURITY':
+        return 'Security';
+      case 'SUBSTANCE':
+      case 'SUBSTANCE_ABUSE':
+        return 'SUBSTANCE';
+      case 'OTHER':
+        return 'OTHER';
+      case 'SPECIAL_NEEDS':
+      case 'SPECIAL NEEDS':
+        return 'SPECIAL_NEEDS';
+      default:
+        return cleanValue;
     }
   }
 
@@ -1860,214 +1914,79 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
       case MgysdFieldType.option:
       // Special-case multi-select for Concern reason
         if (f.id == deConcernReason) {
-          final selected = _selectedConcernReasons;
+          final rawValue = _selectedConcernReasons.isNotEmpty
+              ? _normaliseConcernReasonCode(_selectedConcernReasons.first)
+              : _normaliseConcernReasonCode((_values[f.id] ?? '').split(',').first);
+          final safeValue = f.options.any((o) => o.code == rawValue)
+              ? rawValue
+              : null;
+          final showOther = safeValue == 'OTHER';
 
-          // split options into two roughly equal lists, keeping OTHER last
-          final options = f.options;
-          final otherOption =
-          options.isNotEmpty && options.last.code == 'OTHER' ? options.last : null;
-          final coreOptions = otherOption != null ? options.sublist(0, options.length - 1) : options;
-          final mid = (coreOptions.length / 2).ceil();
-          final left = coreOptions.sublist(0, mid);
-          final right = coreOptions.sublist(mid);
-          if (otherOption != null) right.add(otherOption); // ensure OTHER is last in right column
-
-          return FormField<Set<String>>(
-            initialValue: selected,
-            validator: (set) {
-              // avoid calling contains on null
-              if (requiredNow && (set == null || set.isEmpty)) {
-                return 'Required';
-              }
-              if (set != null && set.contains('OTHER') && _concernOtherController.text.trim().isEmpty) {
-                return 'Required';
-              }
-              return null;
-            },
-            builder: (state) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // label
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8.0),
-                    child: Text(
-                      f.label,
-                      style: const TextStyle(fontSize: 14.0, fontWeight: FontWeight.w600),
-                    ),
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DropdownButtonFormField<String>(
+                value: safeValue,
+                isExpanded: true,
+                items: f.options
+                    .map(
+                      (o) => DropdownMenuItem<String>(
+                    value: o.code,
+                    child: Text(o.label, overflow: TextOverflow.ellipsis),
                   ),
-                  // two-column layout
-                  LayoutBuilder(builder: (context, constraints) {
-                    final twoCols = constraints.maxWidth >= 420;
-                    if (twoCols) {
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              children: left.map((o) {
-                                final isSelected = selected.contains(o.code);
-                                return CheckboxListTile(
-                                  value: isSelected,
-                                  onChanged: (val) {
-                                    setState(() {
-                                      if (val == true) {
-                                        selected.add(o.code);
-                                      } else {
-                                        selected.remove(o.code);
-                                      }
-                                      _values[f.id] = selected.join(',');
-                                      state.didChange(selected);
-                                    });
-                                  },
-                                  title: Text(o.label),
-                                  controlAffinity: ListTileControlAffinity.leading,
-                                  dense: true,
-                                  activeColor: widget.color,
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              children: right.map((o) {
-                                final isSelected = selected.contains(o.code);
-                                final isOther = o.code == 'OTHER';
-                                return Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    CheckboxListTile(
-                                      value: isSelected,
-                                      onChanged: (val) {
-                                        setState(() {
-                                          if (val == true) {
-                                            selected.add(o.code);
-                                          } else {
-                                            selected.remove(o.code);
-                                            if (isOther) {
-                                              _concernOtherController.text = '';
-                                              _values[deConcernReasonOther] = '';
-                                            }
-                                          }
-                                          _values[f.id] = selected.join(',');
-                                          state.didChange(selected);
-                                        });
-                                      },
-                                      title: Text(o.label),
-                                      controlAffinity: ListTileControlAffinity.leading,
-                                      dense: true,
-                                      activeColor: widget.color,
-                                    ),
-                                    if (isOther && isSelected)
-                                      Padding(
-                                        padding: const EdgeInsets.only(left: 16.0, bottom: 8.0),
-                                        child: TextFormField(
-                                          controller: _concernOtherController,
-                                          inputFormatters: _titleCaseInputFormatters,
-                                          textCapitalization: TextCapitalization.sentences,
-                                          decoration: InputDecoration(
-                                            labelText: 'Specify',
-                                            border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                            filled: true,
-                                            fillColor: const Color(0xFFF9FBFD),
-                                          ),
-                                          onChanged: (v) {
-                                            _values[deConcernReasonOther] = v.trim();
-                                          },
-                                          validator: (v) {
-                                            if (requiredNow && selected.contains('OTHER')) {
-                                              if ((v ?? '').trim().isEmpty) return 'Required';
-                                            }
-                                            return null;
-                                          },
-                                        ),
-                                      ),
-                                  ],
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                        ],
-                      );
-                    } else {
-                      // single column for narrow screens: left then right stacked
-                      final all = [...left, ...right];
-                      return Column(
-                        children: all.map((o) {
-                          final isSelected = selected.contains(o.code);
-                          final isOther = o.code == 'OTHER';
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              CheckboxListTile(
-                                value: isSelected,
-                                onChanged: (val) {
-                                  setState(() {
-                                    if (val == true) {
-                                      selected.add(o.code);
-                                    } else {
-                                      selected.remove(o.code);
-                                      if (isOther) {
-                                        _concernOtherController.text = '';
-                                        _values[deConcernReasonOther] = '';
-                                      }
-                                    }
-                                    _values[f.id] = selected.join(',');
-                                    state.didChange(selected);
-                                  });
-                                },
-                                title: Text(o.label),
-                                controlAffinity: ListTileControlAffinity.leading,
-                                dense: true,
-                                activeColor: widget.color,
-                              ),
-                              if (isOther && isSelected)
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 16.0, bottom: 8.0),
-                                  child: TextFormField(
-                                    controller: _concernOtherController,
-                                    inputFormatters: _titleCaseInputFormatters,
-                                    textCapitalization: TextCapitalization.sentences,
-                                    decoration: InputDecoration(
-                                      labelText: 'Specify',
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      filled: true,
-                                      fillColor: const Color(0xFFF9FBFD),
-                                    ),
-                                    onChanged: (v) {
-                                      _values[deConcernReasonOther] = v.trim();
-                                    },
-                                    validator: (v) {
-                                      if (requiredNow && selected.contains('OTHER')) {
-                                        if ((v ?? '').trim().isEmpty) return 'Required';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                ),
-                            ],
-                          );
-                        }).toList(),
-                      );
-                    }
-                  }),
-                  // validation message
-                  if (state.hasError)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Text(
-                        state.errorText ?? '',
-                        style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 12),
-                      ),
+                )
+                    .toList(),
+                onChanged: (v) => setState(() {
+                  final selectedValue = _normaliseConcernReasonCode(v ?? '');
+                  _selectedConcernReasons
+                    ..clear()
+                    ..addAll(
+                      selectedValue.isEmpty ? <String>[] : <String>[selectedValue],
+                    );
+                  _values[f.id] = selectedValue;
+
+                  if (selectedValue != 'OTHER') {
+                    _concernOtherController.text = '';
+                    _values[deConcernReasonOther] = '';
+                  }
+                }),
+                validator: (v) {
+                  final selectedValue = _normaliseConcernReasonCode(v ?? '');
+                  if (requiredNow && selectedValue.isEmpty) return 'Required';
+                  if (selectedValue == 'OTHER' &&
+                      _concernOtherController.text.trim().isEmpty) {
+                    return 'Required';
+                  }
+                  return null;
+                },
+                decoration: _decoration(f.label, requiredField: requiredNow),
+              ),
+              if (showOther) ...[
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _concernOtherController,
+                  inputFormatters: _titleCaseInputFormatters,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(
+                    labelText: 'Specify',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                ],
-              );
-            },
+                    filled: true,
+                    fillColor: const Color(0xFFF9FBFD),
+                  ),
+                  onChanged: (v) {
+                    _values[deConcernReasonOther] = v.trim();
+                  },
+                  validator: (v) {
+                    if (requiredNow && (_values[f.id] ?? '') == 'OTHER') {
+                      if ((v ?? '').trim().isEmpty) return 'Required';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ],
           );
         }
 
@@ -3027,7 +2946,12 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
     setState(() => _submitting = true);
 
     try {
-      _values[deConcernReason] = _selectedConcernReasons.join(',');
+      final selectedConcernReason = _selectedConcernReasons
+          .map(_normaliseConcernReasonCode)
+          .where((value) => value.isNotEmpty)
+          .toList();
+      _values[deConcernReason] =
+      selectedConcernReason.isEmpty ? '' : selectedConcernReason.first;
       _values[deConcernReasonOther] = _concernOtherController.text.trim();
 
       final clientsJson = _clients.map(_clientToJson).toList();

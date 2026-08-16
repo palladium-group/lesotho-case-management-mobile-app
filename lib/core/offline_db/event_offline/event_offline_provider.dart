@@ -21,13 +21,31 @@ class EventOfflineProvider extends OfflineDbProvider {
   final String program = 'program';
   final String programStage = 'programStage';
   final String trackedEntityInstance = 'trackedEntityInstance';
+  final String enrollment = 'enrollment';
   final String status = 'status';
   final String orgUnit = 'orgUnit';
   final String syncStatus = 'syncStatus';
 
+
+  Future<void> _ensureEnrollmentColumn() async {
+    try {
+      var dbClient = await db;
+      final columns = await dbClient!.rawQuery('PRAGMA table_info($table)');
+      final hasEnrollment = columns.any(
+            (column) => '${column['name']}' == enrollment,
+      );
+      if (!hasEnrollment) {
+        await dbClient.execute('ALTER TABLE $table ADD COLUMN $enrollment TEXT');
+      }
+    } catch (e) {
+      // Keep old databases running even if migration check fails.
+    }
+  }
+
   addOrUpdateEvent(Events event) async {
     try {
       var dbClient = await db;
+      await _ensureEnrollmentColumn();
       Map data = Events().toOffline(event);
       data['id'] = data['event'];
       data.remove('dataValues');
@@ -42,6 +60,7 @@ class EventOfflineProvider extends OfflineDbProvider {
   addOrUpdateMultipleEvents(List<dynamic> events) async {
     try {
       var dbClient = await db;
+      await _ensureEnrollmentColumn();
       List<List<dynamic>> chunkedEvents =
       AppUtil.chunkItems(items: events, size: 100);
       for (List<dynamic> eventsGroup in chunkedEvents) {
@@ -68,6 +87,7 @@ class EventOfflineProvider extends OfflineDbProvider {
     List<String?> offlineEventIds = [];
     try {
       var dbClient = await db;
+      await _ensureEnrollmentColumn();
       List<Map> maps = await dbClient!.query(table, columns: [id]);
       if (maps.isNotEmpty) {
         offlineEventIds.addAll(maps.map((map) => map[id] as String?).toList());
@@ -85,6 +105,7 @@ class EventOfflineProvider extends OfflineDbProvider {
     List<Events> events = [];
     try {
       var dbClient = await db;
+      await _ensureEnrollmentColumn();
       for (String? trackedEntityInstanceId in trackedEntityInstanceIds) {
         List<Map> maps = await dbClient!.query(
           table,
@@ -95,6 +116,7 @@ class EventOfflineProvider extends OfflineDbProvider {
             program,
             programStage,
             trackedEntityInstance,
+            enrollment,
             status,
             orgUnit,
             syncStatus,
@@ -127,6 +149,7 @@ class EventOfflineProvider extends OfflineDbProvider {
     List<String> references = [];
     try {
       var dbClient = await db;
+      await _ensureEnrollmentColumn();
       List<Map> maps = await dbClient!.query(
         table,
         columns: [
@@ -136,6 +159,7 @@ class EventOfflineProvider extends OfflineDbProvider {
           program,
           programStage,
           trackedEntityInstance,
+          enrollment,
           status,
           orgUnit,
           syncStatus,
@@ -159,6 +183,7 @@ class EventOfflineProvider extends OfflineDbProvider {
 
   Future<List<Map>> getEventsByProgramId(String programId) async {
     final dbClient = await db;
+    await _ensureEnrollmentColumn();
     final List<Map> maps = await dbClient!.query(
       table,
       where: '$program = ?',
@@ -216,11 +241,12 @@ class EventOfflineProvider extends OfflineDbProvider {
     });
     String searchParamsString = '(${searchParamsStringList.join(' OR ')})';
     String rawQuery =
-        'SELECT $table.$id, $table.$event, $eventDate, $program, $programStage, $trackedEntityInstance, $status, $orgUnit, $syncStatus FROM $table, $dataValuesTable WHERE $program = ? AND $programStage = ? AND $table.$event = $dataValuesTable.$event AND $searchParamsString ORDER BY $eventDate DESC';
+        'SELECT $table.$id, $table.$event, $eventDate, $program, $programStage, $trackedEntityInstance, $enrollment, $status, $orgUnit, $syncStatus FROM $table, $dataValuesTable WHERE $program = ? AND $programStage = ? AND $table.$event = $dataValuesTable.$event AND $searchParamsString ORDER BY $eventDate DESC';
     try {
       List<String> accessibleOrgUnits = await OrganisationUnitService()
           .getOrganisationUnitAccessedByCurrentUser();
       var dbClient = await db;
+      await _ensureEnrollmentColumn();
       List params = [
         programId,
         programStageId,
@@ -273,6 +299,7 @@ class EventOfflineProvider extends OfflineDbProvider {
       List<String> accessibleOrgUnits = await OrganisationUnitService()
           .getOrganisationUnitAccessedByCurrentUser();
       var dbClient = await db;
+      await _ensureEnrollmentColumn();
       List<Map> maps = await dbClient!.query(table,
           columns: [
             id,
@@ -281,6 +308,7 @@ class EventOfflineProvider extends OfflineDbProvider {
             program,
             programStage,
             trackedEntityInstance,
+            enrollment,
             status,
             orgUnit,
             syncStatus,
@@ -318,6 +346,7 @@ class EventOfflineProvider extends OfflineDbProvider {
     List<Events> events = [];
     try {
       var dbClient = await db;
+      await _ensureEnrollmentColumn();
       List<Map> maps = await dbClient!.query(
         table,
         columns: [
@@ -327,6 +356,7 @@ class EventOfflineProvider extends OfflineDbProvider {
           program,
           programStage,
           trackedEntityInstance,
+          enrollment,
           status,
           orgUnit,
           syncStatus,
@@ -360,6 +390,7 @@ class EventOfflineProvider extends OfflineDbProvider {
     int? offlineEventsCount;
     try {
       var dbClient = await db;
+      await _ensureEnrollmentColumn();
       offlineEventsCount = Sqflite.firstIntValue(await dbClient!.rawQuery(
           'SELECT COUNT(*) FROM $table WHERE $program = ? AND $programStage = ?',
           ['$programId', '$programStageId']));
@@ -377,6 +408,7 @@ class EventOfflineProvider extends OfflineDbProvider {
     List<Events> events = [];
     try {
       var dbClient = await db;
+      await _ensureEnrollmentColumn();
       List<List<String?>> chunkedEventList =
       AppUtil.chunkItems(items: eventList, size: 50).cast<List<String?>>();
       if (chunkedEventList.isEmpty) {
@@ -457,6 +489,7 @@ class EventOfflineProvider extends OfflineDbProvider {
     List<String> teiIds = [];
     try {
       var dbClient = await db;
+      await _ensureEnrollmentColumn();
       List<List<String?>> chunkedEventIds =
       AppUtil.chunkItems(items: eventIds, size: 50).cast<List<String?>>();
       for (List<String?> eventIdsGroup in chunkedEventIds) {
@@ -484,6 +517,7 @@ class EventOfflineProvider extends OfflineDbProvider {
     int? eventsCounts;
     try {
       var dbClient = await db;
+      await _ensureEnrollmentColumn();
       eventsCounts = Sqflite.firstIntValue(await dbClient!
           .rawQuery('SELECT COUNT(*) FROM $table WHERE $syncStatus = ?', [
         status,
@@ -498,6 +532,7 @@ class EventOfflineProvider extends OfflineDbProvider {
     int? offlineEventsCount;
     try {
       var dbClient = await db;
+      await _ensureEnrollmentColumn();
       offlineEventsCount = Sqflite.firstIntValue(await dbClient!.rawQuery(
           'SELECT COUNT(*) FROM $table WHERE $program = ? AND $orgUnit = ?',
           ['$programId', '$orgUnitId']));

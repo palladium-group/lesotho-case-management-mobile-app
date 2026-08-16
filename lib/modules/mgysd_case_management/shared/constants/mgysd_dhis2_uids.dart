@@ -295,57 +295,116 @@ class MgysdDhis2Uids {
 
 
   // ---------------------------------------------------------------------------
-  // INTAKE AND INITIAL RISK ASSESSMENT ATTRIBUTES
-  // These are TRACKED ENTITY ATTRIBUTES saved on the CLIENT TEI together with
-  // Intake. Replace ATTR_* placeholders with real DHIS2 TEA UIDs after creating
-  // them in DHIS2.
+  // INTAKE AND INITIAL RISK ASSESSMENT DATA ELEMENTS
+  //
+  // These fields are no longer tracked entity attributes. They must be posted
+  // to DHIS2 as dataValues under:
+  //   programStage: initialRiskAssessmentStage
+  //
+  // The constant names still start with attRisk... only to keep existing pages
+  // compiling. Their values now point to Initial Risk Assessment DATA ELEMENTS.
+  // Empty values mean there is no matching DHIS2 data element yet and the sync
+  // mapper must skip them.
   // ---------------------------------------------------------------------------
-  static const String attRiskAssessmentDate = 'ATTR_RISK_ASSESSMENT_DATE';
-  static const String attRiskAssessmentSocialWorker = 'ATTR_RISK_ASSESSMENT_SOCIAL_WORKER';
-  static const String attRiskAssessmentReportSource = 'ATTR_RISK_ASSESSMENT_REPORT_SOURCE';
-  static const String attRiskAssessmentHasActionTaken = 'ATTR_RISK_ASSESSMENT_HAS_ACTION_TAKEN';
-  static const String attRiskAssessmentNoActionReason = 'ATTR_RISK_ASSESSMENT_NO_ACTION_REASON';
-  static const String attRiskAssessmentEmergencyActionsTaken = 'ATTR_RISK_ASSESSMENT_EMERGENCY_ACTIONS_TAKEN';
-  static const String attRiskAssessmentServicesAccessed = 'ATTR_RISK_ASSESSMENT_SERVICES_ACCESSED';
+  static const String attRiskAssessmentDate = ''; // Use the event date of initialRiskAssessmentStage.
+  static const String attRiskAssessmentSocialWorker = deRiskSocialWorker;
+  static const String attRiskAssessmentReportSource = '';
+  static const String attRiskAssessmentHasActionTaken = '';
+  static const String attRiskAssessmentNoActionReason = '';
+  static const String attRiskAssessmentEmergencyActionsTaken = '';
+  static const String attRiskAssessmentServicesAccessed = '';
 
-  static const String attRiskFamilyBackground = 'ATTR_RISK_FAMILY_BACKGROUND';
-  static const String attRiskFamilyBackgroundNotes = 'ATTR_RISK_FAMILY_BACKGROUND_NOTES';
-  static const String attRiskFamilyBackgroundMember = 'ATTR_RISK_FAMILY_BACKGROUND_MEMBER';
-  static const String attRiskCaregiverWellbeing = 'ATTR_RISK_CAREGIVER_WELLBEING';
-  static const String attRiskCaregiverWellbeingNotes = 'ATTR_RISK_CAREGIVER_WELLBEING_NOTES';
-  static const String attRiskCaregiverWellbeingMember = 'ATTR_RISK_CAREGIVER_WELLBEING_MEMBER';
-  static const String attRiskExtendedFamilyRelationships = 'ATTR_RISK_EXTENDED_FAMILY_RELATIONSHIPS';
-  static const String attRiskExtendedFamilyNotes = 'ATTR_RISK_EXTENDED_FAMILY_NOTES';
-  static const String attRiskExtendedFamilyMember = 'ATTR_RISK_EXTENDED_FAMILY_MEMBER';
-  static const String attRiskClientRelationships = 'ATTR_RISK_CLIENT_RELATIONSHIPS';
-  static const String attRiskClientRelationshipsNotes = 'ATTR_RISK_CLIENT_RELATIONSHIPS_NOTES';
-  static const String attRiskClientRelationshipsMember = 'ATTR_RISK_CLIENT_RELATIONSHIPS_MEMBER';
-  static const String attRiskLivingCircumstances = 'ATTR_RISK_LIVING_CIRCUMSTANCES';
-  static const String attRiskLivingCircumstancesNotes = 'ATTR_RISK_LIVING_CIRCUMSTANCES_NOTES';
-  static const String attRiskLivingCircumstancesMember = 'ATTR_RISK_LIVING_CIRCUMSTANCES_MEMBER';
-  static const String attRiskHousing = 'ATTR_RISK_HOUSING';
-  static const String attRiskHousingNotes = 'ATTR_RISK_HOUSING_NOTES';
-  static const String attRiskHousingMember = 'ATTR_RISK_HOUSING_MEMBER';
-  static const String attRiskPhysicalHealth = 'ATTR_RISK_PHYSICAL_HEALTH';
-  static const String attRiskPhysicalHealthNotes = 'ATTR_RISK_PHYSICAL_HEALTH_NOTES';
-  static const String attRiskPhysicalHealthMember = 'ATTR_RISK_PHYSICAL_HEALTH_MEMBER';
-  static const String attRiskNutrition = 'ATTR_RISK_NUTRITION';
-  static const String attRiskNutritionNotes = 'ATTR_RISK_NUTRITION_NOTES';
-  static const String attRiskNutritionMember = 'ATTR_RISK_NUTRITION_MEMBER';
-  static const String attRiskEmotionalHealth = 'ATTR_RISK_EMOTIONAL_HEALTH';
-  static const String attRiskEmotionalHealthNotes = 'ATTR_RISK_EMOTIONAL_HEALTH_NOTES';
-  static const String attRiskEmotionalHealthMember = 'ATTR_RISK_EMOTIONAL_HEALTH_MEMBER';
-  static const String attRiskSupervision = 'ATTR_RISK_SUPERVISION';
-  static const String attRiskSupervisionNotes = 'ATTR_RISK_SUPERVISION_NOTES';
-  static const String attRiskSupervisionMember = 'ATTR_RISK_SUPERVISION_MEMBER';
-  static const String attRiskEducation = 'ATTR_RISK_EDUCATION';
-  static const String attRiskEducationNotes = 'ATTR_RISK_EDUCATION_NOTES';
-  static const String attRiskEducationMember = 'ATTR_RISK_EDUCATION_MEMBER';
+  static const String attRiskFamilyBackground = deRiskFamilyBackground;
+  static const String attRiskFamilyBackgroundNotes = deRiskFamilyBackgroundNotes;
+  static const String attRiskFamilyBackgroundMember = '';
 
-  static const String attRiskLevel = 'ATTR_RISK_LEVEL';
-  static const String attRiskReason = 'ATTR_RISK_REASON';
-  static const String attRiskImmediateReferrals = 'ATTR_RISK_IMMEDIATE_REFERRALS';
-  static const String attRiskNextSteps = 'ATTR_RISK_NEXT_STEPS';
-  static const String attRiskAdditionalNotes = 'ATTR_RISK_ADDITIONAL_NOTES';
+  static const String attRiskCaregiverWellbeing = '';
+  static const String attRiskCaregiverWellbeingNotes = '';
+  static const String attRiskCaregiverWellbeingMember = '';
+
+  static const String attRiskExtendedFamilyRelationships = deRiskExtendedFamilyRelationships;
+  static const String attRiskExtendedFamilyNotes = deRiskExtendedFamilyNotes;
+  static const String attRiskExtendedFamilyMember = '';
+
+  static const String attRiskClientRelationships = deRiskClientRelationships;
+  static const String attRiskClientRelationshipsNotes = deRiskClientRelationshipsNotes;
+  static const String attRiskClientRelationshipsMember = '';
+
+  static const String attRiskLivingCircumstances = deRiskLivingCircumstances;
+  static const String attRiskLivingCircumstancesNotes = deRiskLivingCircumstancesNotes;
+  static const String attRiskLivingCircumstancesMember = '';
+
+  static const String attRiskHousing = deRiskHousing;
+  static const String attRiskHousingNotes = deRiskHousingNotes;
+  static const String attRiskHousingMember = '';
+
+  static const String attRiskPhysicalHealth = deRiskPhysicalHealth;
+  static const String attRiskPhysicalHealthNotes = deRiskPhysicalHealthNotes;
+  static const String attRiskPhysicalHealthMember = '';
+
+  static const String attRiskNutrition = deRiskNutrition;
+  static const String attRiskNutritionNotes = deRiskNutritionNotes;
+  static const String attRiskNutritionMember = '';
+
+  static const String attRiskEmotionalHealth = deRiskEmotionalHealth;
+  static const String attRiskEmotionalHealthNotes = deRiskEmotionalHealthNotes;
+  static const String attRiskEmotionalHealthMember = '';
+
+  static const String attRiskSupervision = deRiskSupervision;
+  static const String attRiskSupervisionNotes = deRiskSupervisionNotes;
+  static const String attRiskSupervisionMember = '';
+
+  static const String attRiskEducation = deRiskEducation;
+  static const String attRiskEducationNotes = deRiskEducationNotes;
+  static const String attRiskEducationMember = '';
+
+  static const String attRiskLevel = deRiskLevel;
+  static const String attRiskReason = deRiskReason;
+  static const String attRiskImmediateReferrals = deRiskImmediateReferrals;
+  static const String attRiskNextSteps = '';
+  static const String attRiskAdditionalNotes = '';
+
+  static const Set<String> initialRiskAssessmentDataElementIds = {
+    deRiskSocialWorker,
+    deRiskFamilyBackground,
+    deRiskFamilyBackgroundNotes,
+    deRiskExtendedFamilyRelationships,
+    deRiskExtendedFamilyNotes,
+    deRiskClientRelationships,
+    deRiskClientRelationshipsNotes,
+    deRiskLivingCircumstances,
+    deRiskLivingCircumstancesNotes,
+    deRiskHousing,
+    deRiskHousingNotes,
+    deRiskPhysicalHealth,
+    deRiskPhysicalHealthNotes,
+    deRiskNutrition,
+    deRiskNutritionNotes,
+    deRiskEmotionalHealth,
+    deRiskEmotionalHealthNotes,
+    deRiskSupervision,
+    deRiskSupervisionNotes,
+    deRiskEducation,
+    deRiskEducationNotes,
+    deRiskLevel,
+    deRiskReason,
+    deRiskImmediateReferrals,
+    deRiskSelfCare,
+    deRiskDisabilityDiagnosis,
+    deRiskAssistiveDevices,
+    deRiskRehabilitationServices,
+  };
+
+  static bool isInitialRiskAssessmentDataElement(String id) {
+    return id.isNotEmpty && initialRiskAssessmentDataElementIds.contains(id);
+  }
+
+
+  static bool isSyncableTrackedEntityAttribute(String id) {
+    final value = id.trim();
+    return value.isNotEmpty &&
+        !value.startsWith('ATTR_') &&
+        !isInitialRiskAssessmentDataElement(value);
+  }
 
 }

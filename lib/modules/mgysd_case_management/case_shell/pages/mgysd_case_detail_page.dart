@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:lncmis_mobile_app/core/offline_db/offline_db_provider.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
@@ -178,6 +179,7 @@ class _MgysdCaseDetailPageState extends State<MgysdCaseDetailPage> {
   static const String attDisabilitySpecify =
       MgysdDhis2Uids.attDisabilitySpecify;
   static const String attRiskLevel = MgysdDhis2Uids.attRiskLevel;
+  static const String deRiskLevel = MgysdDhis2Uids.deRiskLevel;
 
   static const String legacyAttPersonFirstName = 'ATTR_P_FIRSTNAME';
   static const String legacyAttPersonLastName = 'ATTR_P_LASTNAME';
@@ -251,6 +253,87 @@ class _MgysdCaseDetailPageState extends State<MgysdCaseDetailPage> {
     } catch (_) {
       return <String, String>{};
     }
+  }
+
+
+  dynamic _decodePossibleJson(dynamic value) {
+    if (value == null) return null;
+    if (value is! String) return value;
+
+    final text = value.trim();
+    if (text.isEmpty || text == 'null') return null;
+
+    try {
+      return jsonDecode(text);
+    } catch (_) {
+      return value;
+    }
+  }
+
+  String _readDataElementValue(dynamic source, String dataElement) {
+    final decoded = _decodePossibleJson(source);
+
+    if (decoded is List) {
+      for (final item in decoded) {
+        if (item is Map) {
+          final de = (item['dataElement'] ?? '').toString();
+          if (de == dataElement) {
+            return (item['value'] ?? '').toString();
+          }
+        }
+      }
+    }
+
+    if (decoded is Map) {
+      if (decoded.containsKey(dataElement)) {
+        return (decoded[dataElement] ?? '').toString();
+      }
+
+      if (decoded.containsKey('dataValues')) {
+        return _readDataElementValue(decoded['dataValues'], dataElement);
+      }
+    }
+
+    return '';
+  }
+
+  Future<String> _latestInitialRiskLevel(
+      Database db,
+      String householdTei,
+      ) async {
+    try {
+      if (householdTei.trim().isEmpty) return '';
+      if (!await _tableExists(db, 'events')) return '';
+
+      final rows = await db.query(
+        'events',
+        where: 'trackedEntityInstance = ? AND programStage = ?',
+        whereArgs: [householdTei, MgysdDhis2Uids.initialRiskAssessmentStage],
+      );
+
+      rows.sort((a, b) {
+        final ad = (a['eventDate'] ?? '').toString();
+        final bd = (b['eventDate'] ?? '').toString();
+        return bd.compareTo(ad);
+      });
+
+      for (final row in rows) {
+        final sources = <dynamic>[
+          row['dataValues'],
+          row['dataValuesJson'],
+          row['eventDataValues'],
+          row['payloadJson'],
+          row['payload'],
+        ];
+
+        for (final source in sources) {
+          final riskLevel = _readDataElementValue(source, deRiskLevel).trim();
+          if (riskLevel.isNotEmpty) return riskLevel;
+        }
+      }
+    } catch (_) {}
+
+    return '';
   }
 
   String _readFirstName(Map<String, String> attrs) {
@@ -723,6 +806,10 @@ class _MgysdCaseDetailPageState extends State<MgysdCaseDetailPage> {
         ? <String, String>{}
         : await _attrs(db, clientTei);
 
+    final initialRiskLevel = householdTei.trim().isEmpty
+        ? ''
+        : await _latestInitialRiskLevel(db, householdTei);
+
     final clientName = [
       _readFirstName(clientAttrs),
       _readLastName(clientAttrs),
@@ -787,7 +874,9 @@ class _MgysdCaseDetailPageState extends State<MgysdCaseDetailPage> {
           : _readPhone(clientAttrs),
       clientAge: clientAttrs[attAge] ?? '',
       clientSex: clientAttrs[attSex] ?? '',
-      riskLevel: clientAttrs[attRiskLevel] ?? '',
+      riskLevel: initialRiskLevel.trim().isNotEmpty
+          ? initialRiskLevel
+          : (clientAttrs[attRiskLevel] ?? ''),
       carePlans: await _countCarePlans(db, householdTei),
       activeCarePlans: await _countActiveCarePlans(db, householdTei),
       householdOpenGoals: await _countOpenGoals(db, householdTei),
@@ -2158,4 +2247,3 @@ class _MgysdCaseDetailPageState extends State<MgysdCaseDetailPage> {
     );
   }
 }
-
