@@ -992,8 +992,8 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       final key = term == 'LONG_TERM'
           ? 'longTerm'
           : term == 'MEDIUM_TERM'
-              ? 'mediumTerm'
-              : 'shortTerm';
+          ? 'mediumTerm'
+          : 'shortTerm';
       final goals = source[key];
       if (goals is! List) return '';
       return goals
@@ -1541,6 +1541,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
               label: const Text('Add goal'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: widget.color,
+                foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 11,
@@ -2300,6 +2301,7 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
             label: Text(_saving ? 'Saving...' : 'Mark Complete'),
             style: ElevatedButton.styleFrom(
               backgroundColor: widget.color,
+              foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 13),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),

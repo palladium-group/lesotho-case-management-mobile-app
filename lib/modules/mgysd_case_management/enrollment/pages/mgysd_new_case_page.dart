@@ -144,6 +144,7 @@ class _CaregiverEntry {
   final TextEditingController nameController;
   final TextEditingController surnameController;
   final TextEditingController relationshipController;
+  final TextEditingController relationshipOtherController;
   final TextEditingController dobController;
   final TextEditingController occupationController;
   final TextEditingController phoneController;
@@ -158,6 +159,7 @@ class _CaregiverEntry {
   })  : nameController = TextEditingController(),
         surnameController = TextEditingController(),
         relationshipController = TextEditingController(),
+        relationshipOtherController = TextEditingController(),
         dobController = TextEditingController(),
         occupationController = TextEditingController(),
         phoneController = TextEditingController();
@@ -166,6 +168,7 @@ class _CaregiverEntry {
     return nameController.text.trim().isNotEmpty ||
         surnameController.text.trim().isNotEmpty ||
         relationshipController.text.trim().isNotEmpty ||
+        relationshipOtherController.text.trim().isNotEmpty ||
         dobController.text.trim().isNotEmpty ||
         occupationController.text.trim().isNotEmpty ||
         phoneController.text.trim().isNotEmpty ||
@@ -176,6 +179,7 @@ class _CaregiverEntry {
     nameController.dispose();
     surnameController.dispose();
     relationshipController.dispose();
+    relationshipOtherController.dispose();
     dobController.dispose();
     occupationController.dispose();
     phoneController.dispose();
@@ -262,6 +266,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   final _personalAssistantNameController = TextEditingController();
   final _personalAssistantSurnameController = TextEditingController();
   final _personalAssistantRelationshipController = TextEditingController();
+  final _personalAssistantRelationshipOtherController = TextEditingController();
   final _personalAssistantDobController = TextEditingController();
   final _personalAssistantOccupationController = TextEditingController();
   final _personalAssistantPhoneController = TextEditingController();
@@ -640,6 +645,25 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _Opt('OTHER', 'Other'),
   ];
 
+  static const List<_Opt> caregiverRelationshipOptions = [
+    _Opt('Mother', 'Mother'),
+    _Opt('Father', 'Father'),
+    _Opt('Grandmother', 'Grandmother'),
+    _Opt('Grandfather', 'Grandfather'),
+    _Opt('Aunt', 'Aunt'),
+    _Opt('Uncle', 'Uncle'),
+    _Opt('Sister', 'Sister'),
+    _Opt('Brother', 'Brother'),
+    _Opt('Cousin', 'Cousin'),
+    _Opt('Spouse', 'Spouse'),
+    _Opt('Guardian', 'Guardian'),
+    _Opt('Caregiver', 'Caregiver'),
+    _Opt('Personal Assistant', 'Personal Assistant'),
+    _Opt('Other relative', 'Other relative'),
+    _Opt('Non-relative', 'Non-relative'),
+    _Opt('Other', 'Other'),
+  ];
+
   static const List<_Opt> emergencyNoActionOptions = [
     _Opt('NOT_REQUIRED', 'Not required'),
     _Opt('REFUSED', 'Refused'),
@@ -933,6 +957,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       _personalAssistantSurnameController.clear();
       _personalAssistantSex = '';
       _personalAssistantRelationshipController.clear();
+      _personalAssistantRelationshipOtherController.clear();
       _personalAssistantDobController.clear();
       _personalAssistantOccupationController.clear();
       _personalAssistantPhoneController.clear();
@@ -940,7 +965,1121 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   }
   bool get _reasonOtherSelected => _selectedReasonOptions.contains('OTHER');
 
+  bool _isOtherRelationship(String value) {
+    return value.trim().toUpperCase() == 'OTHER';
+  }
+
   int? get _clientAge => int.tryParse(_clientAgeController.text.trim());
+
+  bool get _isUnder18Client {
+    final age = _clientAge;
+    if (age != null) return age < 18;
+    return _clientCategory == 'Child';
+  }
+
+  bool get _showEmploymentQuestions {
+    return !_isUnder18Client && _isAdultOrElderly;
+  }
+
+  void _clearEmploymentFieldsForChild() {
+    if (!_isUnder18Client) return;
+
+    _isAdultEmployed = '';
+    _employerNameController.clear();
+    _employabilityBarriers.clear();
+    _employabilityBarrierOtherController.clear();
+  }
+
+  List<String> _socialInvestigationNextSteps() {
+    return const ['OPEN_SOCIAL_INVESTIGATION'];
+  }
+
+  String _riskPriorityLabel() {
+    switch (_riskLevel.trim().toUpperCase()) {
+      case 'HIGH RISK':
+      case 'HIGH_RISK':
+        return 'High priority social investigation';
+      case 'MEDIUM RISK':
+      case 'MEDIUM_RISK':
+        return 'Medium priority social investigation';
+      case 'LOW RISK':
+      case 'LOW_RISK':
+        return 'Routine social investigation';
+      case 'NO RISK':
+      case 'NO_RISK':
+        return 'Routine social investigation';
+      default:
+        return 'Select risk level to determine social investigation priority';
+    }
+  }
+
+
+  Future<Map<String, String>> _loadAttributes(
+      Database db,
+      String teiId,
+      ) async {
+    final values = <String, String>{};
+    try {
+      final rows = await db.query(
+        'tracked_entity_instance_attribute',
+        where: 'trackedEntityInstance = ?',
+        whereArgs: [teiId],
+      );
+      for (final row in rows) {
+        final key = (row['attribute'] ?? '').toString();
+        if (key.isEmpty) continue;
+        values[key] = (row['value'] ?? '').toString();
+      }
+    } catch (_) {}
+    return values;
+  }
+
+  Future<String> _loadPrimaryClientTei(
+      Database db,
+      String householdTei,
+      ) async {
+    try {
+      final rows = await db.query(
+        'mgysd_household_member',
+        columns: ['memberTei'],
+        where: 'householdTei = ? AND (isPrimaryClient = ? OR isPrimaryClient = ? OR isPrimaryClient = ?)',
+        whereArgs: [householdTei, 1, 'true', '1'],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) {
+        return (rows.first['memberTei'] ?? '').toString().trim();
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  void _setJsonSet(Set<String> target, String raw) {
+    target.clear();
+    if (raw.trim().isEmpty) return;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        target.addAll(decoded.map((value) => value.toString()));
+        return;
+      }
+    } catch (_) {}
+    target.addAll(
+      raw.split(',').map((value) => value.trim()).where((value) => value.isNotEmpty),
+    );
+  }
+
+
+  String _stringValue(dynamic value) => (value ?? '').toString();
+
+  List<String> _stringListValue(dynamic value) {
+    if (value is List) {
+      return value.map((item) => item.toString()).toList();
+    }
+    if (value is String && value.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is List) {
+          return decoded.map((item) => item.toString()).toList();
+        }
+      } catch (_) {}
+      return value
+          .split(',')
+          .map((item) => item.trim())
+          .where((item) => item.isNotEmpty)
+          .toList();
+    }
+    return <String>[];
+  }
+
+  Future<void> _ensureIntakeFormStateTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS mgysd_intake_form_state (
+        id TEXT PRIMARY KEY,
+        stateKey TEXT,
+        householdTei TEXT,
+        enrollment TEXT,
+        reportedEventId TEXT,
+        status TEXT,
+        payloadJson TEXT,
+        updatedAt TEXT,
+        syncStatus TEXT
+      )
+    ''');
+
+    final tableInfo = await db.rawQuery(
+      'PRAGMA table_info(mgysd_intake_form_state)',
+    );
+    final columns = tableInfo
+        .map((row) => (row['name'] ?? '').toString())
+        .where((name) => name.isNotEmpty)
+        .toSet();
+
+    Future<void> addColumn(String name) async {
+      if (columns.contains(name)) return;
+      try {
+        await db.execute(
+          'ALTER TABLE mgysd_intake_form_state ADD COLUMN $name TEXT',
+        );
+        columns.add(name);
+      } catch (_) {}
+    }
+
+    for (final column in <String>[
+      'stateKey',
+      'householdTei',
+      'enrollment',
+      'reportedEventId',
+      'status',
+      'payloadJson',
+      'updatedAt',
+      'syncStatus',
+    ]) {
+      await addColumn(column);
+    }
+  }
+
+  String _formStateKey({
+    String? householdTeiOverride,
+    String? enrollmentOverride,
+  }) {
+    final householdTei =
+    (householdTeiOverride ?? widget.existingHouseholdTei ?? '').trim();
+    final enrollment =
+    (enrollmentOverride ?? widget.existingAssessedEnrollment ?? '').trim();
+
+    if (householdTei.isNotEmpty && enrollment.isNotEmpty) {
+      return 'intake_edit_${householdTei}_$enrollment';
+    }
+
+    if (householdTei.isNotEmpty) {
+      return 'intake_edit_$householdTei';
+    }
+
+    final reportEventId = (widget.reportedEventId ?? '').trim();
+    if (reportEventId.isNotEmpty) {
+      return 'intake_report_$reportEventId';
+    }
+
+    return 'intake_new_case_draft';
+  }
+
+  List<Map<String, dynamic>> _dynamicTextPayload(List<_DynamicTextItem> items) {
+    return items
+        .map(
+          (item) => {
+        'id': item.id,
+        'value': item.controller.text.trim(),
+        'phoneCountryCode': item.phoneCountryCode,
+      },
+    )
+        .toList();
+  }
+
+  Map<String, dynamic> _householdMemberPayload(_HouseholdMemberEntry member) {
+    return {
+      'id': member.id,
+      'firstName': member.firstNameController.text.trim(),
+      'surname': member.surnameController.text.trim(),
+      'dob': member.dobController.text.trim(),
+      'age': member.ageController.text.trim(),
+      'occupation': member.occupationController.text.trim(),
+      'contacts': member.contactsController.text.trim(),
+      'contactsCountryCode': member.contactsCountryCode,
+      'disabilitySpecify': member.disabilitySpecifyController.text.trim(),
+      'relationshipOther': member.relationshipOtherController.text.trim(),
+      'sex': member.sex,
+      'relationshipToClient': member.relationshipToClient,
+      'hasDisability': member.hasDisability,
+      'isExpanded': member.isExpanded,
+    };
+  }
+
+  Map<String, dynamic> _caregiverPayload(_CaregiverEntry caregiver) {
+    return {
+      'id': caregiver.id,
+      'name': caregiver.nameController.text.trim(),
+      'surname': caregiver.surnameController.text.trim(),
+      'relationship': caregiver.relationshipController.text.trim(),
+      'relationshipOther': caregiver.relationshipOtherController.text.trim(),
+      'dob': caregiver.dobController.text.trim(),
+      'occupation': caregiver.occupationController.text.trim(),
+      'phone': caregiver.phoneController.text.trim(),
+      'phoneCountryCode': caregiver.phoneCountryCode,
+      'sex': caregiver.sex,
+      'isExpanded': caregiver.isExpanded,
+    };
+  }
+
+  Map<String, dynamic> _nextOfKinPayload(_NextOfKinEntry nextOfKin) {
+    return {
+      'id': nextOfKin.id,
+      'firstName': nextOfKin.firstNameController.text.trim(),
+      'surname': nextOfKin.surnameController.text.trim(),
+      'phone': nextOfKin.phoneController.text.trim(),
+      'phoneCountryCode': nextOfKin.phoneCountryCode,
+      'physicalAddress': nextOfKin.physicalAddressController.text.trim(),
+      'relationshipOther': nextOfKin.relationshipOtherController.text.trim(),
+      'relationship': nextOfKin.relationship,
+      'isExpanded': nextOfKin.isExpanded,
+    };
+  }
+
+  Map<String, dynamic> _intakeFormStatePayload() {
+    return {
+      'fileNumber': _fileNumberController.text.trim(),
+      'district': _districtController.text.trim(),
+      'communityCouncil': _communityCouncilController.text.trim(),
+      'village': _villageController.text.trim(),
+      'physicalAddress': _physicalAddressController.text.trim(),
+      'selectedDistrictId': _selectedDistrictId,
+      'selectedDistrictName': _selectedDistrictName,
+      'selectedCommunityCouncilId': _selectedCommunityCouncilId,
+      'selectedCommunityCouncilName': _selectedCommunityCouncilName,
+
+      'identityNumber': _identityNumberController.text.trim(),
+      'clientFirstName': _clientFirstNameController.text.trim(),
+      'clientSurname': _clientSurnameController.text.trim(),
+      'clientDob': _clientDobController.text.trim(),
+      'clientAge': _clientAgeController.text.trim(),
+      'clientPhone': _phoneController.text.trim(),
+      'clientAlternativePhone': _alternativePhoneController.text.trim(),
+      'clientPhoneCountryCode': _clientPhoneCountryCode,
+      'clientAlternativePhoneCountryCode': _clientAlternativePhoneCountryCode,
+      'clientCategory': _clientCategory,
+      'isDisabled': _isDisabled,
+      'sex': _sex,
+      'nationality': _nationality,
+      'nationalityOther': _nationalityOtherController.text.trim(),
+      'homeLanguage': _homeLanguage,
+      'homeLanguageOther': _homeLanguageOtherController.text.trim(),
+
+      'isClientInSchool': _isClientInSchool,
+      'schoolName': _schoolNameController.text.trim(),
+      'grade': _grade,
+      'schoolLevel': _schoolLevel,
+      'schoolAttendanceStatus': _schoolAttendanceStatus,
+      'notInSchoolStatus': _notInSchoolStatus,
+      'highestLevelAchieved': _highestLevelAchieved,
+      'isAdultEmployed': _showEmploymentQuestions ? _isAdultEmployed : '',
+      'employerName': _showEmploymentQuestions
+          ? _employerNameController.text.trim()
+          : '',
+
+      'fatherFirstName': _fatherFirstNameController.text.trim(),
+      'fatherSurname': _fatherSurnameController.text.trim(),
+      'fatherDob': _fatherDobController.text.trim(),
+      'fatherOccupation': _fatherOccupationController.text.trim(),
+      'fatherWhyNotLiving': _fatherWhyNotLivingController.text.trim(),
+      'fatherPhone': _fatherPhoneController.text.trim(),
+      'fatherPhoneCountryCode': _fatherPhoneCountryCode,
+      'fatherAlive': _fatherAlive,
+      'fatherLivingWithChild': _fatherLivingWithChild,
+
+      'motherFirstName': _motherFirstNameController.text.trim(),
+      'motherSurname': _motherSurnameController.text.trim(),
+      'motherDob': _motherDobController.text.trim(),
+      'motherOccupation': _motherOccupationController.text.trim(),
+      'motherWhyNotLiving': _motherWhyNotLivingController.text.trim(),
+      'motherPhone': _motherPhoneController.text.trim(),
+      'motherPhoneCountryCode': _motherPhoneCountryCode,
+      'motherAlive': _motherAlive,
+      'motherLivingWithChild': _motherLivingWithChild,
+
+      'personalAssistantName': _personalAssistantNameController.text.trim(),
+      'personalAssistantSurname': _personalAssistantSurnameController.text.trim(),
+      'personalAssistantSex': _personalAssistantSex,
+      'personalAssistantRelationship':
+      _personalAssistantRelationshipController.text.trim(),
+      'personalAssistantRelationshipOther':
+      _personalAssistantRelationshipOtherController.text.trim(),
+      'personalAssistantDob': _personalAssistantDobController.text.trim(),
+      'personalAssistantOccupation':
+      _personalAssistantOccupationController.text.trim(),
+      'personalAssistantPhone': _personalAssistantPhoneController.text.trim(),
+      'personalAssistantPhoneCountryCode': _personalAssistantPhoneCountryCode,
+
+      'selectedReasonOptions': _selectedReasonOptions.toList(),
+      'reasonOther': _reasonOtherController.text.trim(),
+
+      'riskAssessmentDate': _riskAssessmentDateController.text.trim(),
+      'riskSocialWorker': _riskSocialWorkerController.text.trim(),
+      'riskReason': _riskReasonController.text.trim(),
+      'riskImmediateReferrals': _riskImmediateReferralsController.text.trim(),
+      'riskAdditionalNotes': '',
+      'riskReportSource': _riskReportSource,
+      'riskHasActionTaken': _riskHasActionTaken,
+      'riskNoActionReason': _riskNoActionReason,
+      'riskFamilyBackground': _riskFamilyBackground,
+      'riskFamilyBackgroundNotes':
+      _riskFamilyBackgroundNotesController.text.trim(),
+      'riskCaregiverWellbeing': _riskCaregiverWellbeing,
+      'riskCaregiverWellbeingNotes':
+      _riskCaregiverWellbeingNotesController.text.trim(),
+      'riskExtendedFamilyRelationships': _riskExtendedFamilyRelationships,
+      'riskExtendedFamilyNotes':
+      _riskExtendedFamilyNotesController.text.trim(),
+      'riskClientRelationships': _riskClientRelationships,
+      'riskClientRelationshipsNotes':
+      _riskClientRelationshipsNotesController.text.trim(),
+      'riskLivingCircumstances': _riskLivingCircumstances,
+      'riskLivingCircumstancesNotes':
+      _riskLivingCircumstancesNotesController.text.trim(),
+      'riskHousing': _riskHousing,
+      'riskHousingNotes': _riskHousingNotesController.text.trim(),
+      'riskPhysicalHealth': _riskPhysicalHealth,
+      'riskPhysicalHealthNotes':
+      _riskPhysicalHealthNotesController.text.trim(),
+      'riskNutrition': _riskNutrition,
+      'riskNutritionNotes': _riskNutritionNotesController.text.trim(),
+      'riskEmotionalHealth': _riskEmotionalHealth,
+      'riskEmotionalHealthNotes':
+      _riskEmotionalHealthNotesController.text.trim(),
+      'riskSupervision': _riskSupervision,
+      'riskSupervisionNotes': _riskSupervisionNotesController.text.trim(),
+      'riskEducation': _riskEducation,
+      'riskEducationNotes': _riskEducationNotesController.text.trim(),
+      'riskLevel': _riskLevel,
+      'riskEmergencyActionsTaken': _riskEmergencyActionsTaken.toList(),
+      'riskServicesAccessed': _riskServicesAccessed.toList(),
+      'riskNextSteps': _socialInvestigationNextSteps(),
+      'riskEmergencyActionOther': _riskEmergencyActionOtherController.text.trim(),
+      'riskServicesAccessedOther': _riskServicesAccessedOtherController.text.trim(),
+
+      'selfCareIndependent': _selfCareIndependent,
+      'selfCareDomainsNeeded': _selfCareDomainsNeeded.toList(),
+      'selfCareOther': _selfCareOtherController.text.trim(),
+      'hasDisabilityDiagnosis': _hasDisabilityDiagnosis,
+      'disabilityTypes': _disabilityTypes.toList(),
+      'disabilityTypeOther': _disabilityTypeOtherController.text.trim(),
+      'usesAssistiveDevice': _usesAssistiveDevice,
+      'assistiveDevices': _assistiveDevices.toList(),
+      'assistiveDeviceOther': _assistiveDeviceOtherController.text.trim(),
+      'receivesRehabilitationServices': _receivesRehabilitationServices,
+      'rehabilitationServices': _rehabilitationServices.toList(),
+      'rehabilitationServiceOther':
+      _rehabilitationServiceOtherController.text.trim(),
+      'employabilityBarriers': _showEmploymentQuestions
+          ? _employabilityBarriers.toList()
+          : <String>[],
+      'employabilityBarrierOther': _showEmploymentQuestions
+          ? _employabilityBarrierOtherController.text.trim()
+          : '',
+      'skillsDevelopmentAreas': _skillsDevelopmentAreas.toList(),
+      'skillsDevelopmentOther': _skillsDevelopmentOtherController.text.trim(),
+
+      'contactedPhoneNumbers': _dynamicTextPayload(_contactedPhoneNumbers),
+      'servicesAlreadyProvided': _dynamicTextPayload(_servicesAlreadyProvided),
+      'otherHouseholdMembers':
+      _otherHouseholdMembers.map(_householdMemberPayload).toList(),
+      'caregivers': _caregivers.map(_caregiverPayload).toList(),
+      'nextOfKins': _nextOfKins.map(_nextOfKinPayload).toList(),
+    };
+  }
+
+  void _replaceDynamicItemsFromPayload(
+      List<_DynamicTextItem> target,
+      dynamic rawItems, {
+        required bool phoneItems,
+      }) {
+    for (final item in target) {
+      item.dispose();
+    }
+    target.clear();
+
+    if (rawItems is List) {
+      for (final raw in rawItems) {
+        if (raw is Map) {
+          final map = Map<String, dynamic>.from(raw);
+          target.add(
+            _DynamicTextItem(
+              id: _stringValue(map['id']).isEmpty
+                  ? _newId()
+                  : _stringValue(map['id']),
+              value: _stringValue(map['value']),
+              phoneCountryCode: _stringValue(map['phoneCountryCode']).isEmpty
+                  ? 'LS'
+                  : _stringValue(map['phoneCountryCode']),
+            ),
+          );
+        } else {
+          target.add(
+            _DynamicTextItem(
+              id: _newId(),
+              value: _stringValue(raw),
+              phoneCountryCode: 'LS',
+            ),
+          );
+        }
+      }
+    }
+
+    if (target.isEmpty) {
+      target.add(_DynamicTextItem(id: _newId()));
+    }
+
+    if (!phoneItems) {
+      for (final item in target) {
+        item.phoneCountryCode = 'LS';
+      }
+    }
+  }
+
+  void _replaceHouseholdMembersFromPayload(dynamic rawItems) {
+    for (final item in _otherHouseholdMembers) {
+      item.dispose();
+    }
+    _otherHouseholdMembers.clear();
+
+    if (rawItems is! List) return;
+
+    for (final raw in rawItems) {
+      if (raw is! Map) continue;
+      final map = Map<String, dynamic>.from(raw);
+      final entry = _HouseholdMemberEntry(
+        id: _stringValue(map['id']).isEmpty
+            ? _newId()
+            : _stringValue(map['id']),
+        sex: _stringValue(map['sex']),
+        relationshipToClient: _stringValue(map['relationshipToClient']),
+        hasDisability: _stringValue(map['hasDisability']),
+        contactsCountryCode: _stringValue(map['contactsCountryCode']).isEmpty
+            ? 'LS'
+            : _stringValue(map['contactsCountryCode']),
+        isExpanded: map['isExpanded'] is bool ? map['isExpanded'] as bool : true,
+      );
+      entry.firstNameController.text = _stringValue(map['firstName']);
+      entry.surnameController.text = _stringValue(map['surname']);
+      entry.dobController.text = _stringValue(map['dob']);
+      entry.ageController.text = _stringValue(map['age']);
+      entry.occupationController.text = _stringValue(map['occupation']);
+      entry.contactsController.text = _stringValue(map['contacts']);
+      entry.disabilitySpecifyController.text =
+          _stringValue(map['disabilitySpecify']);
+      entry.relationshipOtherController.text =
+          _stringValue(map['relationshipOther']);
+      _otherHouseholdMembers.add(entry);
+    }
+  }
+
+  void _replaceCaregiversFromPayload(dynamic rawItems) {
+    for (final item in _caregivers) {
+      item.dispose();
+    }
+    _caregivers.clear();
+
+    if (rawItems is! List) return;
+
+    for (final raw in rawItems) {
+      if (raw is! Map) continue;
+      final map = Map<String, dynamic>.from(raw);
+      final entry = _CaregiverEntry(
+        id: _stringValue(map['id']).isEmpty
+            ? _newId()
+            : _stringValue(map['id']),
+        sex: _stringValue(map['sex']),
+        phoneCountryCode: _stringValue(map['phoneCountryCode']).isEmpty
+            ? 'LS'
+            : _stringValue(map['phoneCountryCode']),
+        isExpanded: map['isExpanded'] is bool ? map['isExpanded'] as bool : true,
+      );
+      entry.nameController.text = _stringValue(map['name']);
+      entry.surnameController.text = _stringValue(map['surname']);
+      entry.relationshipController.text = _stringValue(map['relationship']);
+      entry.relationshipOtherController.text =
+          _stringValue(map['relationshipOther']);
+      entry.dobController.text = _stringValue(map['dob']);
+      entry.occupationController.text = _stringValue(map['occupation']);
+      entry.phoneController.text = _stringValue(map['phone']);
+      _caregivers.add(entry);
+    }
+  }
+
+  void _replaceNextOfKinsFromPayload(dynamic rawItems) {
+    for (final item in _nextOfKins) {
+      item.dispose();
+    }
+    _nextOfKins.clear();
+
+    if (rawItems is! List) return;
+
+    for (final raw in rawItems) {
+      if (raw is! Map) continue;
+      final map = Map<String, dynamic>.from(raw);
+      final entry = _NextOfKinEntry(
+        id: _stringValue(map['id']).isEmpty
+            ? _newId()
+            : _stringValue(map['id']),
+        relationship: _stringValue(map['relationship']),
+        phoneCountryCode: _stringValue(map['phoneCountryCode']).isEmpty
+            ? 'LS'
+            : _stringValue(map['phoneCountryCode']),
+        isExpanded: map['isExpanded'] is bool ? map['isExpanded'] as bool : true,
+      );
+      entry.firstNameController.text = _stringValue(map['firstName']);
+      entry.surnameController.text = _stringValue(map['surname']);
+      entry.phoneController.text = _stringValue(map['phone']);
+      entry.physicalAddressController.text =
+          _stringValue(map['physicalAddress']);
+      entry.relationshipOtherController.text =
+          _stringValue(map['relationshipOther']);
+      _nextOfKins.add(entry);
+    }
+  }
+
+  void _applyIntakeFormStatePayload(Map<String, dynamic> payload) {
+    _restoringCachedState = true;
+
+    _fileNumberController.text = _stringValue(payload['fileNumber']);
+    _districtController.text = _stringValue(payload['district']);
+    _communityCouncilController.text =
+        _stringValue(payload['communityCouncil']);
+    _villageController.text = _stringValue(payload['village']);
+    _physicalAddressController.text = _stringValue(payload['physicalAddress']);
+    _selectedDistrictId = _stringValue(payload['selectedDistrictId']);
+    _selectedDistrictName = _stringValue(payload['selectedDistrictName']);
+    _selectedCommunityCouncilId =
+        _stringValue(payload['selectedCommunityCouncilId']);
+    _selectedCommunityCouncilName =
+        _stringValue(payload['selectedCommunityCouncilName']);
+
+    _identityNumberController.text = _stringValue(payload['identityNumber']);
+    _clientFirstNameController.text = _stringValue(payload['clientFirstName']);
+    _clientSurnameController.text = _stringValue(payload['clientSurname']);
+    _clientDobController.text = _stringValue(payload['clientDob']);
+    _clientAgeController.text = _stringValue(payload['clientAge']);
+    _phoneController.text = _stringValue(payload['clientPhone']);
+    _alternativePhoneController.text =
+        _stringValue(payload['clientAlternativePhone']);
+    _clientPhoneCountryCode = _stringValue(payload['clientPhoneCountryCode']).isEmpty
+        ? 'LS'
+        : _stringValue(payload['clientPhoneCountryCode']);
+    _clientAlternativePhoneCountryCode =
+    _stringValue(payload['clientAlternativePhoneCountryCode']).isEmpty
+        ? 'LS'
+        : _stringValue(payload['clientAlternativePhoneCountryCode']);
+    _clientCategory = _stringValue(payload['clientCategory']);
+    _isDisabled = _stringValue(payload['isDisabled']);
+    _sex = _stringValue(payload['sex']);
+    _nationality = _stringValue(payload['nationality']);
+    _nationalityOtherController.text = _stringValue(payload['nationalityOther']);
+    _homeLanguage = _stringValue(payload['homeLanguage']);
+    _homeLanguageOtherController.text =
+        _stringValue(payload['homeLanguageOther']);
+
+    _isClientInSchool = _stringValue(payload['isClientInSchool']);
+    _schoolNameController.text = _stringValue(payload['schoolName']);
+    _grade = _stringValue(payload['grade']);
+    _schoolLevel = _stringValue(payload['schoolLevel']);
+    _schoolAttendanceStatus = _stringValue(payload['schoolAttendanceStatus']);
+    _notInSchoolStatus = _stringValue(payload['notInSchoolStatus']);
+    _highestLevelAchieved = _stringValue(payload['highestLevelAchieved']);
+    _isAdultEmployed = _stringValue(payload['isAdultEmployed']);
+    _employerNameController.text = _stringValue(payload['employerName']);
+
+    _fatherFirstNameController.text = _stringValue(payload['fatherFirstName']);
+    _fatherSurnameController.text = _stringValue(payload['fatherSurname']);
+    _fatherDobController.text = _stringValue(payload['fatherDob']);
+    _fatherOccupationController.text =
+        _stringValue(payload['fatherOccupation']);
+    _fatherWhyNotLivingController.text =
+        _stringValue(payload['fatherWhyNotLiving']);
+    _fatherPhoneController.text = _stringValue(payload['fatherPhone']);
+    _fatherPhoneCountryCode =
+    _stringValue(payload['fatherPhoneCountryCode']).isEmpty
+        ? 'LS'
+        : _stringValue(payload['fatherPhoneCountryCode']);
+    _fatherAlive = _stringValue(payload['fatherAlive']);
+    _fatherLivingWithChild = _stringValue(payload['fatherLivingWithChild']);
+
+    _motherFirstNameController.text = _stringValue(payload['motherFirstName']);
+    _motherSurnameController.text = _stringValue(payload['motherSurname']);
+    _motherDobController.text = _stringValue(payload['motherDob']);
+    _motherOccupationController.text =
+        _stringValue(payload['motherOccupation']);
+    _motherWhyNotLivingController.text =
+        _stringValue(payload['motherWhyNotLiving']);
+    _motherPhoneController.text = _stringValue(payload['motherPhone']);
+    _motherPhoneCountryCode =
+    _stringValue(payload['motherPhoneCountryCode']).isEmpty
+        ? 'LS'
+        : _stringValue(payload['motherPhoneCountryCode']);
+    _motherAlive = _stringValue(payload['motherAlive']);
+    _motherLivingWithChild = _stringValue(payload['motherLivingWithChild']);
+
+    _personalAssistantNameController.text =
+        _stringValue(payload['personalAssistantName']);
+    _personalAssistantSurnameController.text =
+        _stringValue(payload['personalAssistantSurname']);
+    _personalAssistantSex = _stringValue(payload['personalAssistantSex']);
+    _personalAssistantRelationshipController.text =
+        _stringValue(payload['personalAssistantRelationship']);
+    _personalAssistantRelationshipOtherController.text =
+        _stringValue(payload['personalAssistantRelationshipOther']);
+    _personalAssistantDobController.text =
+        _stringValue(payload['personalAssistantDob']);
+    _personalAssistantOccupationController.text =
+        _stringValue(payload['personalAssistantOccupation']);
+    _personalAssistantPhoneController.text =
+        _stringValue(payload['personalAssistantPhone']);
+    _personalAssistantPhoneCountryCode =
+    _stringValue(payload['personalAssistantPhoneCountryCode']).isEmpty
+        ? 'LS'
+        : _stringValue(payload['personalAssistantPhoneCountryCode']);
+
+    _selectedReasonOptions
+      ..clear()
+      ..addAll(_stringListValue(payload['selectedReasonOptions']));
+    _reasonOtherController.text = _stringValue(payload['reasonOther']);
+
+    _riskAssessmentDateController.text =
+        _stringValue(payload['riskAssessmentDate']);
+    _riskSocialWorkerController.text = _stringValue(payload['riskSocialWorker']);
+    _riskReasonController.text = _stringValue(payload['riskReason']);
+    _riskImmediateReferralsController.text =
+        _stringValue(payload['riskImmediateReferrals']);
+    _riskAdditionalNotesController.clear();
+    _riskReportSource = _stringValue(payload['riskReportSource']);
+    _riskHasActionTaken = _stringValue(payload['riskHasActionTaken']);
+    _riskNoActionReason = _stringValue(payload['riskNoActionReason']);
+    _riskFamilyBackground = _stringValue(payload['riskFamilyBackground']);
+    _riskFamilyBackgroundNotesController.text =
+        _stringValue(payload['riskFamilyBackgroundNotes']);
+    _riskCaregiverWellbeing = _stringValue(payload['riskCaregiverWellbeing']);
+    _riskCaregiverWellbeingNotesController.text =
+        _stringValue(payload['riskCaregiverWellbeingNotes']);
+    _riskExtendedFamilyRelationships =
+        _stringValue(payload['riskExtendedFamilyRelationships']);
+    _riskExtendedFamilyNotesController.text =
+        _stringValue(payload['riskExtendedFamilyNotes']);
+    _riskClientRelationships = _stringValue(payload['riskClientRelationships']);
+    _riskClientRelationshipsNotesController.text =
+        _stringValue(payload['riskClientRelationshipsNotes']);
+    _riskLivingCircumstances = _stringValue(payload['riskLivingCircumstances']);
+    _riskLivingCircumstancesNotesController.text =
+        _stringValue(payload['riskLivingCircumstancesNotes']);
+    _riskHousing = _stringValue(payload['riskHousing']);
+    _riskHousingNotesController.text = _stringValue(payload['riskHousingNotes']);
+    _riskPhysicalHealth = _stringValue(payload['riskPhysicalHealth']);
+    _riskPhysicalHealthNotesController.text =
+        _stringValue(payload['riskPhysicalHealthNotes']);
+    _riskNutrition = _stringValue(payload['riskNutrition']);
+    _riskNutritionNotesController.text =
+        _stringValue(payload['riskNutritionNotes']);
+    _riskEmotionalHealth = _stringValue(payload['riskEmotionalHealth']);
+    _riskEmotionalHealthNotesController.text =
+        _stringValue(payload['riskEmotionalHealthNotes']);
+    _riskSupervision = _stringValue(payload['riskSupervision']);
+    _riskSupervisionNotesController.text =
+        _stringValue(payload['riskSupervisionNotes']);
+    _riskEducation = _stringValue(payload['riskEducation']);
+    _riskEducationNotesController.text =
+        _stringValue(payload['riskEducationNotes']);
+    _riskLevel = _stringValue(payload['riskLevel']);
+
+    _riskEmergencyActionsTaken
+      ..clear()
+      ..addAll(_stringListValue(payload['riskEmergencyActionsTaken']));
+    _riskServicesAccessed
+      ..clear()
+      ..addAll(_stringListValue(payload['riskServicesAccessed']));
+    _riskNextSteps
+      ..clear()
+      ..addAll(_socialInvestigationNextSteps());
+    _riskEmergencyActionOtherController.text =
+        _stringValue(payload['riskEmergencyActionOther']);
+    _riskServicesAccessedOtherController.text =
+        _stringValue(payload['riskServicesAccessedOther']);
+
+    _selfCareIndependent = _stringValue(payload['selfCareIndependent']);
+    _selfCareDomainsNeeded
+      ..clear()
+      ..addAll(_stringListValue(payload['selfCareDomainsNeeded']));
+    _selfCareOtherController.text = _stringValue(payload['selfCareOther']);
+    _hasDisabilityDiagnosis = _stringValue(payload['hasDisabilityDiagnosis']);
+    _disabilityTypes
+      ..clear()
+      ..addAll(_stringListValue(payload['disabilityTypes']));
+    _disabilityTypeOtherController.text =
+        _stringValue(payload['disabilityTypeOther']);
+    _usesAssistiveDevice = _stringValue(payload['usesAssistiveDevice']);
+    _assistiveDevices
+      ..clear()
+      ..addAll(_stringListValue(payload['assistiveDevices']));
+    _assistiveDeviceOtherController.text =
+        _stringValue(payload['assistiveDeviceOther']);
+    _receivesRehabilitationServices =
+        _stringValue(payload['receivesRehabilitationServices']);
+    _rehabilitationServices
+      ..clear()
+      ..addAll(_stringListValue(payload['rehabilitationServices']));
+    _rehabilitationServiceOtherController.text =
+        _stringValue(payload['rehabilitationServiceOther']);
+    _employabilityBarriers
+      ..clear()
+      ..addAll(_stringListValue(payload['employabilityBarriers']));
+    _employabilityBarrierOtherController.text =
+        _stringValue(payload['employabilityBarrierOther']);
+    _skillsDevelopmentAreas
+      ..clear()
+      ..addAll(_stringListValue(payload['skillsDevelopmentAreas']));
+    _skillsDevelopmentOtherController.text =
+        _stringValue(payload['skillsDevelopmentOther']);
+
+    _clearEmploymentFieldsForChild();
+
+    _replaceDynamicItemsFromPayload(
+      _contactedPhoneNumbers,
+      payload['contactedPhoneNumbers'],
+      phoneItems: true,
+    );
+    _replaceDynamicItemsFromPayload(
+      _servicesAlreadyProvided,
+      payload['servicesAlreadyProvided'],
+      phoneItems: false,
+    );
+    _replaceHouseholdMembersFromPayload(payload['otherHouseholdMembers']);
+    _replaceCaregiversFromPayload(payload['caregivers']);
+    _replaceNextOfKinsFromPayload(payload['nextOfKins']);
+
+    _syncDisabilityStatus();
+    _removeHiddenReasonOptions();
+
+    _restoringCachedState = false;
+  }
+
+  Future<void> _saveFormState({
+    String status = 'DRAFT',
+    bool showToast = false,
+    String? householdTeiOverride,
+    String? enrollmentOverride,
+    String? stateKeyOverride,
+  }) async {
+    if (_restoringCachedState) return;
+
+    try {
+      final db = await _db();
+      await _ensureIntakeFormStateTable(db);
+
+      final stateKey = stateKeyOverride ??
+          _formStateKey(
+            householdTeiOverride: householdTeiOverride,
+            enrollmentOverride: enrollmentOverride,
+          );
+      final nowIso = DateTime.now().toIso8601String();
+
+      await db.insert(
+        'mgysd_intake_form_state',
+        {
+          'id': stateKey,
+          'stateKey': stateKey,
+          'householdTei':
+          (householdTeiOverride ?? widget.existingHouseholdTei ?? '').trim(),
+          'enrollment':
+          (enrollmentOverride ?? widget.existingAssessedEnrollment ?? '').trim(),
+          'reportedEventId': (widget.reportedEventId ?? '').trim(),
+          'status': status,
+          'payloadJson': jsonEncode(_intakeFormStatePayload()),
+          'updatedAt': nowIso,
+          'syncStatus': 'not-synced',
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      if (showToast) {
+        AppUtil.showToastMessage(
+          message: status == 'SAVED'
+              ? 'Intake form state saved.'
+              : 'Draft cached on this device.',
+        );
+      }
+    } catch (e) {
+      if (showToast) {
+        AppUtil.showToastMessage(message: 'Failed to cache draft: $e');
+      }
+    }
+  }
+
+  Future<void> _deleteFormStateByKey(String stateKey) async {
+    if (stateKey.trim().isEmpty) return;
+    try {
+      final db = await _db();
+      await _ensureIntakeFormStateTable(db);
+      await db.delete(
+        'mgysd_intake_form_state',
+        where: 'stateKey = ? OR id = ?',
+        whereArgs: [stateKey, stateKey],
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _loadFormStateIfAvailable() async {
+    try {
+      final db = await _db();
+      await _ensureIntakeFormStateTable(db);
+
+      final key = _formStateKey();
+      List<Map<String, Object?>> rows = await db.query(
+        'mgysd_intake_form_state',
+        where: 'stateKey = ? OR id = ?',
+        whereArgs: [key, key],
+        orderBy: 'updatedAt DESC',
+        limit: 1,
+      );
+
+      if (rows.isEmpty) {
+        final householdTei = (widget.existingHouseholdTei ?? '').trim();
+        final enrollment = (widget.existingAssessedEnrollment ?? '').trim();
+        final reportEventId = (widget.reportedEventId ?? '').trim();
+
+        if (householdTei.isNotEmpty ||
+            enrollment.isNotEmpty ||
+            reportEventId.isNotEmpty) {
+          final whereParts = <String>[];
+          final whereArgs = <Object?>[];
+
+          if (householdTei.isNotEmpty) {
+            whereParts.add('householdTei = ?');
+            whereArgs.add(householdTei);
+          }
+          if (enrollment.isNotEmpty) {
+            whereParts.add('enrollment = ?');
+            whereArgs.add(enrollment);
+          }
+          if (reportEventId.isNotEmpty) {
+            whereParts.add('reportedEventId = ?');
+            whereArgs.add(reportEventId);
+          }
+
+          rows = await db.query(
+            'mgysd_intake_form_state',
+            where: whereParts.join(' OR '),
+            whereArgs: whereArgs,
+            orderBy: 'updatedAt DESC',
+            limit: 1,
+          );
+        }
+      }
+
+      if (rows.isEmpty) return;
+
+      final payloadText = (rows.first['payloadJson'] ?? '').toString().trim();
+      if (payloadText.isEmpty) return;
+
+      final decoded = jsonDecode(payloadText);
+      if (decoded is! Map) return;
+
+      if (!mounted) return;
+      setState(() {
+        _applyIntakeFormStatePayload(Map<String, dynamic>.from(decoded));
+      });
+    } catch (_) {}
+  }
+
+  void _scheduleCacheSave() {
+    if (_restoringCachedState || _saving || _loadingExistingCase) return;
+    if (_cacheWriteQueued) return;
+
+    _cacheWriteQueued = true;
+
+    Future<void>.delayed(const Duration(milliseconds: 900), () async {
+      _cacheWriteQueued = false;
+      if (!mounted || _restoringCachedState || _saving) return;
+      await _saveFormState(status: 'DRAFT');
+    });
+  }
+
+  Future<void> _saveDraftCacheManually() async {
+    await _saveFormState(status: 'DRAFT', showToast: true);
+  }
+
+  Future<void> _loadExistingCase() async {
+    final householdTei = (widget.existingHouseholdTei ?? '').trim();
+    if (householdTei.isEmpty) return;
+
+    setState(() => _loadingExistingCase = true);
+    try {
+      final db = await _db();
+      final household = await _loadAttributes(db, householdTei);
+      final clientTei = await _loadPrimaryClientTei(db, householdTei);
+      final client = clientTei.isEmpty
+          ? <String, String>{}
+          : await _loadAttributes(db, clientTei);
+
+      _fileNumberController.text = household[attHouseholdFileNumber] ?? '';
+      _districtController.text = household[attHouseholdDistrict] ?? '';
+      _communityCouncilController.text =
+          household[attHouseholdCommunityCouncil] ?? '';
+      _villageController.text = household[attHouseholdVillage] ?? '';
+      _physicalAddressController.text = household[attHouseholdAddress] ?? '';
+
+      _selectedDistrictName = _districtController.text.trim();
+      _selectedCommunityCouncilName = _communityCouncilController.text.trim();
+
+      _reasonOtherController.text =
+          household[attReasonForEnrolmentOther] ?? '';
+      _setJsonSet(
+        _selectedReasonOptions,
+        household[attReasonForEnrolment] ?? '',
+      );
+
+      _clientFirstNameController.text = client[attFirstName] ?? '';
+      _clientSurnameController.text = client[attLastName] ?? '';
+      _clientDobController.text = client[attDob] ?? '';
+      _clientAgeController.text = client[attAge] ?? '';
+      _phoneController.text = client[attPhone] ?? '';
+      _alternativePhoneController.text = client[attAlternativePhone] ?? '';
+      _identityNumberController.text = client[attIdentityNumber] ?? '';
+      _clientCategory = client[attClientCategory] ?? '';
+      _isDisabled = client[attIsDisabled] ?? '';
+      _sex = client[attSex] ?? '';
+      _nationality = client[attNationality] ?? '';
+      _homeLanguage = client[attHomeLanguage] ?? '';
+      _isClientInSchool = client[attIsClientInSchool] ?? '';
+      _grade = client[attGrade] ?? '';
+      _schoolAttendanceStatus = client[attSchoolAttendanceStatus] ?? '';
+      _isAdultEmployed = client[attIsAdultEmployed] ?? '';
+      _schoolNameController.text = client[attSchoolName] ?? '';
+      _employerNameController.text = client[attEmployerName] ?? '';
+
+      _riskAssessmentDateController.text =
+          household[attRiskAssessmentDate] ??
+              client[attRiskAssessmentDate] ??
+              '';
+      _riskSocialWorkerController.text =
+          household[attRiskAssessmentSocialWorker] ??
+              client[attRiskAssessmentSocialWorker] ??
+              '';
+      _riskReportSource =
+          household[attRiskAssessmentReportSource] ??
+              client[attRiskAssessmentReportSource] ??
+              '';
+      _riskHasActionTaken =
+          household[attRiskAssessmentHasActionTaken] ??
+              client[attRiskAssessmentHasActionTaken] ??
+              '';
+      _riskNoActionReason =
+          household[attRiskAssessmentNoActionReason] ??
+              client[attRiskAssessmentNoActionReason] ??
+              '';
+      _riskFamilyBackground =
+          household[attRiskFamilyBackground] ??
+              client[attRiskFamilyBackground] ??
+              '';
+      _riskFamilyBackgroundNotesController.text =
+          household[attRiskFamilyBackgroundNotes] ??
+              client[attRiskFamilyBackgroundNotes] ??
+              '';
+      _riskCaregiverWellbeing =
+          household[attRiskCaregiverWellbeing] ??
+              client[attRiskCaregiverWellbeing] ??
+              '';
+      _riskCaregiverWellbeingNotesController.text =
+          household[attRiskCaregiverWellbeingNotes] ??
+              client[attRiskCaregiverWellbeingNotes] ??
+              '';
+      _riskExtendedFamilyRelationships =
+          household[attRiskExtendedFamilyRelationships] ??
+              client[attRiskExtendedFamilyRelationships] ??
+              '';
+      _riskExtendedFamilyNotesController.text =
+          household[attRiskExtendedFamilyNotes] ??
+              client[attRiskExtendedFamilyNotes] ??
+              '';
+      _riskClientRelationships =
+          household[attRiskClientRelationships] ??
+              client[attRiskClientRelationships] ??
+              '';
+      _riskClientRelationshipsNotesController.text =
+          household[attRiskClientRelationshipsNotes] ??
+              client[attRiskClientRelationshipsNotes] ??
+              '';
+      _riskLivingCircumstances =
+          household[attRiskLivingCircumstances] ??
+              client[attRiskLivingCircumstances] ??
+              '';
+      _riskLivingCircumstancesNotesController.text =
+          household[attRiskLivingCircumstancesNotes] ??
+              client[attRiskLivingCircumstancesNotes] ??
+              '';
+      _riskHousing =
+          household[attRiskHousing] ?? client[attRiskHousing] ?? '';
+      _riskHousingNotesController.text =
+          household[attRiskHousingNotes] ??
+              client[attRiskHousingNotes] ??
+              '';
+      _riskPhysicalHealth =
+          household[attRiskPhysicalHealth] ??
+              client[attRiskPhysicalHealth] ??
+              '';
+      _riskPhysicalHealthNotesController.text =
+          household[attRiskPhysicalHealthNotes] ??
+              client[attRiskPhysicalHealthNotes] ??
+              '';
+      _riskNutrition =
+          household[attRiskNutrition] ?? client[attRiskNutrition] ?? '';
+      _riskNutritionNotesController.text =
+          household[attRiskNutritionNotes] ??
+              client[attRiskNutritionNotes] ??
+              '';
+      _riskEmotionalHealth =
+          household[attRiskEmotionalHealth] ??
+              client[attRiskEmotionalHealth] ??
+              '';
+      _riskEmotionalHealthNotesController.text =
+          household[attRiskEmotionalHealthNotes] ??
+              client[attRiskEmotionalHealthNotes] ??
+              '';
+      _riskSupervision =
+          household[attRiskSupervision] ??
+              client[attRiskSupervision] ??
+              '';
+      _riskSupervisionNotesController.text =
+          household[attRiskSupervisionNotes] ??
+              client[attRiskSupervisionNotes] ??
+              '';
+      _riskEducation =
+          household[attRiskEducation] ?? client[attRiskEducation] ?? '';
+      _riskEducationNotesController.text =
+          household[attRiskEducationNotes] ??
+              client[attRiskEducationNotes] ??
+              '';
+      _riskLevel =
+          household[attRiskLevel] ?? client[attRiskLevel] ?? '';
+      _riskReasonController.text =
+          household[attRiskReason] ?? client[attRiskReason] ?? '';
+      _riskImmediateReferralsController.text =
+          household[attRiskImmediateReferrals] ??
+              client[attRiskImmediateReferrals] ??
+              '';
+      _riskAdditionalNotesController.clear();
+
+      _setJsonSet(
+        _riskEmergencyActionsTaken,
+        household[attRiskAssessmentEmergencyActionsTaken] ??
+            client[attRiskAssessmentEmergencyActionsTaken] ??
+            '',
+      );
+      _setJsonSet(
+        _riskServicesAccessed,
+        household[attRiskAssessmentServicesAccessed] ??
+            client[attRiskAssessmentServicesAccessed] ??
+            '',
+      );
+      _riskNextSteps
+        ..clear()
+        ..addAll(_socialInvestigationNextSteps());
+
+      _clearEmploymentFieldsForChild();
+
+      if (mounted) setState(() {});
+    } catch (e) {
+      AppUtil.showToastMessage(
+        message: 'Failed to load saved Intake: $e',
+      );
+    } finally {
+      if (mounted) setState(() => _loadingExistingCase = false);
+    }
+  }
 
   @override
   void initState() {
@@ -992,6 +2131,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _personalAssistantNameController.dispose();
     _personalAssistantSurnameController.dispose();
     _personalAssistantRelationshipController.dispose();
+    _personalAssistantRelationshipOtherController.dispose();
     _personalAssistantDobController.dispose();
     _personalAssistantOccupationController.dispose();
     _personalAssistantPhoneController.dispose();
@@ -1262,6 +2402,17 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         .toList();
   }
 
+  List<_Opt> _caregiverRelationshipOptionsForValue(String value) {
+    final trimmed = value.trim();
+    final options = List<_Opt>.from(caregiverRelationshipOptions);
+
+    if (trimmed.isNotEmpty && !options.any((option) => option.code == trimmed)) {
+      options.add(_Opt(trimmed, trimmed));
+    }
+
+    return options;
+  }
+
   List<_Opt> _relationshipOptionsForMemberSex(String memberSex) {
     final options = <_Opt>[
       _Opt('GRANDPARENT', 'Grandparent'),
@@ -1479,6 +2630,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             _controllerHasData(_personalAssistantSurnameController) ||
             _personalAssistantSex.trim().isNotEmpty ||
             _controllerHasData(_personalAssistantRelationshipController) ||
+            _controllerHasData(_personalAssistantRelationshipOtherController) ||
             _controllerHasData(_personalAssistantDobController) ||
             _controllerHasData(_personalAssistantOccupationController) ||
             _controllerHasData(_personalAssistantPhoneController));
@@ -2089,6 +3241,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             attLastName: caregiver.surnameController.text,
             attSex: caregiver.sex,
             attRelationshipToClient: caregiver.relationshipController.text,
+            attRelationshipToClientOther:
+            _isOtherRelationship(caregiver.relationshipController.text)
+                ? caregiver.relationshipOtherController.text
+                : '',
             attDob: caregiver.dobController.text,
             attOccupation: caregiver.occupationController.text,
             attPhone: caregiver.phoneController.text,
@@ -2126,6 +3282,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             attSex: _personalAssistantSex,
             attRelationshipToClient:
             _personalAssistantRelationshipController.text,
+            attRelationshipToClientOther:
+            _isOtherRelationship(_personalAssistantRelationshipController.text)
+                ? _personalAssistantRelationshipOtherController.text
+                : '',
             attDob: _personalAssistantDobController.text,
             attOccupation: _personalAssistantOccupationController.text,
             attPhone: _personalAssistantPhoneController.text,
@@ -3352,14 +4512,35 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 requiredField: true,
                 onChanged: (v) => setState(() => caregiver.sex = v ?? ''),
               ),
-              _Input(
-                controller: caregiver.relationshipController,
+              _dropdown(
                 label: 'Relationship with client',
-                hint: 'e.g. Aunt, Grandmother',
+                value: caregiver.relationshipController.text.trim(),
+                options: _caregiverRelationshipOptionsForValue(
+                  caregiver.relationshipController.text,
+                ),
                 requiredField: true,
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                onChanged: (v) {
+                  setState(() {
+                    caregiver.relationshipController.text = v ?? '';
+                    if (!_isOtherRelationship(caregiver.relationshipController.text)) {
+                      caregiver.relationshipOtherController.clear();
+                    }
+                  });
+                },
               ),
             ),
+            if (_isOtherRelationship(caregiver.relationshipController.text)) ...[
+              const SizedBox(height: 10),
+              _Input(
+                controller: caregiver.relationshipOtherController,
+                label: 'Specify other relationship',
+                hint: 'Enter relationship with client',
+                requiredField: true,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Required'
+                    : null,
+              ),
+            ],
             const SizedBox(height: 10),
             _row2(
               _dateInput(
@@ -3550,12 +4731,38 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 setState(() => _personalAssistantSex = v ?? '');
               },
             ),
-            _Input(
-              controller: _personalAssistantRelationshipController,
+            _dropdown(
               label: 'Relationship with client',
-              hint: 'Enter relationship',
+              value: _personalAssistantRelationshipController.text.trim(),
+              options: _caregiverRelationshipOptionsForValue(
+                _personalAssistantRelationshipController.text,
+              ),
+              onChanged: (v) {
+                setState(() {
+                  _personalAssistantRelationshipController.text = v ?? '';
+                  if (!_isOtherRelationship(
+                    _personalAssistantRelationshipController.text,
+                  )) {
+                    _personalAssistantRelationshipOtherController.clear();
+                  }
+                });
+              },
             ),
           ),
+          if (_isOtherRelationship(
+            _personalAssistantRelationshipController.text,
+          )) ...[
+            const SizedBox(height: 10),
+            _Input(
+              controller: _personalAssistantRelationshipOtherController,
+              label: 'Specify other relationship',
+              hint: 'Enter relationship with client',
+              requiredField: true,
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? 'Required'
+                  : null,
+            ),
+          ],
           const SizedBox(height: 10),
           _row2(
             _dateInput(
