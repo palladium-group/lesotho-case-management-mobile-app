@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:lncmis_mobile_app/app_state/intervention_card_state/intervention_card_state.dart';
 import 'package:lncmis_mobile_app/core/components/entry_form_save_button.dart';
 import 'package:lncmis_mobile_app/core/components/material_card.dart';
@@ -13,8 +12,11 @@ import 'package:lncmis_mobile_app/core/offline_db/offline_db_provider.dart';
 import 'package:lncmis_mobile_app/core/services/organisation_unit_service.dart';
 import 'package:lncmis_mobile_app/models/organisation_unit.dart';
 import 'package:lncmis_mobile_app/core/utils/app_util.dart';
+import 'package:lncmis_mobile_app/core/utils/form_util.dart';
+import 'package:lncmis_mobile_app/models/input_field.dart';
+import 'package:lncmis_mobile_app/models/form_section.dart';
+import 'package:lncmis_mobile_app/core/utils/tracked_entity_instance_util.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
-import 'package:lncmis_mobile_app/modules/mgysd_case_management/workflow/helpers/mgysd_program_stage_event_helper.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -23,28 +25,22 @@ class MgysdNewCasePage extends StatefulWidget {
     Key? key,
     required this.color,
     this.reportedEventId,
+    this.existingHouseholdTei,
     this.prefillClientFirstName,
     this.prefillClientLastName,
     this.prefillClientPhone,
     this.prefillCaseType,
     this.prefillIncidentDate,
-    this.existingHouseholdTei,
-    this.existingAssessedEnrollment,
   }) : super(key: key);
 
   final Color color;
   final String? reportedEventId;
+  final String? existingHouseholdTei;
   final String? prefillClientFirstName;
   final String? prefillClientLastName;
   final String? prefillClientPhone;
   final String? prefillCaseType;
   final String? prefillIncidentDate;
-  final String? existingHouseholdTei;
-  final String? existingAssessedEnrollment;
-
-  bool get isEditing =>
-      (existingHouseholdTei ?? '').trim().isNotEmpty &&
-          (existingAssessedEnrollment ?? '').trim().isNotEmpty;
 
   @override
   State<MgysdNewCasePage> createState() => _MgysdNewCasePageState();
@@ -55,89 +51,6 @@ class _Opt {
   final String label;
 
   const _Opt(this.code, this.label);
-}
-
-class _MgysdCountryCodeOption {
-  final String code;
-  final String label;
-  final String dialCode;
-  final int minNationalDigits;
-  final int maxNationalDigits;
-  final List<String> allowedNationalPrefixes;
-  final List<String> disallowedNationalPrefixes;
-  final String prefixHint;
-  final bool useNanpRules;
-
-  const _MgysdCountryCodeOption({
-    required this.code,
-    required this.label,
-    required this.dialCode,
-    this.minNationalDigits = 7,
-    this.maxNationalDigits = 12,
-    this.allowedNationalPrefixes = const [],
-    this.disallowedNationalPrefixes = const [],
-    this.prefixHint = '',
-    this.useNanpRules = false,
-  });
-}
-
-class _MgysdPhoneNumberInputFormatter extends TextInputFormatter {
-  final _MgysdCountryCodeOption country;
-
-  const _MgysdPhoneNumberInputFormatter(this.country);
-
-  @override
-  TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue,
-      TextEditingValue newValue,
-      ) {
-    final formatted = country.code == 'INTL'
-        ? _formatInternationalNumber(newValue.text)
-        : _formatNationalNumber(newValue.text);
-
-    return TextEditingValue(
-      text: formatted,
-      selection: TextSelection.collapsed(offset: formatted.length),
-      composing: TextRange.empty,
-    );
-  }
-
-  String _formatInternationalNumber(String value) {
-    final trimmed = value.trim();
-    final hasLeadingPlus = trimmed.startsWith('+');
-    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
-    final limitedDigits = digits.length > country.maxNationalDigits
-        ? digits.substring(0, country.maxNationalDigits)
-        : digits;
-
-    if (limitedDigits.isEmpty) {
-      return hasLeadingPlus ? '+' : '';
-    }
-
-    return hasLeadingPlus ? '+$limitedDigits' : limitedDigits;
-  }
-
-  String _formatNationalNumber(String value) {
-    final dialDigits = country.dialCode.replaceAll('+', '');
-    var digits = value.replaceAll(RegExp(r'[^0-9]'), '');
-
-    if (digits.startsWith(dialDigits) && digits.length > dialDigits.length) {
-      digits = digits.substring(dialDigits.length);
-    }
-
-    if (digits.startsWith('0')) {
-      final withoutLeadingZeros = digits.replaceFirst(RegExp(r'^0+'), '');
-      if (withoutLeadingZeros.isNotEmpty) {
-        digits = withoutLeadingZeros;
-      }
-    }
-
-    if (digits.length > country.maxNationalDigits) {
-      digits = digits.substring(0, country.maxNationalDigits);
-    }
-
-    return digits;
-  }
 }
 
 class _ReasonGroup {
@@ -157,12 +70,10 @@ class _ReasonGroup {
 class _DynamicTextItem {
   final String id;
   final TextEditingController controller;
-  String phoneCountryCode;
 
   _DynamicTextItem({
     required this.id,
     String value = '',
-    this.phoneCountryCode = 'LS',
   }) : controller = TextEditingController(text: value);
 
   void dispose() => controller.dispose();
@@ -182,7 +93,6 @@ class _HouseholdMemberEntry {
   String sex;
   String relationshipToClient;
   String hasDisability;
-  String contactsCountryCode;
   bool isExpanded;
 
   _HouseholdMemberEntry({
@@ -190,7 +100,6 @@ class _HouseholdMemberEntry {
     this.sex = '',
     this.relationshipToClient = '',
     this.hasDisability = '',
-    this.contactsCountryCode = 'LS',
     this.isExpanded = true,
   })  : firstNameController = TextEditingController(),
         surnameController = TextEditingController(),
@@ -241,13 +150,11 @@ class _CaregiverEntry {
   final TextEditingController phoneController;
 
   String sex;
-  String phoneCountryCode;
   bool isExpanded;
 
   _CaregiverEntry({
     required this.id,
     this.sex = '',
-    this.phoneCountryCode = 'LS',
     this.isExpanded = true,
   })  : nameController = TextEditingController(),
         surnameController = TextEditingController(),
@@ -288,14 +195,12 @@ class _NextOfKinEntry {
   final TextEditingController relationshipOtherController;
 
   String relationship;
-  String phoneCountryCode;
   bool isExpanded;
 
 
   _NextOfKinEntry({
     required this.id,
     this.relationship = '',
-    this.phoneCountryCode = 'LS',
     this.isExpanded = true,
   })  : firstNameController = TextEditingController(),
         surnameController = TextEditingController(),
@@ -322,13 +227,6 @@ class _NextOfKinEntry {
 
 class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   final _formKey = GlobalKey<FormState>();
-
-  final GlobalKey _reasonForEnrolmentSectionKey = GlobalKey();
-  final GlobalKey _clientDemographicsSectionKey = GlobalKey();
-
-  bool _showMandatoryFieldErrors = false;
-  bool _forceOpenMandatorySections = false;
-  int _mandatoryExpansionRefresh = 0;
 
   final _fileNumberController = TextEditingController();
   final _districtController = TextEditingController();
@@ -397,16 +295,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   DateTime? _selectedDob;
   bool _saving = false;
   bool _loadingOrgUnits = false;
-  bool _loadingExistingCase = false;
-  bool _countryPickerBusy = false;
-  bool _restoringCachedState = false;
-  bool _cacheWriteQueued = false;
-
-  String _clientPhoneCountryCode = 'LS';
-  String _clientAlternativePhoneCountryCode = 'LS';
-  String _fatherPhoneCountryCode = 'LS';
-  String _motherPhoneCountryCode = 'LS';
-  String _personalAssistantPhoneCountryCode = 'LS';
 
   List<OrganisationUnit> _districtOrgUnits = [];
   List<OrganisationUnit> _communityCouncilOrgUnits = [];
@@ -650,151 +538,38 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   static const String relHouseholdHasMember = MgysdDhis2Uids.householdHasMemberRelationshipType;
 
   static const List<_Opt> clientCategoryOptions = [
-    _Opt('Child', 'Child'),
-    _Opt('Adult', 'Adult / Elderly Person'),
+    _Opt('CHILD', 'Child'),
+    _Opt('ADULT_ELDERLY_PERSON', 'Adult / Elderly Person'),
   ];
 
   static const List<_Opt> yesNoOptions = [
-    _Opt('Yes', 'Yes'),
-    _Opt('No', 'No'),
+    _Opt('YES', 'Yes'),
+    _Opt('NO', 'No'),
   ];
 
   static const List<_Opt> yesNoUnknownOptions = [
-    _Opt('Yes', 'Yes'),
-    _Opt('No', 'No'),
-    _Opt('Unknown', 'Unknown'),
+    _Opt('YES', 'Yes'),
+    _Opt('NO', 'No'),
+    _Opt('UNKNOWN', 'Unknown'),
   ];
 
   static const List<_Opt> sexOptions = [
-    _Opt('Male', 'Male'),
-    _Opt('Female', 'Female'),
-  ];
-
-  static const List<_MgysdCountryCodeOption> _phoneCountryOptions = [
-    _MgysdCountryCodeOption(
-      code: 'LS',
-      label: 'Lesotho (+266)',
-      dialCode: '+266',
-      minNationalDigits: 8,
-      maxNationalDigits: 8,
-      allowedNationalPrefixes: ['2', '5', '6'],
-      disallowedNationalPrefixes: ['54', '55'],
-      prefixHint: 'Lesotho numbers must start with 2, 5 or 6. Prefixes 54 and 55 are not allowed',
-    ),
-    _MgysdCountryCodeOption(
-      code: 'ZA',
-      label: 'South Africa (+27)',
-      dialCode: '+27',
-      minNationalDigits: 9,
-      maxNationalDigits: 9,
-      allowedNationalPrefixes: [
-        '60', '61', '62', '63', '64', '65', '66', '67', '68',
-        '71', '72', '73', '74', '76', '78', '79', '81', '82', '83', '84',
-      ],
-      prefixHint: 'South African mobile numbers usually start with 6, 7 or 8 ranges such as 60, 71 or 82',
-    ),
-    _MgysdCountryCodeOption(
-      code: 'ZW',
-      label: 'Zimbabwe (+263)',
-      dialCode: '+263',
-      minNationalDigits: 9,
-      maxNationalDigits: 9,
-      allowedNationalPrefixes: ['71', '73', '77', '78'],
-      prefixHint: 'Zimbabwe mobile numbers must start with 71, 73, 77 or 78',
-    ),
-    _MgysdCountryCodeOption(
-      code: 'MZ',
-      label: 'Mozambique (+258)',
-      dialCode: '+258',
-      minNationalDigits: 8,
-      maxNationalDigits: 9,
-      allowedNationalPrefixes: ['82', '83', '84', '85', '86', '87'],
-      prefixHint: 'Mozambique mobile numbers must start with 82, 83, 84, 85, 86 or 87',
-    ),
-    _MgysdCountryCodeOption(
-      code: 'BW',
-      label: 'Botswana (+267)',
-      dialCode: '+267',
-      minNationalDigits: 8,
-      maxNationalDigits: 8,
-      allowedNationalPrefixes: ['71', '72', '73', '74', '75', '76'],
-      prefixHint: 'Botswana mobile numbers must start with 71, 72, 73, 74, 75 or 76',
-    ),
-    _MgysdCountryCodeOption(
-      code: 'NA',
-      label: 'Namibia (+264)',
-      dialCode: '+264',
-      minNationalDigits: 9,
-      maxNationalDigits: 9,
-      allowedNationalPrefixes: ['81', '82', '83', '84', '85'],
-      prefixHint: 'Namibia mobile/electronic communications numbers must start with 81, 82, 83, 84 or 85',
-    ),
-    _MgysdCountryCodeOption(
-      code: 'SZ',
-      label: 'Eswatini (+268)',
-      dialCode: '+268',
-      minNationalDigits: 8,
-      maxNationalDigits: 8,
-      allowedNationalPrefixes: ['75', '76', '77', '78', '79'],
-      prefixHint: 'Eswatini mobile numbers must start with 75, 76, 77, 78 or 79',
-    ),
-    _MgysdCountryCodeOption(
-      code: 'ZM',
-      label: 'Zambia (+260)',
-      dialCode: '+260',
-      minNationalDigits: 9,
-      maxNationalDigits: 9,
-      allowedNationalPrefixes: ['76', '77', '95', '96', '97'],
-      prefixHint: 'Zambia mobile numbers must start with 76, 77, 95, 96 or 97',
-    ),
-    _MgysdCountryCodeOption(
-      code: 'MW',
-      label: 'Malawi (+265)',
-      dialCode: '+265',
-      minNationalDigits: 7,
-      maxNationalDigits: 9,
-      allowedNationalPrefixes: ['1', '3', '7', '8', '9'],
-      prefixHint: 'Malawi numbers must start with an allocated range such as 1, 3, 7, 8 or 9',
-    ),
-    _MgysdCountryCodeOption(
-      code: 'US',
-      label: 'USA/Canada (+1)',
-      dialCode: '+1',
-      minNationalDigits: 10,
-      maxNationalDigits: 10,
-      useNanpRules: true,
-      prefixHint: 'USA/Canada numbers must follow NANP format: area code and exchange code start with 2-9',
-    ),
-    _MgysdCountryCodeOption(
-      code: 'GB',
-      label: 'United Kingdom (+44)',
-      dialCode: '+44',
-      minNationalDigits: 10,
-      maxNationalDigits: 10,
-      allowedNationalPrefixes: ['7'],
-      prefixHint: 'UK mobile numbers must start with 7 after the +44 country code',
-    ),
-    _MgysdCountryCodeOption(
-      code: 'INTL',
-      label: 'Other country (use + code)',
-      dialCode: '+',
-      minNationalDigits: 8,
-      maxNationalDigits: 15,
-    ),
+    _Opt('MALE', 'Male'),
+    _Opt('FEMALE', 'Female'),
   ];
 
   static const List<_Opt> nationalityOptions = [
-    _Opt('Mosotho', 'Mosotho'),
-    _Opt('South African', 'South African'),
-    _Opt('Zimbabwean', 'Zimbabwean'),
-    _Opt('Other', 'Other'),
+    _Opt('MOSOTHO', 'Mosotho'),
+    _Opt('SOUTH_AFRICAN', 'South African'),
+    _Opt('ZIMBABWEAN', 'Zimbabwean'),
+    _Opt('OTHER', 'Other'),
   ];
 
   static const List<_Opt> homeLanguageOptions = [
-    _Opt('Sesotho', 'Sesotho'),
-    _Opt('English', 'English'),
-    _Opt('Xhosa', 'Xhosa'),
-    _Opt('Other', 'Other'),
+    _Opt('SESOTHO', 'Sesotho'),
+    _Opt('ENGLISH', 'English'),
+    _Opt('XHOSA', 'Xhosa'),
+    _Opt('OTHER', 'Other'),
   ];
 
   static const List<_Opt> gradeOptions = [
@@ -813,11 +588,11 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   ];
 
   static const List<_Opt> schoolLevelOptions = [
-    _Opt('Pre-School', 'Pre-School'),
-    _Opt('Primary', 'Primary'),
-    _Opt('Secondary', 'Secondary'),
-    _Opt('High School', 'High School'),
-    _Opt('Tertiary', 'Tertiary'),
+    _Opt('PRE_SCHOOL', 'Pre-School'),
+    _Opt('PRIMARY', 'Primary'),
+    _Opt('SECONDARY', 'Secondary'),
+    _Opt('HIGH_SCHOOL', 'High School'),
+    _Opt('TERTIARY', 'Tertiary'),
   ];
 
   static const List<_Opt> primaryGradeOptions = [
@@ -842,25 +617,25 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   ];
 
   static const List<_Opt> notInSchoolStatusOptions = [
-    _Opt('Never attended school', 'Never attended school'),
-    _Opt('No longer in school', 'No longer in school'),
+    _Opt('Never attended', 'Never attended school'),
+    _Opt('No longer attending', 'No longer in school'),
   ];
 
   static const List<_Opt> highestLevelAchievedOptions = [
-    _Opt('Primary', 'Primary'),
-    _Opt('Secondary', 'Secondary'),
-    _Opt('High School', 'High School'),
-    _Opt('Tertiary', 'Tertiary'),
+    _Opt('PRIMARY', 'Primary'),
+    _Opt('SECONDARY', 'Secondary'),
+    _Opt('HIGH_SCHOOL', 'High School'),
+    _Opt('TERTIARY', 'Tertiary'),
   ];
 
   static const List<_Opt> inSchoolAttendanceOptions = [
-    _Opt('POOR_ATTENDANCE', 'Poor attendance'),
-    _Opt('GOOD_ATTENDANCE', 'Good attendance'),
+    _Opt('Poor attendance', 'Poor attendance'),
+    _Opt('Good attendance', 'Good attendance'),
   ];
 
   static const List<_Opt> notInSchoolAttendanceOptions = [
-    _Opt('NO_LONGER_IN_SCHOOL', 'No longer in School'),
-    _Opt('NEVER_ATTENDED_SCHOOL', 'Never attended School'),
+    _Opt('No longer attending', 'No longer attending'),
+    _Opt('Never attended', 'Never attended'),
   ];
 
   static const List<_Opt> nextOfKinRelationshipOptions = [
@@ -1013,10 +788,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   ];
 
   static const List<_Opt> riskLevelOptions = [
-    _Opt('NO RISK', 'No Risk'),
-    _Opt('LOW RISK', 'Low Risk'),
-    _Opt('MEDIUM RISK', 'Medium Risk'),
-    _Opt('HIGH RISK', 'High Risk'),
+    _Opt('NO_RISK', 'No Risk'),
+    _Opt('LOW', 'Low Risk'),
+    _Opt('MEDIUM', 'Medium Risk'),
+    _Opt('HIGH', 'High Risk'),
   ];
 
   static const List<_Opt> selfCareDomains = [
@@ -1034,9 +809,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _Opt('BLINDNESS', 'Blindness'),
     _Opt('SPEECH_IMPAIRMENT', 'Speech impairment'),
     _Opt('MOBILITY_IMPAIRMENT', 'Mobility impairment'),
-    _Opt('VISUAL_IMPAIRMENT', 'Visual impairment'),
-    _Opt('ALBINISM', 'Albinism'),
-    _Opt('DEAF', 'Deaf'),
     _Opt('OTHER', 'Other'),
   ];
 
@@ -1078,6 +850,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         _Opt('ABUSE_PHYSICAL', 'Physical abuse'),
         _Opt('ABUSE_EMOTIONAL', 'Emotional abuse'),
         _Opt('ABUSE_SEXUAL', 'Sexual abuse'),
+        _Opt('ABUSE_RAPE', 'Rape'),
         _Opt('ABUSE_INCEST', 'Incest'),
         _Opt('DOMESTIC_VIOLENCE', 'Domestic violence'),
         _Opt('HUMAN_TRAFFICKING', 'Human trafficking / Trafficking in Persons'),
@@ -1153,21 +926,21 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     'SOCIAL_ASSISTANCE_EDUCATIONAL_AID',
   };
 
-  bool get _isAdultOrElderly => _clientCategory == 'Adult';
-  bool get _isChild => _clientCategory == 'Child';
-  bool get _isDisabledYes => _isDisabled == 'Yes';
+  bool get _isAdultOrElderly => _clientCategory == 'ADULT_ELDERLY_PERSON';
+  bool get _isChild => _clientCategory == 'CHILD';
+  bool get _isDisabledYes => _isDisabled == 'YES';
   bool get _showGuardianOption => _isDisabledYes;
   bool get _disabilityAutoDetected =>
-      _usesAssistiveDevice == 'Yes' || _hasDisabilityDiagnosis == 'Yes';
+      _usesAssistiveDevice == 'YES' || _hasDisabilityDiagnosis == 'YES';
 
   void _syncDisabilityStatus() {
     final diagnosis = _hasDisabilityDiagnosis.trim();
     final device = _usesAssistiveDevice.trim();
 
-    if (diagnosis == 'Yes' || device == 'Yes') {
-      _isDisabled = 'Yes';
-    } else if (diagnosis == 'No' && device == 'No') {
-      _isDisabled = 'No';
+    if (diagnosis == 'YES' || device == 'YES') {
+      _isDisabled = 'YES';
+    } else if (diagnosis == 'NO' && device == 'NO') {
+      _isDisabled = 'NO';
     } else {
       _isDisabled = '';
     }
@@ -2323,15 +2096,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _addContactedPhoneNumber();
     _addServiceProvided();
     _loadLocationTree();
-    _restoreSavedOrCachedState();
-  }
-
-  Future<void> _restoreSavedOrCachedState() async {
-    if (widget.isEditing) {
-      await _loadExistingCase();
-    }
-
-    await _loadFormStateIfAvailable();
   }
 
   @override
@@ -2564,238 +2328,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     return age < 0 ? 0 : age;
   }
 
-  _MgysdCountryCodeOption _phoneCountryByCode(String code) {
-    for (final option in _phoneCountryOptions) {
-      if (option.code == code) return option;
-    }
-    return _phoneCountryOptions.first;
-  }
-
-  String _digitsOnly(String value) {
-    return value.replaceAll(RegExp(r'[^0-9]'), '');
-  }
-
-  bool _hasInvalidPhoneCharacters(String value) {
-    return RegExp(r'[^0-9+\s\-\(\)]').hasMatch(value);
-  }
-
-  bool _hasValidNationalLength(
-      String nationalDigits,
-      _MgysdCountryCodeOption country,
-      ) {
-    return nationalDigits.length >= country.minNationalDigits &&
-        nationalDigits.length <= country.maxNationalDigits;
-  }
-
-  bool _hasDisallowedNationalPrefix(
-      String nationalDigits,
-      _MgysdCountryCodeOption country,
-      ) {
-    if (country.code == 'INTL' || nationalDigits.isEmpty) return false;
-    return country.disallowedNationalPrefixes.any(nationalDigits.startsWith);
-  }
-
-  bool _hasPossibleNetworkPrefix(
-      String nationalDigits,
-      _MgysdCountryCodeOption country,
-      ) {
-    if (country.code == 'INTL' || nationalDigits.isEmpty) return true;
-
-    if (_hasDisallowedNationalPrefix(nationalDigits, country)) return false;
-
-    if (country.useNanpRules) {
-      if (nationalDigits.isNotEmpty &&
-          !RegExp(r'^[2-9]').hasMatch(nationalDigits)) {
-        return false;
-      }
-      if (nationalDigits.length >= 4 &&
-          !RegExp(r'^[2-9][0-9]{2}[2-9]').hasMatch(nationalDigits)) {
-        return false;
-      }
-      return true;
-    }
-
-    if (country.allowedNationalPrefixes.isEmpty) return true;
-
-    return country.allowedNationalPrefixes.any((prefix) {
-      return prefix.startsWith(nationalDigits) ||
-          nationalDigits.startsWith(prefix);
-    });
-  }
-
-  bool _hasValidNetworkPrefix(
-      String nationalDigits,
-      _MgysdCountryCodeOption country,
-      ) {
-    if (country.code == 'INTL') return true;
-
-    if (_hasDisallowedNationalPrefix(nationalDigits, country)) return false;
-
-    if (country.useNanpRules) {
-      return RegExp(r'^[2-9][0-9]{2}[2-9][0-9]{6}$')
-          .hasMatch(nationalDigits);
-    }
-
-    if (country.allowedNationalPrefixes.isEmpty) return true;
-
-    return country.allowedNationalPrefixes.any(nationalDigits.startsWith);
-  }
-
-  String _phonePrefixMessage(_MgysdCountryCodeOption country) {
-    return country.prefixHint.isNotEmpty
-        ? country.prefixHint
-        : 'Phone number prefix does not match selected country';
-  }
-
-  String _phoneLengthMessage(_MgysdCountryCodeOption country) {
-    if (country.minNationalDigits == country.maxNationalDigits) {
-      return '${country.label} numbers must have ${country.maxNationalDigits} digits after ${country.dialCode}';
-    }
-
-    return '${country.label} numbers must have ${country.minNationalDigits} to ${country.maxNationalDigits} digits after ${country.dialCode}';
-  }
-
-  void _validateNationalPhoneDigits(
-      String nationalDigits,
-      _MgysdCountryCodeOption country,
-      ) {
-    if (!_hasPossibleNetworkPrefix(nationalDigits, country)) {
-      throw FormatException(_phonePrefixMessage(country));
-    }
-
-    if (!_hasValidNationalLength(nationalDigits, country)) {
-      throw FormatException(_phoneLengthMessage(country));
-    }
-
-    if (!_hasValidNetworkPrefix(nationalDigits, country)) {
-      throw FormatException(_phonePrefixMessage(country));
-    }
-  }
-
-  String _normalisePhoneByCountryCode(String value, String countryCode) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return '';
-
-    final country = _phoneCountryByCode(countryCode);
-    final compact = trimmed.replaceAll(RegExp(r'[\s\-\(\)]'), '');
-    final digits = _digitsOnly(compact);
-
-    if (digits.isEmpty) {
-      throw const FormatException('Phone number must contain digits');
-    }
-
-    if (country.code == 'INTL') {
-      if (!compact.startsWith('+')) {
-        throw const FormatException('International numbers must start with +');
-      }
-      if (digits.length < 8 || digits.length > 15) {
-        throw const FormatException('International numbers must have 8 to 15 digits');
-      }
-      return '+$digits';
-    }
-
-    final dialDigits = country.dialCode.replaceAll('+', '');
-
-    if (compact.startsWith('+')) {
-      if (!digits.startsWith(dialDigits)) {
-        throw const FormatException('Phone number country code does not match selected country');
-      }
-      final nationalDigits = digits.substring(dialDigits.length);
-      _validateNationalPhoneDigits(nationalDigits, country);
-      return '+$digits';
-    }
-
-    if (digits.startsWith(dialDigits)) {
-      final nationalDigits = digits.substring(dialDigits.length);
-      _validateNationalPhoneDigits(nationalDigits, country);
-      return '+$digits';
-    }
-
-    final localDigits = digits.replaceFirst(RegExp(r'^0+'), '');
-    _validateNationalPhoneDigits(localDigits, country);
-
-    return '${country.dialCode}$localDigits';
-  }
-
-  String _normalisedPhoneNumber(String value, String countryCode) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return '';
-
-    try {
-      return _normalisePhoneByCountryCode(trimmed, countryCode);
-    } catch (_) {
-      return trimmed;
-    }
-  }
-
-  String? _phoneValidator(
-      String? value, {
-        required bool requiredField,
-        required String countryCode,
-      }) {
-    final text = (value ?? '').trim();
-    if (!requiredField && text.isEmpty) return null;
-    if (text.isEmpty) return 'Required';
-
-    if (_hasInvalidPhoneCharacters(text)) {
-      return 'Use numbers only';
-    }
-
-    final country = _phoneCountryByCode(countryCode);
-
-    try {
-      _normalisePhoneByCountryCode(text, countryCode);
-      return null;
-    } on FormatException catch (e) {
-      if (country.code == 'INTL') {
-        return e.message.isNotEmpty
-            ? e.message
-            : 'Start with + country code, e.g. +266...';
-      }
-      return e.message.isNotEmpty
-          ? e.message
-          : 'Enter a valid ${country.label} phone number';
-    } catch (_) {
-      if (country.code == 'INTL') {
-        return 'Start with + country code, e.g. +266...';
-      }
-      return 'Enter a valid ${country.label} phone number';
-    }
-  }
-
-  String? _identityNumberValidator(String? value) {
-    final raw = (value ?? '').trim();
-    if (raw.isEmpty) return null;
-
-    final compact = raw.replaceAll(RegExp(r'[\s-]'), '').toUpperCase();
-
-    if (!RegExp(r'^[A-Z0-9]+$').hasMatch(compact)) {
-      return 'Use letters and numbers only';
-    }
-
-    if (compact.length < 6 || compact.length > 20) {
-      return 'Identity number must be 6 to 20 characters';
-    }
-
-    if (_nationality == 'South African' &&
-        RegExp(r'^\d+$').hasMatch(compact) &&
-        compact.length != 13) {
-      return 'South African identity number must have 13 digits';
-    }
-
-    return null;
-  }
-
-  List<String> _normalisedDynamicPhoneValues(List<_DynamicTextItem> items) {
-    return items
-        .map((item) => _normalisedPhoneNumber(
-      item.controller.text.trim(),
-      item.phoneCountryCode,
-    ))
-        .where((value) => value.isNotEmpty)
-        .toList();
-  }
-
   Future<void> _pickDateFor(TextEditingController controller) async {
     final now = DateTime.now();
     final initial = DateTime.tryParse(controller.text.trim()) ??
@@ -2832,8 +2364,11 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         _selectedDob = picked;
         _clientDobController.text = _formatDate(picked);
         _clientAgeController.text = age.toString();
-        _clientCategory = age < 18 ? 'Child' : 'Adult';
-        _clearEmploymentFieldsForChild();
+        _clientCategory = age < 18 ? 'CHILD' : 'ADULT_ELDERLY_PERSON';
+        if (!_isAdultOrElderly) {
+          _isAdultEmployed = '';
+          _employerNameController.clear();
+        }
         if (_isAdultOrElderly) _grade = '';
         _removeHiddenReasonOptions();
       });
@@ -2925,7 +2460,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       return false;
     }
     if (reason.code == 'TEENAGE_PREGNANCY_YOUNG_MOTHERS') {
-      return _isChild && _sex == 'Female';
+      return _isChild && _sex == 'FEMALE';
     }
     if (reason.code == 'SOCIAL_ASSISTANCE_EDUCATIONAL_AID') {
       final age = _clientAge;
@@ -3107,12 +2642,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required String teiTypeId,
     required String orgUnit,
   }) async {
-    await db.delete(
-      'tracked_entity_instance',
-      where: 'trackedEntityInstance = ?',
-      whereArgs: [teiId],
-    );
-
     await db.insert(
       'tracked_entity_instance',
       {
@@ -3126,21 +2655,43 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     );
   }
 
+  bool _isBooleanTrackedEntityAttribute(String attribute) {
+    return <String>{
+      attIsDisabled,
+      attIsClientInSchool,
+      attIsAdultEmployed,
+    }.contains(attribute.trim());
+  }
+
+  String _normaliseDhis2AttributeValue({
+    required String attribute,
+    required String value,
+  }) {
+    final v = value.trim();
+    if (v.isEmpty) return '';
+
+    if (_isBooleanTrackedEntityAttribute(attribute)) {
+      final upper = v.toUpperCase();
+      if (upper == 'YES' || upper == 'TRUE' || upper == '1') return 'true';
+      if (upper == 'NO' || upper == 'FALSE' || upper == '0') return 'false';
+    }
+
+    return v;
+  }
+
   Future<void> _saveAttrOffline({
     required Database db,
     required String teiId,
     required String attribute,
     required String value,
   }) async {
-    final v = value.trim();
-    if (attribute.startsWith('ATTR_') || attribute.length != 11) return;
+    final attr = attribute.trim();
+    if (attr.isEmpty || attr.startsWith('ATTR_')) return;
 
-    await db.delete(
-      'tracked_entity_instance_attribute',
-      where: 'trackedEntityInstance = ? AND attribute = ?',
-      whereArgs: [teiId, attribute],
+    final v = _normaliseDhis2AttributeValue(
+      attribute: attr,
+      value: value,
     );
-
     if (v.isEmpty) return;
 
     await db.insert(
@@ -3148,7 +2699,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       {
         'id': _newId(),
         'trackedEntityInstance': teiId,
-        'attribute': attribute,
+        'attribute': attr,
         'value': v,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
@@ -3176,12 +2727,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required String fromTei,
     required String toTei,
   }) async {
-    await db.delete(
-      'tei_relationships',
-      where: 'relationshipType = ? AND fromTei = ? AND toTei = ?',
-      whereArgs: [relationshipTypeCode, fromTei, toTei],
-    );
-
     await db.insert(
       'tei_relationships',
       {
@@ -3202,12 +2747,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required String memberRole,
     required bool isPrimaryClient,
   }) async {
-    await db.delete(
-      'mgysd_household_member',
-      where: 'householdTei = ? AND memberTei = ?',
-      whereArgs: [householdTei, memberTei],
-    );
-
     await db.insert(
       'mgysd_household_member',
       {
@@ -3231,13 +2770,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required String searchableValue,
   }) async {
     final nowIso = DateTime.now().toIso8601String();
-
-    await db.delete(
-      'enrollment',
-      where: 'enrollment = ?',
-      whereArgs: [enrollmentId],
-    );
-
     await db.insert(
       'enrollment',
       {
@@ -3262,66 +2794,126 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required String teiId,
     required String enrollmentId,
   }) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS mgysd_report_intake_link (
-        id TEXT PRIMARY KEY,
-        reportEvent TEXT,
-        tei TEXT,
-        enrollment TEXT,
-        createdAt TEXT
-      )
-    ''');
-
-    final tableInfo = await db.rawQuery(
-      'PRAGMA table_info(mgysd_report_intake_link)',
-    );
-    final columns = tableInfo
-        .map((row) => '${row['name'] ?? ''}')
-        .where((name) => name.isNotEmpty)
-        .toSet();
-
-    Future<void> addColumn(String name) async {
-      if (columns.contains(name)) return;
-      await db.execute(
-        'ALTER TABLE mgysd_report_intake_link ADD COLUMN $name TEXT',
-      );
-      columns.add(name);
-    }
-
-    for (final name in <String>[
-      'reportEvent',
-      'reportEventId',
-      'tei',
-      'teiId',
-      'householdTei',
-      'enrollment',
-      'enrollmentId',
-      'createdAt',
-    ]) {
-      await addColumn(name);
-    }
-
-    await db.delete(
-      'mgysd_report_intake_link',
-      where: 'reportEvent = ? OR reportEventId = ?',
-      whereArgs: <Object?>[reportEventId, reportEventId],
-    );
-
     await db.insert(
       'mgysd_report_intake_link',
-      <String, Object?>{
+      {
         'id': _newId(),
         'reportEvent': reportEventId,
-        'reportEventId': reportEventId,
         'tei': teiId,
-        'teiId': teiId,
-        'householdTei': teiId,
         'enrollment': enrollmentId,
-        'enrollmentId': enrollmentId,
         'createdAt': DateTime.now().toIso8601String(),
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+
+  bool _hasDhis2SyncValue(dynamic value) {
+    if (value == null) return false;
+
+    final text = value.toString().trim();
+
+    return text.isNotEmpty &&
+        text != 'null' &&
+        text != '[]' &&
+        text != '{}';
+  }
+
+  Future<void> _saveInitialRiskAssessmentEventOffline({
+    required String householdTeiId,
+    required String enrollmentId,
+    required String orgUnit,
+  }) async {
+    final eventDate = _riskAssessmentDateController.text.trim().isNotEmpty
+        ? _riskAssessmentDateController.text.trim()
+        : DateTime.now().toIso8601String().split('T').first;
+
+    final riskDataValues = <String, dynamic>{
+      MgysdDhis2Uids.deRiskSocialWorker:
+      _riskSocialWorkerController.text,
+      MgysdDhis2Uids.deRiskFamilyBackground:
+      _riskFamilyBackground,
+      MgysdDhis2Uids.deRiskFamilyBackgroundNotes:
+      _riskFamilyBackgroundNotesController.text,
+      MgysdDhis2Uids.deRiskExtendedFamilyRelationships:
+      _riskExtendedFamilyRelationships,
+      MgysdDhis2Uids.deRiskExtendedFamilyNotes:
+      _riskExtendedFamilyNotesController.text,
+      MgysdDhis2Uids.deRiskClientRelationships:
+      _riskClientRelationships,
+      MgysdDhis2Uids.deRiskClientRelationshipsNotes:
+      _riskClientRelationshipsNotesController.text,
+      MgysdDhis2Uids.deRiskLivingCircumstances:
+      _riskLivingCircumstances,
+      MgysdDhis2Uids.deRiskLivingCircumstancesNotes:
+      _riskLivingCircumstancesNotesController.text,
+      MgysdDhis2Uids.deRiskHousing:
+      _riskHousing,
+      MgysdDhis2Uids.deRiskHousingNotes:
+      _riskHousingNotesController.text,
+      MgysdDhis2Uids.deRiskPhysicalHealth:
+      _riskPhysicalHealth,
+      MgysdDhis2Uids.deRiskPhysicalHealthNotes:
+      _riskPhysicalHealthNotesController.text,
+      MgysdDhis2Uids.deRiskNutrition:
+      _riskNutrition,
+      MgysdDhis2Uids.deRiskNutritionNotes:
+      _riskNutritionNotesController.text,
+      MgysdDhis2Uids.deRiskEmotionalHealth:
+      _riskEmotionalHealth,
+      MgysdDhis2Uids.deRiskEmotionalHealthNotes:
+      _riskEmotionalHealthNotesController.text,
+      MgysdDhis2Uids.deRiskSupervision:
+      _riskSupervision,
+      MgysdDhis2Uids.deRiskSupervisionNotes:
+      _riskSupervisionNotesController.text,
+      MgysdDhis2Uids.deRiskEducation:
+      _riskEducation,
+      MgysdDhis2Uids.deRiskEducationNotes:
+      _riskEducationNotesController.text,
+      MgysdDhis2Uids.deRiskLevel:
+      _riskLevel,
+      MgysdDhis2Uids.deRiskReason:
+      _riskReasonController.text,
+      MgysdDhis2Uids.deRiskImmediateReferrals:
+      _riskImmediateReferralsController.text,
+      MgysdDhis2Uids.deRiskSelfCare:
+      _selfCareIndependent,
+      MgysdDhis2Uids.deRiskDisabilityDiagnosis:
+      _hasDisabilityDiagnosis,
+      MgysdDhis2Uids.deRiskAssistiveDevices:
+      _usesAssistiveDevice,
+      MgysdDhis2Uids.deRiskRehabilitationServices:
+      _receivesRehabilitationServices,
+    };
+
+    riskDataValues.removeWhere((key, value) {
+      return key.trim().isEmpty || !_hasDhis2SyncValue(value);
+    });
+
+    if (riskDataValues.isEmpty) return;
+
+    final riskInputFields = riskDataValues.keys.map((dataElementId) {
+      return InputField(
+        id: dataElementId,
+        name: dataElementId,
+        valueType: 'TEXT',
+      );
+    }).toList();
+
+    final eventData = FormUtil.getEventPayload(
+      _newDhis2Uid(),
+      MgysdDhis2Uids.assessedHouseholdsProgram,
+      MgysdDhis2Uids.initialRiskAssessmentStage,
+      orgUnit,
+      riskInputFields.map((field) => field.id).whereType<String>().toList(),
+      riskDataValues,
+      eventDate,
+      householdTeiId,
+      enrollmentId,
+    );
+
+    await FormUtil.savingEvent(eventData);
   }
 
   Future<String> _savePersonAsFamilyMember({
@@ -3380,156 +2972,58 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     return memberTeiId;
   }
 
+  bool _shouldEnrollForCaseManagement() {
+    final value = _riskLevel.trim().toUpperCase().replaceAll(RegExp(r'[^A-Z]'), '');
+    if (value.isEmpty) return false;
 
-  void _expandMandatorySectionsForValidation() {
-    _forceOpenMandatorySections = true;
-    _showMandatoryFieldErrors = true;
-    _mandatoryExpansionRefresh++;
-    _clearEmploymentFieldsForChild();
-
-    for (final nextOfKin in _nextOfKins) {
-      nextOfKin.isExpanded = true;
-    }
-
-    for (final caregiver in _caregivers) {
-      caregiver.isExpanded = true;
-    }
-
-    for (final member in _otherHouseholdMembers) {
-      member.isExpanded = true;
-    }
-  }
-
-  Future<void> _scrollToKey(GlobalKey key) async {
-    await Future<void>.delayed(const Duration(milliseconds: 80));
-
-    final targetContext = key.currentContext;
-    if (targetContext == null) return;
-
-    await Scrollable.ensureVisible(
-      targetContext,
-      duration: const Duration(milliseconds: 550),
-      curve: Curves.easeInOut,
-      alignment: 0.12,
-    );
-  }
-
-  Future<void> _scrollToFirstInvalidFormField() async {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final formContext = _formKey.currentContext;
-      if (formContext == null) return;
-
-      FormFieldState<dynamic>? firstInvalidField;
-
-      void visit(Element element) {
-        if (firstInvalidField != null) return;
-
-        if (element is StatefulElement) {
-          final state = element.state;
-          if (state is FormFieldState<dynamic> && state.hasError) {
-            firstInvalidField = state;
-            return;
-          }
-        }
-
-        element.visitChildElements(visit);
-      }
-
-      (formContext as Element).visitChildElements(visit);
-
-      final invalidContext = firstInvalidField?.context;
-      if (invalidContext == null) return;
-
-      await Scrollable.ensureVisible(
-        invalidContext,
-        duration: const Duration(milliseconds: 550),
-        curve: Curves.easeInOut,
-        alignment: 0.12,
-      );
-
-    });
-  }
-
-  Future<bool> _validateBeforeSavingAndGoToFirstMissingField() async {
-    setState(_expandMandatorySectionsForValidation);
-
-    // Wait for collapsed Part sections and dynamic cards to rebuild in expanded mode
-    // before the validators run. This makes hidden mandatory fields visible first.
-    await Future<void>.delayed(const Duration(milliseconds: 120));
-
-    final isValid = _formKey.currentState?.validate() ?? false;
-    if (!isValid) {
-      _scrollToFirstInvalidFormField();
-      AppUtil.showToastMessage(
-        message: 'Please complete the highlighted mandatory field.',
-      );
-      return false;
-    }
-
-    if (_selectedReasonOptions.isEmpty) {
-      await _scrollToKey(_reasonForEnrolmentSectionKey);
-      AppUtil.showToastMessage(
-        message: 'Please select at least one reason for enrolment.',
-      );
-      return false;
-    }
-
-    if (_reasonOtherSelected && _reasonOtherController.text.trim().isEmpty) {
-      await _scrollToKey(_reasonForEnrolmentSectionKey);
-      AppUtil.showToastMessage(
-        message: 'Please specify the other reason for enrolment.',
-      );
-      return false;
-    }
-
-    if (_clientCategory.trim().isEmpty) {
-      await _scrollToKey(_clientDemographicsSectionKey);
-      AppUtil.showToastMessage(
-        message: 'Please enter the client\'s date of birth to determine client category.',
-      );
-      return false;
-    }
-
-    if (_riskLevel.trim().isEmpty) {
-      _scrollToFirstInvalidFormField();
-      AppUtil.showToastMessage(
-        message: 'Please select the initial risk level.',
-      );
-      return false;
-    }
-
-    _riskNextSteps
-      ..clear()
-      ..addAll(_socialInvestigationNextSteps());
-
-    return true;
+    // Only a clear No Risk assessment remains in the assessed-only program.
+    // Low, Medium and High Risk cases continue into the enrolled household case program.
+    return value != 'NORISK';
   }
 
   Future<void> _saveCase() async {
-    final canSave = await _validateBeforeSavingAndGoToFirstMissingField();
-    if (!canSave) return;
+    final isValid = _formKey.currentState?.validate() ?? false;
+    if (!isValid) return;
+
+    if (_selectedReasonOptions.isEmpty) {
+      AppUtil.showToastMessage(
+        message: 'Please select at least one reason for enrolment.',
+      );
+      return;
+    }
+
+    if (_reasonOtherSelected && _reasonOtherController.text.trim().isEmpty) {
+      AppUtil.showToastMessage(
+        message: 'Please specify the other reason for enrolment.',
+      );
+      return;
+    }
+
+    if (_clientCategory.trim().isEmpty) {
+      AppUtil.showToastMessage(
+        message: 'Please enter the client\'s date of birth to determine client category.',
+      );
+      return;
+    }
+
+    if (_riskLevel.trim().isEmpty) {
+      AppUtil.showToastMessage(
+        message: 'Please select the initial risk level.',
+      );
+      return;
+    }
 
     setState(() => _saving = true);
 
     try {
       final db = await _db();
 
-      final householdTeiId = widget.isEditing
-          ? widget.existingHouseholdTei!.trim()
-          : _newDhis2Uid();
-      final assessedHouseholdEnrollmentId = widget.isEditing
-          ? widget.existingAssessedEnrollment!.trim()
-          : _newDhis2Uid();
-      final existingPrimaryClientTei = widget.isEditing
-          ? await _loadPrimaryClientTei(db, householdTeiId)
-          : '';
-      final clientTeiId = existingPrimaryClientTei.isNotEmpty
-          ? existingPrimaryClientTei
-          : _newDhis2Uid();
-
-      // Intake always stops in the Assessed Households programme.
-      // Risk level must never create Enrolled Household or member enrolments.
-      const shouldEnrollForCaseManagement = false;
+      final householdTeiId = _newDhis2Uid();
+      final clientTeiId = _newDhis2Uid();
+      final assessedHouseholdEnrollmentId = _newDhis2Uid();
+      final enrolledHouseholdEnrollmentId = _newDhis2Uid();
+      final clientFamilyEnrollmentId = _newDhis2Uid();
+      final shouldEnrollForCaseManagement = _shouldEnrollForCaseManagement();
       final orgUnit = _selectedCommunityCouncilId.trim();
 
       if (orgUnit.isEmpty) {
@@ -3552,59 +3046,16 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         teiId: householdTeiId,
         attrs: {
           attHouseholdFileNumber: _fileNumberController.text,
-          attHouseholdDistrict: _selectedDistrictName.isNotEmpty
-              ? _selectedDistrictName
-              : _districtController.text,
-          attHouseholdCommunityCouncil: _selectedCommunityCouncilName.isNotEmpty
-              ? _selectedCommunityCouncilName
-              : _communityCouncilController.text,
+          attHouseholdDistrict: _selectedDistrictId,
+          attHouseholdCommunityCouncil: _selectedCommunityCouncilId,
           attHouseholdVillage: _villageController.text,
           attHouseholdAddress: _physicalAddressController.text,
           attReasonForEnrolment: jsonEncode(_selectedReasonPayload()),
           attReasonForEnrolmentOther: _reasonOtherController.text,
           attEmergencyContactedPhoneNumbers:
-          jsonEncode(_normalisedDynamicPhoneValues(_contactedPhoneNumbers)),
+          jsonEncode(_dynamicValues(_contactedPhoneNumbers)),
           attEmergencyServicesAlreadyProvided:
           jsonEncode(_dynamicValues(_servicesAlreadyProvided)),
-          attRiskAssessmentDate: _riskAssessmentDateController.text,
-          attRiskAssessmentSocialWorker: _riskSocialWorkerController.text,
-          attRiskAssessmentReportSource: _riskReportSource,
-          attRiskAssessmentHasActionTaken: _riskHasActionTaken,
-          attRiskAssessmentNoActionReason: _riskNoActionReason,
-          attRiskAssessmentEmergencyActionsTaken:
-          jsonEncode(_riskEmergencyActionsTaken.toList()),
-          attRiskAssessmentServicesAccessed:
-          jsonEncode(_riskServicesAccessed.toList()),
-          attRiskFamilyBackground: _riskFamilyBackground,
-          attRiskFamilyBackgroundNotes: _riskFamilyBackgroundNotesController.text,
-          attRiskCaregiverWellbeing: _riskCaregiverWellbeing,
-          attRiskCaregiverWellbeingNotes:
-          _riskCaregiverWellbeingNotesController.text,
-          attRiskExtendedFamilyRelationships: _riskExtendedFamilyRelationships,
-          attRiskExtendedFamilyNotes: _riskExtendedFamilyNotesController.text,
-          attRiskClientRelationships: _riskClientRelationships,
-          attRiskClientRelationshipsNotes:
-          _riskClientRelationshipsNotesController.text,
-          attRiskLivingCircumstances: _riskLivingCircumstances,
-          attRiskLivingCircumstancesNotes:
-          _riskLivingCircumstancesNotesController.text,
-          attRiskHousing: _riskHousing,
-          attRiskHousingNotes: _riskHousingNotesController.text,
-          attRiskPhysicalHealth: _riskPhysicalHealth,
-          attRiskPhysicalHealthNotes: _riskPhysicalHealthNotesController.text,
-          attRiskNutrition: _riskNutrition,
-          attRiskNutritionNotes: _riskNutritionNotesController.text,
-          attRiskEmotionalHealth: _riskEmotionalHealth,
-          attRiskEmotionalHealthNotes: _riskEmotionalHealthNotesController.text,
-          attRiskSupervision: _riskSupervision,
-          attRiskSupervisionNotes: _riskSupervisionNotesController.text,
-          attRiskEducation: _riskEducation,
-          attRiskEducationNotes: _riskEducationNotesController.text,
-          attRiskLevel: _riskLevel,
-          attRiskReason: _riskReasonController.text,
-          attRiskImmediateReferrals: _riskImmediateReferralsController.text,
-          attRiskNextSteps: jsonEncode(_socialInvestigationNextSteps()),
-          attRiskAdditionalNotes: '',
         },
       );
 
@@ -3628,21 +3079,14 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         attHomeLanguage: _homeLanguage,
         attHomeLanguageOther: _homeLanguageOtherController.text,
         attNationalityOther: _nationalityOtherController.text,
-        attPhone: _normalisedPhoneNumber(
-          _phoneController.text,
-          _clientPhoneCountryCode,
-        ),
-        attAlternativePhone: _normalisedPhoneNumber(
-          _alternativePhoneController.text,
-          _clientAlternativePhoneCountryCode,
-        ),
+        attPhone: _phoneController.text,
+        attAlternativePhone: _alternativePhoneController.text,
         attIsClientInSchool: _isClientInSchool,
         attSchoolName: _schoolNameController.text,
         attGrade: _grade,
         attSchoolAttendanceStatus: _schoolAttendanceStatus,
-        attIsAdultEmployed: _showEmploymentQuestions ? _isAdultEmployed : '',
-        attEmployerName:
-        _showEmploymentQuestions ? _employerNameController.text : '',
+        attIsAdultEmployed: _isAdultEmployed,
+        attEmployerName: _employerNameController.text,
         // Parent/caregiver/person details are NOT stored on the client TEI.
         // They are saved below as their own separate TEIs using the same generic
         // person attributes: firstName, lastName, dob, sex, occupation, phone.
@@ -3656,48 +3100,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         attReasonForEnrolment: jsonEncode(_selectedReasonPayload()),
         attReasonForEnrolmentOther: _reasonOtherController.text,
         attEmergencyContactedPhoneNumbers:
-        jsonEncode(_normalisedDynamicPhoneValues(_contactedPhoneNumbers)),
+        jsonEncode(_dynamicValues(_contactedPhoneNumbers)),
         attEmergencyServicesAlreadyProvided:
         jsonEncode(_dynamicValues(_servicesAlreadyProvided)),
-        attRiskAssessmentDate: _riskAssessmentDateController.text,
-        attRiskAssessmentSocialWorker: _riskSocialWorkerController.text,
-        attRiskAssessmentReportSource: _riskReportSource,
-        attRiskAssessmentHasActionTaken: _riskHasActionTaken,
-        attRiskAssessmentNoActionReason: _riskNoActionReason,
-        attRiskAssessmentEmergencyActionsTaken:
-        jsonEncode(_riskEmergencyActionsTaken.toList()),
-        attRiskAssessmentServicesAccessed:
-        jsonEncode(_riskServicesAccessed.toList()),
-        attRiskFamilyBackground: _riskFamilyBackground,
-        attRiskFamilyBackgroundNotes: _riskFamilyBackgroundNotesController.text,
-        attRiskCaregiverWellbeing: _riskCaregiverWellbeing,
-        attRiskCaregiverWellbeingNotes:
-        _riskCaregiverWellbeingNotesController.text,
-        attRiskExtendedFamilyRelationships: _riskExtendedFamilyRelationships,
-        attRiskExtendedFamilyNotes: _riskExtendedFamilyNotesController.text,
-        attRiskClientRelationships: _riskClientRelationships,
-        attRiskClientRelationshipsNotes:
-        _riskClientRelationshipsNotesController.text,
-        attRiskLivingCircumstances: _riskLivingCircumstances,
-        attRiskLivingCircumstancesNotes:
-        _riskLivingCircumstancesNotesController.text,
-        attRiskHousing: _riskHousing,
-        attRiskHousingNotes: _riskHousingNotesController.text,
-        attRiskPhysicalHealth: _riskPhysicalHealth,
-        attRiskPhysicalHealthNotes: _riskPhysicalHealthNotesController.text,
-        attRiskNutrition: _riskNutrition,
-        attRiskNutritionNotes: _riskNutritionNotesController.text,
-        attRiskEmotionalHealth: _riskEmotionalHealth,
-        attRiskEmotionalHealthNotes: _riskEmotionalHealthNotesController.text,
-        attRiskSupervision: _riskSupervision,
-        attRiskSupervisionNotes: _riskSupervisionNotesController.text,
-        attRiskEducation: _riskEducation,
-        attRiskEducationNotes: _riskEducationNotesController.text,
-        attRiskLevel: _riskLevel,
-        attRiskReason: _riskReasonController.text,
-        attRiskImmediateReferrals: _riskImmediateReferralsController.text,
-        attRiskNextSteps: jsonEncode(_socialInvestigationNextSteps()),
-        attRiskAdditionalNotes: '',
       };
 
       await _saveAttrsOffline(db: db, teiId: clientTeiId, attrs: clientAttrs);
@@ -3718,11 +3123,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         _selectedCommunityCouncilName.trim(),
         _villageController.text.trim(),
         'risk:$_riskLevel',
-        'social_investigation:required',
-        'priority:${_riskPriorityLabel()}',
-        widget.reportedEventId == null
-            ? ''
-            : 'reportEvent:${widget.reportedEventId}',
       ].where((e) => e.isNotEmpty).join(' | ');
 
       await _saveEnrollmentOffline(
@@ -3734,112 +3134,30 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         searchableValue: householdSearchableValue,
       );
 
-      // Initial Risk Assessment is a tracker EVENT, not a TEI attribute set.
-      // Preserve one event per assessed-household enrollment and update it on edit.
-      String initialRiskEventId = '';
-      final existingRiskEvents = await db.query(
-        'events',
-        columns: ['event'],
-        where: 'trackedEntityInstance = ? AND programStage = ?',
-        whereArgs: [householdTeiId, MgysdDhis2Uids.initialRiskAssessmentStage],
-        orderBy: 'eventDate DESC',
-        limit: 1,
-      );
-      if (existingRiskEvents.isNotEmpty) {
-        initialRiskEventId = (existingRiskEvents.first['event'] ?? '').toString();
-      }
-      if (initialRiskEventId.isEmpty) initialRiskEventId = _newDhis2Uid();
-
-      await MgysdProgramStageEventHelper.saveProgramStageEvent(
-        db: db,
-        eventId: initialRiskEventId,
-        status: 'COMPLETED',
-        eventDate: _riskAssessmentDateController.text.trim().isEmpty
-            ? DateTime.now().toIso8601String().substring(0, 10)
-            : _riskAssessmentDateController.text.trim(),
+      await _saveInitialRiskAssessmentEventOffline(
+        householdTeiId: householdTeiId,
+        enrollmentId: assessedHouseholdEnrollmentId,
         orgUnit: orgUnit,
-        program: MgysdDhis2Uids.assessedHouseholdsProgram,
-        programStage: MgysdDhis2Uids.initialRiskAssessmentStage,
-        trackedEntityInstance: householdTeiId,
-        enrollment: assessedHouseholdEnrollmentId,
-        dataValues: {
-          MgysdDhis2Uids.deRiskSocialWorker: _riskSocialWorkerController.text,
-          MgysdDhis2Uids.deRiskFamilyBackground: _riskFamilyBackground,
-          MgysdDhis2Uids.deRiskFamilyBackgroundNotes: _riskFamilyBackgroundNotesController.text,
-          MgysdDhis2Uids.deRiskExtendedFamilyRelationships: _riskExtendedFamilyRelationships,
-          MgysdDhis2Uids.deRiskExtendedFamilyNotes: _riskExtendedFamilyNotesController.text,
-          MgysdDhis2Uids.deRiskClientRelationships: _riskClientRelationships,
-          MgysdDhis2Uids.deRiskClientRelationshipsNotes: _riskClientRelationshipsNotesController.text,
-          MgysdDhis2Uids.deRiskLivingCircumstances: _riskLivingCircumstances,
-          MgysdDhis2Uids.deRiskLivingCircumstancesNotes: _riskLivingCircumstancesNotesController.text,
-          MgysdDhis2Uids.deRiskHousing: _riskHousing,
-          MgysdDhis2Uids.deRiskHousingNotes: _riskHousingNotesController.text,
-          MgysdDhis2Uids.deRiskPhysicalHealth: _riskPhysicalHealth,
-          MgysdDhis2Uids.deRiskPhysicalHealthNotes: _riskPhysicalHealthNotesController.text,
-          MgysdDhis2Uids.deRiskNutrition: _riskNutrition,
-          MgysdDhis2Uids.deRiskNutritionNotes: _riskNutritionNotesController.text,
-          MgysdDhis2Uids.deRiskEmotionalHealth: _riskEmotionalHealth,
-          MgysdDhis2Uids.deRiskEmotionalHealthNotes: _riskEmotionalHealthNotesController.text,
-          MgysdDhis2Uids.deRiskSupervision: _riskSupervision,
-          MgysdDhis2Uids.deRiskSupervisionNotes: _riskSupervisionNotesController.text,
-          MgysdDhis2Uids.deRiskEducation: _riskEducation,
-          MgysdDhis2Uids.deRiskEducationNotes: _riskEducationNotesController.text,
-          MgysdDhis2Uids.deRiskLevel: _riskLevel,
-          MgysdDhis2Uids.deRiskReason: _riskReasonController.text,
-          MgysdDhis2Uids.deRiskImmediateReferrals: _riskImmediateReferralsController.text,
-          MgysdDhis2Uids.deRiskSelfCare: _riskCaregiverWellbeing,
-          MgysdDhis2Uids.deRiskDisabilityDiagnosis: _isDisabled,
-          MgysdDhis2Uids.deRiskAssistiveDevices: _riskServicesAccessed.join(', '),
-          MgysdDhis2Uids.deRiskRehabilitationServices: _riskEmergencyActionsTaken.join(', '),
-        },
       );
 
-      // Enforce the Intake boundary even when editing older records that were
-      // incorrectly enrolled by previous versions.
-      await db.delete(
-        'enrollment',
-        where: 'trackedEntityInstance = ? AND program = ?',
-        whereArgs: [householdTeiId, mgysdEnrolledHouseholdsProgramId],
-      );
-      try {
-        final linkedMembers = await db.query(
-          'mgysd_household_member',
-          columns: ['memberTei'],
-          where: 'householdTei = ?',
-          whereArgs: [householdTeiId],
-        );
-        for (final linkedMember in linkedMembers) {
-          final memberTei =
-          (linkedMember['memberTei'] ?? '').toString().trim();
-          if (memberTei.isEmpty) continue;
-          await db.delete(
-            'enrollment',
-            where: 'trackedEntityInstance = ? AND program = ?',
-            whereArgs: [memberTei, mgysdFamilyMembersProgramId],
-          );
-        }
-      } catch (_) {}
-
-      if (widget.isEditing) {
-        // Edit mode is update-only. The existing Household TEI, primary Client
-        // TEI and Assessed Household enrollment have already been updated above.
-        // Do not create duplicate relationships, household-member records or person TEIs.
-        final savedStateKey = _formStateKey(
-          householdTeiOverride: householdTeiId,
-          enrollmentOverride: assessedHouseholdEnrollmentId,
-        );
-        await _saveFormState(
-          status: 'SAVED',
-          householdTeiOverride: householdTeiId,
-          enrollmentOverride: assessedHouseholdEnrollmentId,
-          stateKeyOverride: savedStateKey,
+      if (shouldEnrollForCaseManagement) {
+        await _saveEnrollmentOffline(
+          db: db,
+          enrollmentId: enrolledHouseholdEnrollmentId,
+          teiId: householdTeiId,
+          programId: mgysdEnrolledHouseholdsProgramId,
+          orgUnit: orgUnit,
+          searchableValue: householdSearchableValue,
         );
 
-        AppUtil.showToastMessage(
-          message: 'Intake and Initial Risk Assessment updated.',
+        await _saveEnrollmentOffline(
+          db: db,
+          enrollmentId: clientFamilyEnrollmentId,
+          teiId: clientTeiId,
+          programId: mgysdFamilyMembersProgramId,
+          orgUnit: orgUnit,
+          searchableValue: searchableValue,
         );
-        if (mounted) Navigator.pop(context, true);
-        return;
       }
 
       await _saveRelationshipOffline(
@@ -3873,16 +3191,13 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           householdTeiId: householdTeiId,
           orgUnit: orgUnit,
           memberRole: 'FATHER',
-          enrollInFamilyMembersProgram: false,
+          enrollInFamilyMembersProgram: shouldEnrollForCaseManagement,
           attrs: {
             attFirstName: _fatherFirstNameController.text,
             attLastName: _fatherSurnameController.text,
             attDob: _fatherDobController.text,
             attOccupation: _fatherOccupationController.text,
-            attPhone: _normalisedPhoneNumber(
-              _fatherPhoneController.text,
-              _fatherPhoneCountryCode,
-            ),
+            attPhone: _fatherPhoneController.text,
             attSex: 'MALE',
             attRelationshipToClient: 'FATHER',
             attFatherAlive: _fatherAlive,
@@ -3898,16 +3213,13 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           householdTeiId: householdTeiId,
           orgUnit: orgUnit,
           memberRole: 'MOTHER',
-          enrollInFamilyMembersProgram: false,
+          enrollInFamilyMembersProgram: shouldEnrollForCaseManagement,
           attrs: {
             attFirstName: _motherFirstNameController.text,
             attLastName: _motherSurnameController.text,
             attDob: _motherDobController.text,
             attOccupation: _motherOccupationController.text,
-            attPhone: _normalisedPhoneNumber(
-              _motherPhoneController.text,
-              _motherPhoneCountryCode,
-            ),
+            attPhone: _motherPhoneController.text,
             attSex: 'FEMALE',
             attRelationshipToClient: 'MOTHER',
             attMotherAlive: _motherAlive,
@@ -3923,7 +3235,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           householdTeiId: householdTeiId,
           orgUnit: orgUnit,
           memberRole: 'CAREGIVER',
-          enrollInFamilyMembersProgram: false,
+          enrollInFamilyMembersProgram: shouldEnrollForCaseManagement,
           attrs: {
             attFirstName: caregiver.nameController.text,
             attLastName: caregiver.surnameController.text,
@@ -3935,10 +3247,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 : '',
             attDob: caregiver.dobController.text,
             attOccupation: caregiver.occupationController.text,
-            attPhone: _normalisedPhoneNumber(
-              caregiver.phoneController.text,
-              caregiver.phoneCountryCode,
-            ),
+            attPhone: caregiver.phoneController.text,
           },
         );
       }
@@ -3949,14 +3258,11 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           householdTeiId: householdTeiId,
           orgUnit: orgUnit,
           memberRole: nextOfKin.relationship.isEmpty ? 'NEXT_OF_KIN' : nextOfKin.relationship,
-          enrollInFamilyMembersProgram: false,
+          enrollInFamilyMembersProgram: shouldEnrollForCaseManagement,
           attrs: {
             attFirstName: nextOfKin.firstNameController.text,
             attLastName: nextOfKin.surnameController.text,
-            attPhone: _normalisedPhoneNumber(
-              nextOfKin.phoneController.text,
-              nextOfKin.phoneCountryCode,
-            ),
+            attPhone: nextOfKin.phoneController.text,
             attRelationshipToClient: nextOfKin.relationship,
             attRelationshipToClientOther: nextOfKin.relationshipOtherController.text,
           },
@@ -3969,7 +3275,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           householdTeiId: householdTeiId,
           orgUnit: orgUnit,
           memberRole: 'PERSONAL_ASSISTANT',
-          enrollInFamilyMembersProgram: false,
+          enrollInFamilyMembersProgram: shouldEnrollForCaseManagement,
           attrs: {
             attFirstName: _personalAssistantNameController.text,
             attLastName: _personalAssistantSurnameController.text,
@@ -3982,10 +3288,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 : '',
             attDob: _personalAssistantDobController.text,
             attOccupation: _personalAssistantOccupationController.text,
-            attPhone: _normalisedPhoneNumber(
-              _personalAssistantPhoneController.text,
-              _personalAssistantPhoneCountryCode,
-            ),
+            attPhone: _personalAssistantPhoneController.text,
           },
         );
       }
@@ -3998,7 +3301,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           memberRole: member.relationshipToClient.isEmpty
               ? 'HOUSEHOLD_MEMBER'
               : member.relationshipToClient,
-          enrollInFamilyMembersProgram: false,
+          enrollInFamilyMembersProgram: shouldEnrollForCaseManagement,
           attrs: {
             attFirstName: member.firstNameController.text,
             attLastName: member.surnameController.text,
@@ -4008,39 +3311,20 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             attRelationshipToClient: member.relationshipToClient,
             attRelationshipToClientOther: member.relationshipOtherController.text,
             attOccupation: member.occupationController.text,
-            attPhone: _normalisedPhoneNumber(
-              member.contactsController.text,
-              member.contactsCountryCode,
-            ),
+            attPhone: member.contactsController.text,
             attHasDisability: member.hasDisability,
             attDisabilitySpecify: member.disabilitySpecifyController.text,
           },
         );
       }
 
-      final savedStateKey = _formStateKey(
-        householdTeiOverride: householdTeiId,
-        enrollmentOverride: assessedHouseholdEnrollmentId,
-      );
-      await _saveFormState(
-        status: 'SAVED',
-        householdTeiOverride: householdTeiId,
-        enrollmentOverride: assessedHouseholdEnrollmentId,
-        stateKeyOverride: savedStateKey,
-      );
-
-      final currentDraftKey = _formStateKey();
-      if (currentDraftKey != savedStateKey) {
-        await _deleteFormStateByKey(currentDraftKey);
-      }
-
       AppUtil.showToastMessage(
-        message: widget.isEditing
-            ? 'Intake and Initial Risk Assessment updated.'
-            : 'Household saved in MGYSD Assessed Households.',
+        message: shouldEnrollForCaseManagement
+            ? 'Household assessed and enrolled for case management.'
+            : 'Household assessed. Risk is No/Low, so it was not enrolled for case management.',
       );
 
-      if (mounted) Navigator.pop(context, true);
+      if (mounted) Navigator.pop(context);
     } catch (e) {
       AppUtil.showToastMessage(message: 'Failed to save case: $e');
     } finally {
@@ -4220,421 +3504,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     );
   }
 
-  Widget _requiredInputLabel(String label, {required bool requiredField}) {
-    if (!requiredField) return Text(label);
-
-    return RichText(
-      text: TextSpan(
-        style: const TextStyle(
-          color: Colors.black87,
-          fontSize: 14,
-          fontWeight: FontWeight.w700,
-        ),
-        children: [
-          TextSpan(text: label),
-          const TextSpan(text: ' *', style: TextStyle(color: Colors.red)),
-        ],
-      ),
-    );
-  }
-
-  InputDecoration _phoneDecoration(
-      String label, {
-        required String hint,
-        required bool requiredField,
-      }) {
-    return InputDecoration(
-      label: _requiredInputLabel(label, requiredField: requiredField),
-      hintText: hint,
-      errorMaxLines: 4,
-      helperMaxLines: 4,
-      labelStyle: const TextStyle(
-        fontWeight: FontWeight.w700,
-        color: Colors.blueGrey,
-      ),
-      hintStyle: TextStyle(
-        color: Colors.blueGrey.withOpacity(0.82),
-        fontSize: 13,
-        fontWeight: FontWeight.w500,
-      ),
-      filled: true,
-      fillColor: const Color(0xFFF3F7FA),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: Colors.blueGrey.withOpacity(0.24)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(
-          color: Theme.of(context).colorScheme.primary,
-          width: 1.6,
-        ),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: Colors.red.withOpacity(0.65)),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: Colors.red.withOpacity(0.85), width: 1.4),
-      ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-    );
-  }
-
-  String _countryDisplayName(_MgysdCountryCodeOption country) {
-    final label = country.label.trim();
-    final bracketIndex = label.indexOf(' (');
-    if (bracketIndex > 0) return label.substring(0, bracketIndex);
-    return label;
-  }
-
-  String _countryFlag(_MgysdCountryCodeOption country) {
-    switch (country.code) {
-      case 'LS':
-        return '🇱🇸';
-      case 'ZA':
-        return '🇿🇦';
-      case 'ZW':
-        return '🇿🇼';
-      case 'MZ':
-        return '🇲🇿';
-      case 'BW':
-        return '🇧🇼';
-      case 'NA':
-        return '🇳🇦';
-      case 'SZ':
-        return '🇸🇿';
-      case 'ZM':
-        return '🇿🇲';
-      case 'MW':
-        return '🇲🇼';
-      case 'US':
-        return '🇺🇸';
-      case 'GB':
-        return '🇬🇧';
-      case 'INTL':
-        return '🌐';
-      default:
-        return '🌐';
-    }
-  }
-
-  String _phoneFieldLabel(String label, _MgysdCountryCodeOption country) {
-    if (country.code == 'INTL') return label;
-
-    if (country.minNationalDigits == country.maxNationalDigits) {
-      return '$label (${country.maxNationalDigits} digits)';
-    }
-
-    return '$label (${country.minNationalDigits}-${country.maxNationalDigits} digits)';
-  }
-
-  String _formatPhoneTextForSelectedCountry(String value, String countryCode) {
-    final country = _phoneCountryByCode(countryCode);
-    return _MgysdPhoneNumberInputFormatter(country).formatEditUpdate(
-      const TextEditingValue(),
-      TextEditingValue(text: value),
-    ).text;
-  }
-
-  void _formatPhoneControllerForSelectedCountry(
-      TextEditingController controller,
-      String countryCode,
-      ) {
-    final formatted = _formatPhoneTextForSelectedCountry(
-      controller.text,
-      countryCode,
-    );
-
-    controller.value = TextEditingValue(
-      text: formatted,
-      selection: TextSelection.collapsed(offset: formatted.length),
-      composing: TextRange.empty,
-    );
-  }
-
-  Future<String?> _showCountryPicker({
-    required String selectedCode,
-  }) async {
-    String query = '';
-
-    return showDialog<String>(
-      context: context,
-      useRootNavigator: true,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (dialogContext, setModalState) {
-            final normalizedQuery = query.trim().toLowerCase();
-            final countries = normalizedQuery.isEmpty
-                ? _phoneCountryOptions
-                : _phoneCountryOptions.where((country) {
-              final countryName = _countryDisplayName(country).toLowerCase();
-              final label = country.label.toLowerCase();
-              final dialCode = country.dialCode.toLowerCase();
-              final code = country.code.toLowerCase();
-
-              return countryName.contains(normalizedQuery) ||
-                  label.contains(normalizedQuery) ||
-                  dialCode.contains(normalizedQuery) ||
-                  code.contains(normalizedQuery);
-            }).toList();
-
-            return Dialog(
-              insetPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 24,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: 620,
-                  maxHeight: MediaQuery.of(dialogContext).size.height * 0.82,
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          const Expanded(
-                            child: Text(
-                              'Select Country',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () {
-                              FocusScope.of(dialogContext).unfocus();
-                              Navigator.of(dialogContext, rootNavigator: true).pop();
-                            },
-                            icon: const Icon(Icons.close),
-                            tooltip: 'Close',
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        autofocus: false,
-                        decoration: InputDecoration(
-                          prefixIcon: const Icon(Icons.search),
-                          hintText: 'Search by country or code (e.g. Lesotho or +266)',
-                          isDense: true,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                              color: Colors.blueGrey.withOpacity(0.25),
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                              color: widget.color,
-                              width: 1.5,
-                            ),
-                          ),
-                        ),
-                        onChanged: (value) => setModalState(() {
-                          query = value;
-                        }),
-                      ),
-                      const SizedBox(height: 12),
-                      Flexible(
-                        child: countries.isEmpty
-                            ? const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(24),
-                            child: Text('No countries found'),
-                          ),
-                        )
-                            : ListView.builder(
-                          shrinkWrap: true,
-                          itemCount: countries.length,
-                          itemBuilder: (itemContext, index) {
-                            final country = countries[index];
-                            final selected = country.code == selectedCode;
-
-                            return Material(
-                              color: selected
-                                  ? widget.color.withOpacity(0.10)
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(10),
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(10),
-                                onTap: () {
-                                  FocusScope.of(dialogContext).unfocus();
-                                  Navigator.of(dialogContext, rootNavigator: true)
-                                      .pop(country.code);
-                                },
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 12,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Text(
-                                        _countryFlag(country),
-                                        style: const TextStyle(fontSize: 24),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Text(
-                                          _countryDisplayName(country),
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: selected
-                                                ? FontWeight.w800
-                                                : FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                      Text(
-                                        country.dialCode,
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.blueGrey,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _countryCodeSelectorButton({
-    required String value,
-    required void Function(String?) onChanged,
-  }) {
-    final country = _phoneCountryByCode(value);
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () async {
-        if (_countryPickerBusy) return;
-        _countryPickerBusy = true;
-
-        final selectedCode = await _showCountryPicker(
-          selectedCode: country.code,
-        );
-
-        _countryPickerBusy = false;
-
-        if (!mounted || selectedCode == null || selectedCode == value) return;
-
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          onChanged(selectedCode);
-        });
-      },
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          height: 48,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.blueGrey.withOpacity(0.25)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _countryFlag(country),
-                style: const TextStyle(fontSize: 20),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                country.dialCode,
-                style: const TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(width: 4),
-              const Icon(Icons.keyboard_arrow_down, size: 18),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _phoneInputField({
-    required String label,
-    required TextEditingController controller,
-    required String countryCode,
-    required void Function(String?) onCountryChanged,
-    required bool requiredField,
-  }) {
-    final country = _phoneCountryByCode(countryCode);
-    final phoneHint = country.code == 'INTL'
-        ? 'Start with + country code'
-        : country.minNationalDigits == country.maxNationalDigits
-        ? 'Phone Number (${country.maxNationalDigits} digits)'
-        : 'Phone Number (${country.minNationalDigits}-${country.maxNationalDigits} digits)';
-
-    final phoneField = TextFormField(
-      controller: controller,
-      decoration: _phoneDecoration(
-        _phoneFieldLabel(label, country),
-        hint: phoneHint,
-        requiredField: requiredField,
-      ),
-      keyboardType: country.code == 'INTL'
-          ? TextInputType.phone
-          : TextInputType.number,
-      inputFormatters: [
-        _MgysdPhoneNumberInputFormatter(country),
-      ],
-      autovalidateMode: AutovalidateMode.onUserInteraction,
-      validator: (value) => _phoneValidator(
-        value,
-        requiredField: requiredField,
-        countryCode: countryCode,
-      ),
-    );
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 108,
-          child: _countryCodeSelectorButton(
-            value: countryCode,
-            onChanged: onCountryChanged,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(child: phoneField),
-      ],
-    );
-  }
-
   Widget _reasonGroupCard(_ReasonGroup group) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -4685,105 +3554,90 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     final visibleSingleReasons =
     singleReasons.where(_isVisibleSingleReason).toList();
 
-    return KeyedSubtree(
-      key: _reasonForEnrolmentSectionKey,
-      child: MaterialCard(
-        body: Container(
-          padding: const EdgeInsets.all(12.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _titleRow(
-                color: primary,
-                title: 'Reason for Enrolment',
-                subtitle: 'Select all applicable reasons for this case.',
-                icon: Icons.fact_check_outlined,
+    return MaterialCard(
+      body: Container(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _titleRow(
+              color: primary,
+              title: 'Reason for Enrolment',
+              subtitle: 'Select all applicable reasons for this case.',
+              icon: Icons.fact_check_outlined,
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: primary.withOpacity(0.10),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: primary.withOpacity(0.16)),
               ),
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: primary.withOpacity(0.10),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: primary.withOpacity(0.16)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Identified Concerns',
-                      style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Identified Concerns',
+                    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'These are the specific concerns identified for this client.',
+                    style: TextStyle(color: Colors.blueGrey, fontSize: 12.5, height: 1.3),
+                  ),
+                  const SizedBox(height: 12),
+                  ..._visibleGroupedReasons().map(_reasonGroupCard).toList(),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.blueGrey.withOpacity(0.18)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Other enrolment reasons',
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w800,
                     ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'These are the specific concerns identified for this client.',
-                      style: TextStyle(color: Colors.blueGrey, fontSize: 12.5, height: 1.3),
-                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children:
+                    visibleSingleReasons.map(_reasonChoiceChip).toList(),
+                  ),
+                  if (_reasonOtherSelected) ...[
                     const SizedBox(height: 12),
-                    ..._visibleGroupedReasons().map(_reasonGroupCard).toList(),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.blueGrey.withOpacity(0.18)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Other enrolment reasons',
-                      style: TextStyle(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w800,
-                      ),
+                    _Input(
+                      controller: _reasonOtherController,
+                      label: 'Specify other reason',
+                      hint: 'Describe other reason for enrolment',
+                      maxLines: 3,
+                      validator: (v) {
+                        if (_reasonOtherSelected &&
+                            (v == null || v.trim().isEmpty)) {
+                          return 'Please specify other reason';
+                        }
+                        return null;
+                      },
                     ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children:
-                      visibleSingleReasons.map(_reasonChoiceChip).toList(),
-                    ),
-                    if (_showMandatoryFieldErrors &&
-                        _selectedReasonOptions.isEmpty) ...[
-                      const SizedBox(height: 10),
-                      const Text(
-                        'Please select at least one reason for enrolment.',
-                        style: TextStyle(
-                          color: Colors.red,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12.5,
-                        ),
-                      ),
-                    ],
-                    if (_reasonOtherSelected) ...[
-                      const SizedBox(height: 12),
-                      _Input(
-                        controller: _reasonOtherController,
-                        label: 'Specify other reason',
-                        hint: 'Describe other reason for enrolment',
-                        maxLines: 3,
-                        validator: (v) {
-                          if (_reasonOtherSelected &&
-                              (v == null || v.trim().isEmpty)) {
-                            return 'Please specify other reason';
-                          }
-                          return null;
-                        },
-                      ),
-                    ],
                   ],
-                ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -4815,21 +3669,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: keyboardType == TextInputType.phone
-                      ? _phoneInputField(
-                    controller: item.controller,
-                    label: '$label ${index + 1}',
-                    countryCode: item.phoneCountryCode,
-                    requiredField: false,
-                    onCountryChanged: (value) {
-                      setState(() => item.phoneCountryCode = value ?? 'LS');
-                      _formatPhoneControllerForSelectedCountry(
-                        item.controller,
-                        item.phoneCountryCode,
-                      );
-                    },
-                  )
-                      : _Input(
+                  child: _Input(
                     controller: item.controller,
                     label: '$label ${index + 1}',
                     hint: hint,
@@ -5084,17 +3924,17 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       members.add(_Opt('CLIENT', 'Client: $clientName'));
     }
 
-    if (_fatherAlive == 'Yes') {
+    if (_fatherAlive == 'YES') {
       final fatherName = '${_fatherFirstNameController.text.trim()} ${_fatherSurnameController.text.trim()}'.trim();
       if (fatherName.isNotEmpty) {
-        members.add(_Opt('Father', 'Father: $fatherName'));
+        members.add(_Opt('FATHER', 'Father: $fatherName'));
       }
     }
 
-    if (_motherAlive == 'Yes') {
+    if (_motherAlive == 'YES') {
       final motherName = '${_motherFirstNameController.text.trim()} ${_motherSurnameController.text.trim()}'.trim();
       if (motherName.isNotEmpty) {
-        members.add(_Opt('Mother', 'Mother: $motherName'));
+        members.add(_Opt('MOTHER', 'Mother: $motherName'));
       }
     }
 
@@ -5162,8 +4002,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   }
 
   Widget _buildInitialRiskAssessmentSection(Color primary) {
-    final socialInvestigationPriority = _riskPriorityLabel();
-
     return MaterialCard(
       body: Padding(
         padding: const EdgeInsets.all(12.0),
@@ -5191,8 +4029,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               ),
               _Input(
                 controller: _riskSocialWorkerController,
-                label: 'Case Worker',
-                hint: 'Name of case worker',
+                label: 'Social Worker',
+                hint: 'Name of social worker',
               ),
             ),
             const SizedBox(height: 10),
@@ -5226,7 +4064,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               notesController: _riskExtendedFamilyNotesController,
             ),
             _riskDomainItem(
-              title: 'Client relationship with HH members',
+              title: 'Client relationships',
               value: _riskClientRelationships,
               options: riskRelationshipOptions,
               onChanged: (v) => setState(() => _riskClientRelationships = v ?? ''),
@@ -5281,20 +4119,13 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               onChanged: (v) => setState(() => _riskEducation = v ?? ''),
               notesController: _riskEducationNotesController,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _dropdown(
               label: 'Decision on level of risk *',
               value: _riskLevel,
               options: riskLevelOptions,
               requiredField: true,
-              onChanged: (v) {
-                setState(() {
-                  _riskLevel = v ?? '';
-                  _riskNextSteps
-                    ..clear()
-                    ..addAll(_socialInvestigationNextSteps());
-                });
-              },
+              onChanged: (v) => setState(() => _riskLevel = v ?? ''),
             ),
             const SizedBox(height: 10),
             _Input(
@@ -5304,52 +4135,24 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               maxLines: 3,
             ),
             const SizedBox(height: 10),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: primary.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: primary.withOpacity(0.18)),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.travel_explore_outlined, color: primary, size: 21),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Social Investigation required for all cases',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 13.5,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          socialInvestigationPriority,
-                          style: const TextStyle(
-                            color: Colors.blueGrey,
-                            fontSize: 12.5,
-                            height: 1.3,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
             _Input(
               controller: _riskImmediateReferralsController,
               label: 'Immediate referrals',
               hint: 'Record immediate referrals needed or made',
               maxLines: 3,
+            ),
+            const SizedBox(height: 12),
+            _riskMultiSelect(
+              title: 'Next steps',
+              options: riskNextStepOptions,
+              selectedValues: _riskNextSteps,
+            ),
+            const SizedBox(height: 12),
+            _Input(
+              controller: _riskAdditionalNotesController,
+              label: 'Additional notes',
+              hint: 'Any additional initial risk notes',
+              maxLines: 4,
             ),
           ],
         ),
@@ -5367,9 +4170,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             _titleRow(
               color: primary,
               title: 'Additional Assessment',
-              subtitle: _showEmploymentQuestions
-                  ? 'Self-care, disability, assistive devices, rehabilitation and employability.'
-                  : 'Self-care, disability, assistive devices and rehabilitation.',
+              subtitle: 'Self-care, disability, assistive devices, rehabilitation and employability.',
               icon: Icons.accessible_outlined,
             ),
             const SizedBox(height: 12),
@@ -5385,7 +4186,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             ),
             _yesNoGatedMultiSelect(
               title: 'Disability diagnosis',
-              subtitle: 'Any form of disability? e.g. hearing loss, blindness, speech impairment, mobility impairment, vision impairment, albinism, deaf.',
+              subtitle: 'Have you ever been diagnosed with any form of disability? e.g. hearing loss, blindness, speech impairment, mobility impairment.',
               gateValue: _hasDisabilityDiagnosis,
               onGateChanged: (v) => setState(() {
                 _hasDisabilityDiagnosis = v ?? '';
@@ -5419,58 +4220,56 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               selectedValues: _rehabilitationServices,
               otherController: _rehabilitationServiceOtherController,
             ),
-            if (_showEmploymentQuestions)
-              Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEFF4F8),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.blueGrey.withOpacity(0.22)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Employability',
-                      style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'What barriers does the client face in finding a job?',
-                      style: TextStyle(color: Colors.blueGrey, fontSize: 12.5, height: 1.3),
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: employabilityBarrierOptions
-                          .map((option) => _riskChoiceChip(
-                        option: option,
-                        selectedValues: _employabilityBarriers,
-                      ))
-                          .toList(),
-                    ),
-                    if (_employabilityBarriers.contains('OTHER')) ...[
-                      const SizedBox(height: 10),
-                      _Input(
-                        controller: _employabilityBarrierOtherController,
-                        label: 'Specify other',
-                        hint: 'Enter other barrier',
-                        validator: (v) {
-                          if (_showEmploymentQuestions &&
-                              _employabilityBarriers.contains('OTHER') &&
-                              (v == null || v.trim().isEmpty)) {
-                            return 'Please specify';
-                          }
-                          return null;
-                        },
-                      ),
-                    ],
-                  ],
-                ),
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF4F8),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.blueGrey.withOpacity(0.22)),
               ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Employability',
+                    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'What barriers does the client face in finding a job?',
+                    style: TextStyle(color: Colors.blueGrey, fontSize: 12.5, height: 1.3),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: employabilityBarrierOptions
+                        .map((option) => _riskChoiceChip(
+                      option: option,
+                      selectedValues: _employabilityBarriers,
+                    ))
+                        .toList(),
+                  ),
+                  if (_employabilityBarriers.contains('OTHER')) ...[
+                    const SizedBox(height: 10),
+                    _Input(
+                      controller: _employabilityBarrierOtherController,
+                      label: 'Specify other',
+                      hint: 'Enter other barrier',
+                      validator: (v) {
+                        if (_employabilityBarriers.contains('OTHER') &&
+                            (v == null || v.trim().isEmpty)) {
+                          return 'Please specify';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
@@ -5581,8 +4380,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required void Function(String value) onLivingWithChildChanged,
     required TextEditingController whyNotLivingController,
     required TextEditingController phoneController,
-    required String phoneCountryCode,
-    required void Function(String value) onPhoneCountryChanged,
   }) {
     return Container(
       width: double.infinity,
@@ -5607,7 +4404,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             requiredField: true,
             onChanged: (v) => onAliveChanged(v ?? ''),
           ),
-          if (aliveValue == 'Yes') ...[
+          if (aliveValue == 'YES') ...[
             const SizedBox(height: 10),
             _row2(
               _Input(
@@ -5642,7 +4439,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               requiredField: true,
               onChanged: (v) => onLivingWithChildChanged(v ?? ''),
             ),
-            if (livingWithChildValue != 'Yes' &&
+            if (livingWithChildValue != 'YES' &&
                 livingWithChildValue.trim().isNotEmpty) ...[
               const SizedBox(height: 10),
               _Input(
@@ -5652,18 +4449,11 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 maxLines: 3,
               ),
               const SizedBox(height: 10),
-              _phoneInputField(
+              _Input(
                 controller: phoneController,
                 label: 'Phone Number',
-                countryCode: phoneCountryCode,
-                requiredField: false,
-                onCountryChanged: (value) {
-                  onPhoneCountryChanged(value ?? 'LS');
-                  _formatPhoneControllerForSelectedCountry(
-                    phoneController,
-                    value ?? 'LS',
-                  );
-                },
+                hint: 'e.g. 5xxxxxxx',
+                keyboardType: TextInputType.phone,
               ),
             ],
           ],
@@ -5768,18 +4558,13 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               ),
             ),
             const SizedBox(height: 10),
-            _phoneInputField(
+            _Input(
               controller: caregiver.phoneController,
               label: 'Phone Number',
-              countryCode: caregiver.phoneCountryCode,
+              hint: 'e.g. 5xxxxxxx',
+              keyboardType: TextInputType.phone,
               requiredField: true,
-              onCountryChanged: (value) {
-                setState(() => caregiver.phoneCountryCode = value ?? 'LS');
-                _formatPhoneControllerForSelectedCountry(
-                  caregiver.phoneController,
-                  caregiver.phoneCountryCode,
-                );
-              },
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
             ),
           ],
         ],
@@ -5829,18 +4614,13 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               ),
             ),
             const SizedBox(height: 10),
-            _phoneInputField(
+            _Input(
               controller: nextOfKin.phoneController,
               label: 'Phone Number',
-              countryCode: nextOfKin.phoneCountryCode,
+              hint: 'e.g. 5xxxxxxx',
+              keyboardType: TextInputType.phone,
               requiredField: true,
-              onCountryChanged: (value) {
-                setState(() => nextOfKin.phoneCountryCode = value ?? 'LS');
-                _formatPhoneControllerForSelectedCountry(
-                  nextOfKin.phoneController,
-                  nextOfKin.phoneCountryCode,
-                );
-              },
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
             ),
             const SizedBox(height: 10),
             _Input(
@@ -5997,18 +4777,11 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             ),
           ),
           const SizedBox(height: 10),
-          _phoneInputField(
+          _Input(
             controller: _personalAssistantPhoneController,
             label: 'Phone Number',
-            countryCode: _personalAssistantPhoneCountryCode,
-            requiredField: false,
-            onCountryChanged: (value) {
-              setState(() => _personalAssistantPhoneCountryCode = value ?? 'LS');
-              _formatPhoneControllerForSelectedCountry(
-                _personalAssistantPhoneController,
-                _personalAssistantPhoneCountryCode,
-              );
-            },
+            hint: 'e.g. 5xxxxxxx',
+            keyboardType: TextInputType.phone,
           ),
         ],
       ),
@@ -6037,7 +4810,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 onAliveChanged: (value) {
                   setState(() {
                     _fatherAlive = value;
-                    if (_fatherAlive != 'Yes') {
+                    if (_fatherAlive != 'YES') {
                       _fatherFirstNameController.clear();
                       _fatherSurnameController.clear();
                       _fatherDobController.clear();
@@ -6056,7 +4829,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 onLivingWithChildChanged: (value) {
                   setState(() {
                     _fatherLivingWithChild = value;
-                    if (_fatherLivingWithChild == 'Yes') {
+                    if (_fatherLivingWithChild == 'YES') {
                       _fatherWhyNotLivingController.clear();
                       _fatherPhoneController.clear();
                     }
@@ -6064,10 +4837,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 },
                 whyNotLivingController: _fatherWhyNotLivingController,
                 phoneController: _fatherPhoneController,
-                phoneCountryCode: _fatherPhoneCountryCode,
-                onPhoneCountryChanged: (value) {
-                  setState(() => _fatherPhoneCountryCode = value);
-                },
               ),
               _parentSection(
                 title: 'Mother',
@@ -6075,7 +4844,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 onAliveChanged: (value) {
                   setState(() {
                     _motherAlive = value;
-                    if (_motherAlive != 'Yes') {
+                    if (_motherAlive != 'YES') {
                       _motherFirstNameController.clear();
                       _motherSurnameController.clear();
                       _motherDobController.clear();
@@ -6094,7 +4863,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 onLivingWithChildChanged: (value) {
                   setState(() {
                     _motherLivingWithChild = value;
-                    if (_motherLivingWithChild == 'Yes') {
+                    if (_motherLivingWithChild == 'YES') {
                       _motherWhyNotLivingController.clear();
                       _motherPhoneController.clear();
                     }
@@ -6102,10 +4871,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 },
                 whyNotLivingController: _motherWhyNotLivingController,
                 phoneController: _motherPhoneController,
-                phoneCountryCode: _motherPhoneCountryCode,
-                onPhoneCountryChanged: (value) {
-                  setState(() => _motherPhoneCountryCode = value);
-                },
               ),
             ],
             _caregiverSection(),
@@ -6242,18 +5007,13 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 requiredField: true,
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
               ),
-              _phoneInputField(
+              _Input(
                 controller: member.contactsController,
                 label: 'Contacts',
-                countryCode: member.contactsCountryCode,
+                hint: 'Phone / contact details',
+                keyboardType: TextInputType.phone,
                 requiredField: true,
-                onCountryChanged: (value) {
-                  setState(() => member.contactsCountryCode = value ?? 'LS');
-                  _formatPhoneControllerForSelectedCountry(
-                    member.contactsController,
-                    member.contactsCountryCode,
-                  );
-                },
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
               ),
             ),
             const SizedBox(height: 10),
@@ -6265,13 +5025,13 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               onChanged: (v) {
                 setState(() {
                   member.hasDisability = v ?? '';
-                  if (member.hasDisability != 'Yes') {
+                  if (member.hasDisability != 'YES') {
                     member.disabilitySpecifyController.clear();
                   }
                 });
               },
             ),
-            if (member.hasDisability == 'Yes') ...[
+            if (member.hasDisability == 'YES') ...[
               const SizedBox(height: 10),
               _Input(
                 controller: member.disabilitySpecifyController,
@@ -6336,8 +5096,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       body: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          key: ValueKey('part_${title}_$_mandatoryExpansionRefresh'),
-          initiallyExpanded: initiallyExpanded || _forceOpenMandatorySections,
+          initiallyExpanded: initiallyExpanded,
           tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
           leading: CircleAvatar(
@@ -6384,8 +5143,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          key: ValueKey('subpart_${title}_$_mandatoryExpansionRefresh'),
-          initiallyExpanded: _forceOpenMandatorySections,
           tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
           leading: Icon(icon, color: color, size: 20),
@@ -6434,7 +5191,6 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             margin: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 10.0),
             child: Form(
               key: _formKey,
-              onChanged: _scheduleCacheSave,
               child: Column(
                 children: [
                   if ((widget.reportedEventId ?? '').trim().isNotEmpty)
@@ -6457,8 +5213,39 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                     ),
                   const SizedBox(height: 12),
                   _partTile(
-                    title: 'Part 1: Demographics, Household and Education',
-                    subtitle: 'Capture household location, client demographics, education and applicable adult employment details.',
+                    title: 'Part 1: Risk Assessment and Reasons for Enrolment',
+                    subtitle: 'Start with assessment, then confirm why the client is enrolled.',
+                    icon: Icons.fact_check_outlined,
+                    color: primary,
+                    initiallyExpanded: true,
+                    children: [
+                      _subPartTile(
+                        title: '1.1 Initial Assessment',
+                        subtitle: 'Capture risk level and key assessment domains.',
+                        icon: Icons.health_and_safety_outlined,
+                        color: primary,
+                        child: _buildInitialRiskAssessmentSection(primary),
+                      ),
+                      _subPartTile(
+                        title: '1.2 Reasons for Enrolment',
+                        subtitle: 'Select only the reason(s) that apply.',
+                        icon: Icons.assignment_late_outlined,
+                        color: primary,
+                        child: _buildReasonSection(primary),
+                      ),
+                      _subPartTile(
+                        title: '1.3 Additional Assessment',
+                        subtitle: 'Disability, self-care, rehabilitation and employability.',
+                        icon: Icons.accessibility_new_outlined,
+                        color: primary,
+                        child: _buildAdditionalAssessmentSection(primary),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _partTile(
+                    title: 'Part 2: Household, Client and Education',
+                    subtitle: 'Location, client identity, school and employment details.',
                     icon: Icons.home_work_outlined,
                     color: primary,
                     initiallyExpanded: true,
@@ -6548,221 +5335,196 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      KeyedSubtree(
-                        key: _clientDemographicsSectionKey,
-                        child: MaterialCard(
-                          body: Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _titleRow(
-                                  color: primary,
-                                  title: 'Demographics and Reporting Information',
-                                  subtitle:
-                                  'Capture the main client information for this case.',
-                                  icon: Icons.person_outline,
-                                ),
-                                const SizedBox(height: 12),
+                      MaterialCard(
+                        body: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _titleRow(
+                                color: primary,
+                                title: 'Demographics and Reporting Information',
+                                subtitle:
+                                'Capture the main client information for this case.',
+                                icon: Icons.person_outline,
+                              ),
+                              const SizedBox(height: 12),
+                              _Input(
+                                controller: _identityNumberController,
+                                label: 'Identity Number',
+                                hint: 'National ID / document number',
+                              ),
+                              const SizedBox(height: 10),
+                              _row2(
                                 _Input(
-                                  controller: _identityNumberController,
-                                  label: 'Identity Number',
-                                  hint: 'National ID / document number',
-                                  keyboardType: TextInputType.text,
-                                  inputFormatters: [
-                                    FilteringTextInputFormatter.allow(
-                                      RegExp(r'[A-Za-z0-9\s-]'),
-                                    ),
-                                  ],
-                                  autovalidateMode: AutovalidateMode.onUserInteraction,
-                                  validator: _identityNumberValidator,
+                                  controller: _clientFirstNameController,
+                                  label: 'First name',
+                                  hint: 'Client first name',
+                                  validator: (v) =>
+                                  (v == null || v.trim().isEmpty)
+                                      ? 'First name is required'
+                                      : null,
                                 ),
-                                const SizedBox(height: 10),
-                                _row2(
-                                  _Input(
-                                    controller: _clientFirstNameController,
-                                    label: 'First name',
-                                    hint: 'Client first name',
-                                    validator: (v) =>
-                                    (v == null || v.trim().isEmpty)
-                                        ? 'First name is required'
-                                        : null,
-                                  ),
-                                  _Input(
-                                    controller: _clientSurnameController,
-                                    label: 'Surname',
-                                    hint: 'Client surname',
-                                    validator: (v) =>
-                                    (v == null || v.trim().isEmpty)
-                                        ? 'Surname is required'
-                                        : null,
-                                  ),
+                                _Input(
+                                  controller: _clientSurnameController,
+                                  label: 'Surname',
+                                  hint: 'Client surname',
+                                  validator: (v) =>
+                                  (v == null || v.trim().isEmpty)
+                                      ? 'Surname is required'
+                                      : null,
                                 ),
-                                const SizedBox(height: 10),
-                                _row2(
-                                  GestureDetector(
-                                    onTap: _pickDobForClient,
-                                    child: AbsorbPointer(
-                                      child: _Input(
-                                        controller: _clientDobController,
-                                        label: 'Date of Birth',
-                                        hint: 'Pick date',
-                                        suffixIcon: const Icon(Icons.date_range),
-                                        validator: (v) =>
-                                        (v == null || v.trim().isEmpty)
-                                            ? 'Date of birth is required'
-                                            : null,
-                                      ),
+                              ),
+                              const SizedBox(height: 10),
+                              _row2(
+                                GestureDetector(
+                                  onTap: _pickDobForClient,
+                                  child: AbsorbPointer(
+                                    child: _Input(
+                                      controller: _clientDobController,
+                                      label: 'Date of Birth',
+                                      hint: 'Pick date',
+                                      suffixIcon: const Icon(Icons.date_range),
+                                      validator: (v) =>
+                                      (v == null || v.trim().isEmpty)
+                                          ? 'Date of birth is required'
+                                          : null,
                                     ),
                                   ),
-                                  _Input(
-                                    controller: _clientAgeController,
-                                    label: 'Age',
-                                    hint: 'Auto-calculated',
-                                    readOnly: true,
-                                  ),
                                 ),
+                                _Input(
+                                  controller: _clientAgeController,
+                                  label: 'Age',
+                                  hint: 'Auto-calculated',
+                                  readOnly: true,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              _dropdown(
+                                label: 'Sex',
+                                value: _sex,
+                                options: sexOptions,
+                                requiredField: true,
+                                onChanged: (v) {
+                                  setState(() {
+                                    _sex = v ?? '';
+                                    _removeHiddenReasonOptions();
+                                  });
+                                },
+                              ),
+                              const SizedBox(height: 10),
+                              _dropdown(
+                                label: 'Nationality',
+                                value: _nationality,
+                                options: nationalityOptions,
+                                requiredField: true,
+                                onChanged: (v) {
+                                  setState(() {
+                                    _nationality = v ?? '';
+                                    if (_nationality != 'OTHER') {
+                                      _nationalityOtherController.clear();
+                                    }
+                                  });
+                                },
+                              ),
+                              if (_nationality == 'OTHER') ...[
                                 const SizedBox(height: 10),
-                                _dropdown(
-                                  label: 'Sex',
-                                  value: _sex,
-                                  options: sexOptions,
-                                  requiredField: true,
-                                  onChanged: (v) {
-                                    setState(() {
-                                      _sex = v ?? '';
-                                      _removeHiddenReasonOptions();
-                                    });
+                                _Input(
+                                  controller: _nationalityOtherController,
+                                  label: 'Specify other nationality',
+                                  hint: 'Enter nationality',
+                                  validator: (v) {
+                                    if (_nationality == 'OTHER' &&
+                                        (v == null || v.trim().isEmpty)) {
+                                      return 'Please specify nationality';
+                                    }
+                                    return null;
                                   },
-                                ),
-                                const SizedBox(height: 10),
-                                _dropdown(
-                                  label: 'Nationality',
-                                  value: _nationality,
-                                  options: nationalityOptions,
-                                  requiredField: true,
-                                  onChanged: (v) {
-                                    setState(() {
-                                      _nationality = v ?? '';
-                                      if (_nationality != 'OTHER') {
-                                        _nationalityOtherController.clear();
-                                      }
-                                    });
-                                  },
-                                ),
-                                if (_nationality == 'OTHER') ...[
-                                  const SizedBox(height: 10),
-                                  _Input(
-                                    controller: _nationalityOtherController,
-                                    label: 'Specify other nationality',
-                                    hint: 'Enter nationality',
-                                    validator: (v) {
-                                      if (_nationality == 'OTHER' &&
-                                          (v == null || v.trim().isEmpty)) {
-                                        return 'Please specify nationality';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                ],
-                                const SizedBox(height: 10),
-                                _dropdown(
-                                  label: 'Home Language',
-                                  value: _homeLanguage,
-                                  options: homeLanguageOptions,
-                                  requiredField: true,
-                                  onChanged: (v) {
-                                    setState(() {
-                                      _homeLanguage = v ?? '';
-                                      if (_homeLanguage != 'OTHER') {
-                                        _homeLanguageOtherController.text = '';
-                                      }
-                                    });
-                                  },
-                                ),
-                                if (_homeLanguage == 'OTHER') ...[
-                                  const SizedBox(height: 10),
-                                  _Input(
-                                    controller: _homeLanguageOtherController,
-                                    label: 'Specify other language',
-                                    hint: 'Enter language',
-                                  ),
-                                ],
-                                const SizedBox(height: 10),
-                                _row2(
-                                  _phoneInputField(
-                                    controller: _phoneController,
-                                    label: 'Phone Number',
-                                    countryCode: _clientPhoneCountryCode,
-                                    requiredField: false,
-                                    onCountryChanged: (value) {
-                                      setState(() => _clientPhoneCountryCode = value ?? 'LS');
-                                      _formatPhoneControllerForSelectedCountry(
-                                        _phoneController,
-                                        _clientPhoneCountryCode,
-                                      );
-                                    },
-                                  ),
-                                  _phoneInputField(
-                                    controller: _alternativePhoneController,
-                                    label: 'Alternative Phone Number',
-                                    countryCode: _clientAlternativePhoneCountryCode,
-                                    requiredField: false,
-                                    onCountryChanged: (value) {
-                                      setState(() => _clientAlternativePhoneCountryCode = value ?? 'LS');
-                                      _formatPhoneControllerForSelectedCountry(
-                                        _alternativePhoneController,
-                                        _clientAlternativePhoneCountryCode,
-                                      );
-                                    },
-                                  ),
-                                ),
-
-                                const SizedBox(height: 10),
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFE7EEF4),
-                                    borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(color: Colors.blueGrey.withOpacity(0.22)),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        _clientCategory.isEmpty
-                                            ? Icons.info_outline
-                                            : Icons.check_circle_outline,
-                                        color: Colors.blueGrey,
-                                        size: 20,
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            const Text(
-                                              'Client category',
-                                              style: TextStyle(color: Colors.blueGrey, fontSize: 12.5),
-                                            ),
-                                            const SizedBox(height: 3),
-                                            Text(
-                                              _clientCategory.isEmpty
-                                                  ? 'Not yet determined — pick the Date of Birth above'
-                                                  : (_isChild ? 'Child' : 'Adult / Elderly Person'),
-                                              style: const TextStyle(
-                                                fontSize: 14.5,
-                                                fontWeight: FontWeight.w800,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
                                 ),
                               ],
-                            ),
+                              const SizedBox(height: 10),
+                              _dropdown(
+                                label: 'Home Language',
+                                value: _homeLanguage,
+                                options: homeLanguageOptions,
+                                requiredField: true,
+                                onChanged: (v) {
+                                  setState(() {
+                                    _homeLanguage = v ?? '';
+                                    if (_homeLanguage != 'OTHER') {
+                                      _homeLanguageOtherController.text = '';
+                                    }
+                                  });
+                                },
+                              ),
+                              if (_homeLanguage == 'OTHER') ...[
+                                const SizedBox(height: 10),
+                                _Input(
+                                  controller: _homeLanguageOtherController,
+                                  label: 'Specify other language',
+                                  hint: 'Enter language',
+                                ),
+                              ],
+                              const SizedBox(height: 10),
+                              _row2(
+                                _Input(
+                                  controller: _phoneController,
+                                  label: 'Phone Number',
+                                  hint: 'e.g. 5xxxxxxx',
+                                  keyboardType: TextInputType.phone,
+                                ),
+                                _Input(
+                                  controller: _alternativePhoneController,
+                                  label: 'Alternative Phone Number',
+                                  hint: 'e.g. 5xxxxxxx',
+                                  keyboardType: TextInputType.phone,
+                                ),
+                              ),
+
+                              const SizedBox(height: 10),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE7EEF4),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: Colors.blueGrey.withOpacity(0.22)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      _clientCategory.isEmpty
+                                          ? Icons.info_outline
+                                          : Icons.check_circle_outline,
+                                      color: Colors.blueGrey,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Client category',
+                                            style: TextStyle(color: Colors.blueGrey, fontSize: 12.5),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            _clientCategory.isEmpty
+                                                ? 'Not yet determined — pick the Date of Birth above'
+                                                : (_isChild ? 'Child' : 'Adult / Elderly Person'),
+                                            style: const TextStyle(
+                                              fontSize: 14.5,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -6800,7 +5562,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                                   });
                                 },
                               ),
-                              if (_isClientInSchool == 'Yes') ...[
+                              if (_isClientInSchool == 'YES') ...[
                                 const SizedBox(height: 10),
                                 _Input(
                                   controller: _schoolNameController,
@@ -6865,7 +5627,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                                           () => _schoolAttendanceStatus = v ?? ''),
                                 ),
                               ],
-                              if (_isClientInSchool == 'No') ...[
+                              if (_isClientInSchool == 'NO') ...[
                                 const SizedBox(height: 10),
                                 _dropdown(
                                   label: 'School attendance Status',
@@ -6897,7 +5659,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                           ),
                         ),
                       ),
-                      if (_showEmploymentQuestions) ...[
+                      if (_isAdultOrElderly) ...[
                         const SizedBox(height: 12),
                         MaterialCard(
                           body: Padding(
@@ -6921,13 +5683,13 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                                   onChanged: (v) {
                                     setState(() {
                                       _isAdultEmployed = v ?? '';
-                                      if (_isAdultEmployed != 'Yes') {
+                                      if (_isAdultEmployed != 'YES') {
                                         _employerNameController.clear();
                                       }
                                     });
                                   },
                                 ),
-                                if (_isAdultEmployed == 'Yes') ...[
+                                if (_isAdultEmployed == 'YES') ...[
                                   const SizedBox(height: 10),
                                   _Input(
                                     controller: _employerNameController,
@@ -6943,9 +5705,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                     ],
                   ),
                   const SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   _partTile(
-                    title: 'Part 2: Family and Household Members',
-                    subtitle: 'Capture next of kin, parents, caregivers and household members after demographics.',
+                    title: 'Part 3: Family and Household Members',
+                    subtitle: 'Next of kin, parents, caregivers and household members.',
                     icon: Icons.family_restroom_outlined,
                     color: primary,
                     children: [
@@ -6987,102 +5750,18 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  _partTile(
-                    title: 'Part 3: Initial Risk Assessment and Referrals',
-                    subtitle: 'Complete initial risk assessment, reasons for enrolment, then additional assessment.',
-                    icon: Icons.fact_check_outlined,
-                    color: primary,
-                    children: [
-                      _subPartTile(
-                        title: '3.1 Initial Risk Assessment',
-                        subtitle: 'Record assessment domains, decision on risk level, risk reason and referrals.',
-                        icon: Icons.health_and_safety_outlined,
-                        color: primary,
-                        child: _buildInitialRiskAssessmentSection(primary),
-                      ),
-                      _subPartTile(
-                        title: '3.2 Reasons for Enrolment',
-                        subtitle: 'Select only the reason(s) that apply.',
-                        icon: Icons.assignment_late_outlined,
-                        color: primary,
-                        child: _buildReasonSection(primary),
-                      ),
-                      _subPartTile(
-                        title: '3.3 Additional Assessment',
-                        subtitle: 'Disability, self-care, rehabilitation and employability.',
-                        icon: Icons.accessibility_new_outlined,
-                        color: primary,
-                        child: _buildAdditionalAssessmentSection(primary),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
                   const SizedBox(height: 16),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: (_saving || _loadingExistingCase)
-                            ? null
-                            : _saveDraftCacheManually,
-                        icon: const Icon(Icons.cloud_done_outlined),
-                        label: const Text('Save Draft / Cache'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: primary,
-                          side: BorderSide(color: primary.withOpacity(0.55)),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          textStyle: const TextStyle(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: (_saving || _loadingExistingCase) ? null : _saveCase,
-                        icon: _saving
-                            ? const SizedBox(
-                          width: 17,
-                          height: 17,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                            : const Icon(Icons.save_outlined),
-                        label: Text(
-                          _saving
-                              ? 'Saving...'
-                              : widget.isEditing
-                              ? 'Update Intake and Initial Risk Assessment'
-                              : 'Save Intake and Initial Risk Assessment',
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primary,
-                          foregroundColor: Colors.white,
-                          disabledBackgroundColor: primary.withOpacity(0.65),
-                          disabledForegroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 15),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          textStyle: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                    ),
+                  EntryFormSaveButton(
+                    marginLeft: 20.0,
+                    marginRight: 20.0,
+                    label: _saving ? 'Saving...' : 'Save Intake and Initial Risk Assessment',
+                    svgIconPath: 'assets/icons/save-icon.svg',
+                    svgIconHeight: 16.0,
+                    svgIconWidth: 16.0,
+                    labelColor: Colors.white,
+                    buttonColor: primary,
+                    fontSize: 15.0,
+                    onPressButton: _saving ? () {} : _saveCase,
                   ),
                 ],
               ),
@@ -7107,9 +5786,6 @@ class _Input extends StatelessWidget {
     this.readOnly = false,
     this.keyboardType,
     this.requiredField = false,
-    this.inputFormatters,
-    this.autovalidateMode,
-    this.onChanged,
   }) : super(key: key);
 
   final TextEditingController controller;
@@ -7121,9 +5797,6 @@ class _Input extends StatelessWidget {
   final bool readOnly;
   final TextInputType? keyboardType;
   final bool requiredField;
-  final List<TextInputFormatter>? inputFormatters;
-  final AutovalidateMode? autovalidateMode;
-  final void Function(String)? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -7133,9 +5806,6 @@ class _Input extends StatelessWidget {
       maxLines: maxLines,
       readOnly: readOnly,
       keyboardType: keyboardType,
-      inputFormatters: inputFormatters,
-      autovalidateMode: autovalidateMode,
-      onChanged: onChanged,
       decoration: InputDecoration(
         label: requiredField
             ? RichText(
@@ -7150,8 +5820,6 @@ class _Input extends StatelessWidget {
             : null,
         labelText: requiredField ? null : label,
         labelStyle: const TextStyle(fontWeight: FontWeight.w700, color: Colors.blueGrey),
-        errorMaxLines: 4,
-        helperMaxLines: 4,
         hintText: hint,
         hintStyle: TextStyle(color: Colors.blueGrey.withOpacity(0.82), fontSize: 13, fontWeight: FontWeight.w500),
         suffixIcon: suffixIcon,

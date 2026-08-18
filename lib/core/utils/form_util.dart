@@ -24,11 +24,11 @@ import 'package:provider/provider.dart';
 
 class FormUtil {
   static bool hasAllMandatoryFieldsFilled(
-    List mandatoryFields,
-    Map dataDynamic, {
-    required List<InputField> checkBoxInputFields,
-    required Map hiddenFields,
-  }) {
+      List mandatoryFields,
+      Map dataDynamic, {
+        required List<InputField> checkBoxInputFields,
+        required Map hiddenFields,
+      }) {
     bool hasMandoryFieldCheckPass = true;
     List inputFieldWithData = dataDynamic.keys.toList();
     List hiddenFieldsIds = hiddenFields.keys
@@ -66,7 +66,7 @@ class FormUtil {
             bool hasAtLeastOneInputFieldFilled = isAtLeastOneCheckBoxTicked(
               checkBoxInputFields
                   .where((InputField inputField) =>
-                      inputField.id == mandatoryField)
+              inputField.id == mandatoryField)
                   .toList(),
               dataDynamic,
             );
@@ -83,9 +83,9 @@ class FormUtil {
   }
 
   static bool isAtLeastOneCheckBoxTicked(
-    List<InputField> checkBoxInputFields,
-    Map dataDynamic,
-  ) {
+      List<InputField> checkBoxInputFields,
+      Map dataDynamic,
+      ) {
     bool hasAtLeastOneInputFieldFilled = false;
     List<String> ids = [];
     for (InputField inputField in checkBoxInputFields) {
@@ -103,11 +103,11 @@ class FormUtil {
   }
 
   static List getUnFilledMandatoryFields(
-    List mandatoryFields,
-    Map dataDynamic, {
-    required List<InputField> checkBoxInputFields,
-    required Map hiddenFields,
-  }) {
+      List mandatoryFields,
+      Map dataDynamic, {
+        required List<InputField> checkBoxInputFields,
+        required Map hiddenFields,
+      }) {
     List unFilledMandatoryFields = [];
     List fieldIds = dataDynamic.keys.toList();
     List hiddenFieldsIds = hiddenFields.keys
@@ -144,7 +144,7 @@ class FormUtil {
             bool hasAtLeastOneInputFieldFilled = isAtLeastOneCheckBoxTicked(
               checkBoxInputFields
                   .where((InputField inputField) =>
-                      inputField.id == mandatoryField)
+              inputField.id == mandatoryField)
                   .toList(),
               dataDynamic,
             );
@@ -161,9 +161,9 @@ class FormUtil {
   }
 
   static bool getAtLeastOneFormFieldsFilledStatus(
-    List fields,
-    Map dataDynamic,
-  ) {
+      List fields,
+      Map dataDynamic,
+      ) {
     List unFilledFields = [];
     List fieldIds = dataDynamic.keys.toList();
     for (var field in fields) {
@@ -235,10 +235,10 @@ class FormUtil {
   }
 
   static updateServiceFormState(
-    BuildContext context,
-    bool isEditableMode,
-    Events? eventData,
-  ) {
+      BuildContext context,
+      bool isEditableMode,
+      Events? eventData,
+      ) {
     Provider.of<ServiceFormState>(context, listen: false).resetFormState();
     Provider.of<ServiceFormState>(context, listen: false)
         .updateFormEditabilityState(isEditableMode: isEditableMode);
@@ -259,10 +259,10 @@ class FormUtil {
   }
 
   static List<FormSection> getFormSectionWithReadOnlyStatus(
-    List<FormSection> formSections,
-    bool isReadOnly,
-    List<String> skippedInputs,
-  ) {
+      List<FormSection> formSections,
+      bool isReadOnly,
+      List<String> skippedInputs,
+      ) {
     List<FormSection> sanitizedFormSections = [];
     for (FormSection formSection in formSections) {
       List<InputField> inputFields = getInputFieldsWithStatus(
@@ -277,10 +277,10 @@ class FormUtil {
   }
 
   static List<InputField> getInputFieldsWithStatus(
-    List<InputField> inputFields,
-    bool isReadOnly,
-    List<String> skippedInputs,
-  ) {
+      List<InputField> inputFields,
+      bool isReadOnly,
+      List<String> skippedInputs,
+      ) {
     return inputFields.map((InputField inputField) {
       if (inputField.id != '' && !skippedInputs.contains(inputField.id)) {
         inputField.isReadOnly = isReadOnly;
@@ -290,8 +290,8 @@ class FormUtil {
   }
 
   static List<FormSection> getFlattenFormSections(
-    List<FormSection> formSections,
-  ) {
+      List<FormSection> formSections,
+      ) {
     List<FormSection> sections = [];
     for (FormSection formSection in formSections) {
       if (formSection.subSections!.isNotEmpty) {
@@ -303,16 +303,16 @@ class FormUtil {
   }
 
   static List<InputFieldOption> getFormFieldOptions(
-    List<FormSection> formSections,
-    String formSectionId,
-    String inputFieldId,
-  ) {
+      List<FormSection> formSections,
+      String formSectionId,
+      String inputFieldId,
+      ) {
     List<InputFieldOption> inputFieldOptions = [];
     InputField? inputField = (formSections
-                .firstWhereOrNull(
-                    (formSection) => formSection.id == formSectionId)
-                ?.inputFields ??
-            [])
+        .firstWhereOrNull(
+            (formSection) => formSection.id == formSectionId)
+        ?.inputFields ??
+        [])
         .firstWhereOrNull((field) => field.id == inputFieldId);
 
     if (inputField != null) {
@@ -324,8 +324,8 @@ class FormUtil {
   }
 
   static List<String> getAllFormSectionInpiutFields(
-    List<FormSection> formSections,
-  ) {
+      List<FormSection> formSections,
+      ) {
     List<String> fieldIds = [];
     for (FormSection formSection in formSections) {
       for (InputField inputField in formSection.inputFields!) {
@@ -334,16 +334,16 @@ class FormUtil {
         }
       }
       List<String> subSectionFormFields =
-          getAllFormSectionInpiutFields(formSection.subSections!);
+      getAllFormSectionInpiutFields(formSection.subSections!);
       fieldIds.addAll(subSectionFormFields);
     }
     return fieldIds.toSet().toList();
   }
 
   static List<String> getFormFieldIds(
-    List<FormSection> formSections, {
-    bool includeLocationId = false,
-  }) {
+      List<FormSection> formSections, {
+        bool includeLocationId = false,
+      }) {
     List<String> fieldIds = [];
     for (FormSection formSection in formSections) {
       for (InputField inputField in formSection.inputFields!) {
@@ -357,7 +357,7 @@ class FormUtil {
         }
       }
       List<String> subSectionFormFields =
-          getFormFieldIds(formSection.subSections!);
+      getFormFieldIds(formSection.subSections!);
       fieldIds.addAll(subSectionFormFields);
     }
     return includeLocationId
@@ -366,9 +366,9 @@ class FormUtil {
   }
 
   static bool geFormFilledStatus(
-    Map dataObject,
-    List<FormSection>? formSections,
-  ) {
+      Map dataObject,
+      List<FormSection>? formSections,
+      ) {
     bool isFormFilled = false;
     if (dataObject.keys.isNotEmpty) {
       List<String> inputFields = getFormFieldIds(formSections!);
@@ -385,44 +385,209 @@ class FormUtil {
     List<InputField> inputFields = [];
     for (FormSection formSection in formSections) {
       List<InputField> subSectionFormFields =
-          getFormInputFields(formSection.subSections!);
+      getFormInputFields(formSection.subSections!);
       inputFields.addAll(formSection.inputFields!);
       inputFields.addAll(subSectionFormFields);
     }
     return inputFields;
   }
 
+
+
+  static const String _mgysdConcernReasonDataElement = 'UJIrqEgPMn1';
+
+  static const Set<String> _mgysdConcernReasonValidCodes = {
+    'Physical violence',
+    'Sexual violence',
+    'Low socio-economic status',
+    'Exclusion/inclusion error(ISSN/NISSA)',
+    'Work exploitation',
+    'Emotional violence',
+    'Child marriage',
+    'Financial Exploitation',
+    'Grievance',
+    'Health',
+    'Mental Health',
+    'Security',
+    'SUBSTANCE',
+    'OTHER',
+    'SPECIAL_NEEDS',
+  };
+
+  static String _normaliseConcernReasonOptionCode(String value) {
+    final cleanValue = value.trim();
+    if (cleanValue.isEmpty) return '';
+
+    if (_mgysdConcernReasonValidCodes.contains(cleanValue)) {
+      return cleanValue;
+    }
+
+    switch (cleanValue.toUpperCase()) {
+      case 'PHYSICAL':
+      case 'PHYSICAL_VIOLENCE':
+        return 'Physical violence';
+      case 'SEXUAL':
+      case 'SEXUAL_VIOLENCE':
+        return 'Sexual violence';
+      case 'LOW_SOCIO_ECONOMIC_STATUS':
+      case 'LOW SOCIO-ECONOMIC STATUS':
+        return 'Low socio-economic status';
+      case 'EXCLUSION_INCLUSION_ERROR':
+      case 'EXCLUSION_INCLUSION_ERROR_ISSN_NISSA':
+        return 'Exclusion/inclusion error(ISSN/NISSA)';
+      case 'WORK_EXPLOITATION':
+        return 'Work exploitation';
+      case 'EMOTIONAL':
+      case 'EMOTIONAL_VIOLENCE':
+        return 'Emotional violence';
+      case 'CHILD_MARRIAGE':
+        return 'Child marriage';
+      case 'FINANCIAL_EXPLOITATION':
+      case 'FINANCIAL EXPLOITATION':
+        return 'Financial Exploitation';
+      case 'GRIEVANCE':
+        return 'Grievance';
+      case 'HEALTH':
+        return 'Health';
+      case 'MENTAL_HEALTH':
+      case 'MENTAL HEALTH':
+        return 'Mental Health';
+      case 'SECURITY':
+      case 'SAFETY_AND_SECURITY':
+      case 'SAFETY AND SECURITY':
+        return 'Security';
+      case 'SUBSTANCE':
+      case 'SUBSTANCE_ABUSE':
+        return 'SUBSTANCE';
+      case 'OTHER':
+        return 'OTHER';
+      case 'SPECIAL_NEEDS':
+      case 'SPECIAL NEEDS':
+        return 'SPECIAL_NEEDS';
+      default:
+        return cleanValue;
+    }
+  }
+
+  static String _normaliseEventDataValue(
+      String dataElement,
+      String value,
+      ) {
+    final cleanValue = value.trim();
+    if (cleanValue.isEmpty || cleanValue == 'null') return '';
+
+    if (dataElement.trim() != _mgysdConcernReasonDataElement) {
+      return cleanValue;
+    }
+
+    final normalisedCodes = cleanValue
+        .split(',')
+        .map(_normaliseConcernReasonOptionCode)
+        .where((code) => code.isNotEmpty)
+        .toList();
+
+    if (normalisedCodes.isEmpty) return '';
+
+    // UJIrqEgPMn1 uses a DHIS2 option set, so it can only sync one option
+    // code. Keep the first selected concern reason to avoid invalid comma
+    // separated option values.
+    return normalisedCodes.first;
+  }
+
+  static const Set<String> _dhis2BooleanAttributeIds = {
+    'qplFRHPhrMJ',
+    'doT78HXVVtZ',
+    'jfjsu5QL6Ce',
+  };
+
+  static const Set<String> _organisationUnitAttributeIds = {
+    'mUd3nLq2yWs',
+    'QEFKNkxgAPJ',
+  };
+
+  static bool _looksLikeDhis2Uid(String value) {
+    return RegExp(r'^[A-Za-z][A-Za-z0-9]{10}$').hasMatch(value.trim());
+  }
+
+  static String _normaliseTrackedEntityAttributeValue(
+      String attribute,
+      String value,
+      ) {
+    final cleanValue = value.trim();
+
+    if (!_dhis2BooleanAttributeIds.contains(attribute)) {
+      return cleanValue;
+    }
+
+    switch (cleanValue.toUpperCase()) {
+      case 'YES':
+      case 'TRUE':
+        return 'true';
+      case 'NO':
+      case 'FALSE':
+        return 'false';
+      default:
+        return cleanValue;
+    }
+  }
+
+  static bool _canUploadTrackedEntityAttribute(
+      String attribute,
+      String value,
+      ) {
+    final cleanAttribute = attribute.trim();
+    final cleanValue = value.trim();
+
+    if (cleanAttribute.isEmpty || cleanAttribute.startsWith('ATTR_')) {
+      return false;
+    }
+
+    if (cleanValue.isEmpty ||
+        cleanValue == 'null' ||
+        cleanValue == '[]' ||
+        cleanValue == '{}') {
+      return false;
+    }
+
+    if (_organisationUnitAttributeIds.contains(cleanAttribute) &&
+        !_looksLikeDhis2Uid(cleanValue)) {
+      return false;
+    }
+
+    return true;
+  }
+
   static Future<TrackedEntityInstance> geTrackedEntityInstanceEnrollmentPayLoad(
-    String? trackedEntityInstance,
-    String trackedEntityType,
-    String? orgUnit,
-    List<String> inputFieldIds,
-    Map dataObject, {
-    bool hasBeneficiaryId = true,
-    List<String> skippedFields = const ['enrollmentDate', 'location'],
-  }) async {
+      String? trackedEntityInstance,
+      String trackedEntityType,
+      String? orgUnit,
+      List<String> inputFieldIds,
+      Map dataObject, {
+        bool hasBeneficiaryId = true,
+        List<String> skippedFields = const ['enrollmentDate', 'location'],
+      }) async {
     inputFieldIds.removeWhere((field) => skippedFields.contains(field));
     trackedEntityInstance = trackedEntityInstance ?? AppUtil.getUid();
     String appAndDeviceTrackingAttribute =
-        await AppInfoUtil.getAppAndDeviceTrackingInfo();
+    await AppInfoUtil.getAppAndDeviceTrackingInfo();
     String? beneficiaryIndex =
         dataObject[BeneficiaryIdentification.beneficiaryIndex] ??
             await ReservedAttributeValueService().getReservedAttributeValue();
     List<OrganisationUnit> organisationUnits =
-        await OrganisationUnitService().getOrganisationUnits([orgUnit]);
+    await OrganisationUnitService().getOrganisationUnits([orgUnit]);
     OrganisationUnit? organisationUnit =
-        organisationUnits.isNotEmpty ? organisationUnits[0] : null;
+    organisationUnits.isNotEmpty ? organisationUnits[0] : null;
     dataObject[UserAccountReference.appAndDeviceTrackingAttribute] =
         dataObject[UserAccountReference.appAndDeviceTrackingAttribute] ??
             appAndDeviceTrackingAttribute;
     inputFieldIds.add(UserAccountReference.appAndDeviceTrackingAttribute);
     if (hasBeneficiaryId) {
       dataObject[BeneficiaryIdentification.beneficiaryId] =
-          dataObject[BeneficiaryIdentification.beneficiaryId] =
-              dataObject[BeneficiaryIdentification.beneficiaryIndex] != null
-                  ? dataObject[BeneficiaryIdentification.beneficiaryId]
-                  : BeneficiaryIdentification().getBeneficiaryId(
-                      organisationUnit!, dataObject, beneficiaryIndex);
+      dataObject[BeneficiaryIdentification.beneficiaryId] =
+      dataObject[BeneficiaryIdentification.beneficiaryIndex] != null
+          ? dataObject[BeneficiaryIdentification.beneficiaryId]
+          : BeneficiaryIdentification().getBeneficiaryId(
+          organisationUnit!, dataObject, beneficiaryIndex);
       dataObject[BeneficiaryIdentification.beneficiaryIndex] = beneficiaryIndex;
     }
 
@@ -430,14 +595,16 @@ class FormUtil {
         .toSet()
         .toList()
         .map((String attribute) {
-          String value = dataObject.keys.toList().contains(attribute)
-              ? '${dataObject[attribute]}'.trim()
-              : '';
-          value = value == "null" ? '' : value;
-          return attribute != ''
-              ? '{"attribute": "$attribute", "value": "$value"}'
-              : '';
-        })
+      String value = dataObject.keys.toList().contains(attribute)
+          ? '${dataObject[attribute]}'.trim()
+          : '';
+
+      value = _normaliseTrackedEntityAttributeValue(attribute, value);
+
+      return _canUploadTrackedEntityAttribute(attribute, value)
+          ? '{"attribute": ${json.encode(attribute)}, "value": ${json.encode(value)}}'
+          : '';
+    })
         .toList()
         .where((String attributeObj) => attributeObj.isNotEmpty)
         .toList()
@@ -449,21 +616,21 @@ class FormUtil {
   }
 
   static Enrollment getEnrollmentPayLoad(
-    String? enrollment,
-    String? enrollmentDate,
-    String? incidentDate,
-    String? orgUnit,
-    String program,
-    String? trackedEntityInstance,
-    Map? dataObject,
-  ) {
+      String? enrollment,
+      String? enrollmentDate,
+      String? incidentDate,
+      String? orgUnit,
+      String program,
+      String? trackedEntityInstance,
+      Map? dataObject,
+      ) {
     enrollment = enrollment ?? AppUtil.getUid();
     enrollmentDate =
         enrollmentDate ?? AppUtil.formattedDateTimeIntoString(DateTime.now());
     incidentDate =
         incidentDate ?? AppUtil.formattedDateTimeIntoString(DateTime.now());
     String searchableValue =
-        dataObject != null ? _getSearchableFieldFromDataObject(dataObject) : '';
+    dataObject != null ? _getSearchableFieldFromDataObject(dataObject) : '';
     dynamic enrollmentJson =
         '{"enrollment":"$enrollment", "enrollmentDate":"$enrollmentDate","incidentDate":"$incidentDate","orgUnit":"$orgUnit","program":"$program","trackedEntityInstance":"$trackedEntityInstance","status":"ACTIVE","syncStatus":"not-synced", "searchableValue":"$searchableValue" }';
     return Enrollment().fromJson(json.decode(enrollmentJson));
@@ -492,10 +659,10 @@ class FormUtil {
   }
 
   static TeiRelationship getTeiRelationshipPayload(
-    String relationshipType,
-    String? fromTei,
-    String toTei,
-  ) {
+      String relationshipType,
+      String? fromTei,
+      String toTei,
+      ) {
     String id = AppUtil.getUid();
     dynamic source =
         '{"id":"$id","relationshipType":"$relationshipType","toTei":"$toTei", "fromTei":"$fromTei", "syncStatus": "not-synced"}';
@@ -503,43 +670,46 @@ class FormUtil {
   }
 
   static Events getEventPayload(
-    String? event,
-    String? program,
-    String? programStage,
-    String? orgUnit,
-    List<String> inputFieldIds,
-    Map? dataObject,
-    String? eventDate,
-    String? trackedEntityInstance,
-  ) {
+      String? event,
+      String? program,
+      String? programStage,
+      String? orgUnit,
+      List<String> inputFieldIds,
+      Map? dataObject,
+      String? eventDate,
+      String? trackedEntityInstance, [
+        String? enrollment,
+      ]) {
     event = event ?? AppUtil.getUid();
     trackedEntityInstance = trackedEntityInstance ?? '';
+    enrollment = enrollment ?? '';
     eventDate =
         eventDate ?? AppUtil.formattedDateTimeIntoString(DateTime.now());
     String dataValues = inputFieldIds
         .toSet()
         .toList()
         .map((String dataElement) {
-          String value = dataObject!.keys.toList().contains(dataElement)
-              ? '${dataObject[dataElement]}'.trim()
-              : '';
-          value = value == "null" ? '' : value;
-          return dataElement != ''
-              ? '{"dataElement": "$dataElement", "value": "$value"}'
-              : '';
-        })
+      String value = dataObject!.keys.toList().contains(dataElement)
+          ? '${dataObject[dataElement]}'.trim()
+          : '';
+      value = value == "null" ? '' : value;
+      value = _normaliseEventDataValue(dataElement, value);
+      return dataElement != ''
+          ? '{"dataElement": ${json.encode(dataElement)}, "value": ${json.encode(value)}}'
+          : '';
+    })
         .toList()
         .where((String dataElementObj) => dataElementObj.isNotEmpty)
         .toList()
         .join(',');
     dynamic eventJson =
-        '{"event" : "$event", "eventDate":"$eventDate",  "program":"$program", "programStage":"$programStage", "trackedEntityInstance":"$trackedEntityInstance", "status":"COMPLETED", "orgUnit":"$orgUnit", "syncStatus":"not-synced", "dataValues":[$dataValues] }';
+        '{"event" : "$event", "eventDate":"$eventDate",  "program":"$program", "programStage":"$programStage", "trackedEntityInstance":"$trackedEntityInstance", "enrollment":"$enrollment", "status":"COMPLETED", "orgUnit":"$orgUnit", "syncStatus":"not-synced", "dataValues":[$dataValues] }';
     return Events().fromJson(json.decode(eventJson));
   }
 
   static Future savingTrackedEntityInstance(
-    TrackedEntityInstance trackedEntityInstance,
-  ) async {
+      TrackedEntityInstance trackedEntityInstance,
+      ) async {
     await TrackedEntityInstanceOfflineProvider()
         .addOrUpdateTrackedEntityInstance(trackedEntityInstance);
     await ReservedAttributeValueService().cleanUsedReservedAttributeValues();

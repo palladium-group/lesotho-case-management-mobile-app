@@ -6,6 +6,7 @@ class Events {
   String? program;
   String? programStage;
   String? trackedEntityInstance;
+  String? enrollment;
   String? status;
   String? orgUnit;
   String? syncStatus;
@@ -18,6 +19,7 @@ class Events {
     this.program,
     this.programStage,
     this.trackedEntityInstance,
+    this.enrollment,
     this.status,
     this.orgUnit,
     this.syncStatus,
@@ -38,6 +40,7 @@ class Events {
       program: json['program'],
       programStage: json['programStage'],
       trackedEntityInstance: json['trackedEntityInstance'] ?? '',
+      enrollment: json['enrollment'] ?? '',
       orgUnit: json['orgUnit'],
       status: json['status'],
       dataValues: json['dataValues'],
@@ -56,6 +59,7 @@ class Events {
     mapData['program'] = eventData.program;
     mapData['programStage'] = eventData.programStage;
     mapData['trackedEntityInstance'] = eventData.trackedEntityInstance;
+    mapData['enrollment'] = eventData.enrollment;
     mapData['status'] = eventData.status;
     mapData['orgUnit'] = eventData.orgUnit;
     mapData['syncStatus'] = eventData.syncStatus;
@@ -70,6 +74,7 @@ class Events {
     program = mapData['program'];
     programStage = mapData['programStage'];
     trackedEntityInstance = mapData['trackedEntityInstance'];
+    enrollment = mapData['enrollment'];
     status = mapData['status'];
     orgUnit = mapData['orgUnit'];
     syncStatus = mapData['syncStatus'];
@@ -82,10 +87,10 @@ class Events {
 
     List<Map> sanitizedDataValues = _getSanitizedDataValues();
     Map intervention = (sanitizedDataValues).firstWhere(
-        (Map dataValue) => dataValue['dataElement'] == serviceFormIntervention,
+            (Map dataValue) => dataValue['dataElement'] == serviceFormIntervention,
         orElse: () => {});
     Map sessionNumber = (sanitizedDataValues).firstWhere(
-        (Map dataValue) => dataValue['dataElement'] == serviceFormSessionNumber,
+            (Map dataValue) => dataValue['dataElement'] == serviceFormSessionNumber,
         orElse: () => {});
 
     return intervention.isNotEmpty

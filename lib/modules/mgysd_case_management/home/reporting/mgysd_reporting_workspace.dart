@@ -76,16 +76,16 @@ class _ReportedCaseItem {
   String get intakeLabel => hasIntake ? 'Intake completed' : 'Awaiting intake';
 
   String get searchableText => [
-        displayName,
-        phone,
-        sex,
-        district,
-        concern,
-        incidentDate,
-        incidentLocation,
-        description,
-        intakeLabel,
-      ].join(' ').toLowerCase();
+    displayName,
+    phone,
+    sex,
+    district,
+    concern,
+    incidentDate,
+    incidentLocation,
+    description,
+    intakeLabel,
+  ].join(' ').toLowerCase();
 }
 
 class _MgysdReportingWorkspaceState
@@ -132,9 +132,9 @@ class _MgysdReportingWorkspaceState
   }
 
   Future<Map<String, String>> _eventValues(
-    Database db,
-    String eventId,
-  ) async {
+      Database db,
+      String eventId,
+      ) async {
     final map = <String, String>{};
     if (!await _tableExists(db, 'event_data_value')) return map;
 
@@ -164,9 +164,9 @@ class _MgysdReportingWorkspaceState
   }
 
   Future<Map<String, String>> _linkedIntake(
-    Database db,
-    String reportEventId,
-  ) async {
+      Database db,
+      String reportEventId,
+      ) async {
     if (await _tableExists(db, 'mgysd_report_intake_link')) {
       try {
         final columns = await db.rawQuery(
@@ -197,7 +197,7 @@ class _MgysdReportingWorkspaceState
 
           if (rows.isNotEmpty) {
             return rows.first.map(
-              (key, value) => MapEntry(key, (value ?? '').toString()),
+                  (key, value) => MapEntry(key, (value ?? '').toString()),
             );
           }
         }
@@ -218,7 +218,7 @@ class _MgysdReportingWorkspaceState
           final row = rows.first;
           final tei = (row['trackedEntityInstance'] ?? '').toString();
           final enrollment =
-              (row['enrollment'] ?? row['id'] ?? '').toString();
+          (row['enrollment'] ?? row['id'] ?? '').toString();
           if (tei.isNotEmpty || enrollment.isNotEmpty) {
             return <String, String>{
               'tei': tei,
@@ -262,7 +262,7 @@ class _MgysdReportingWorkspaceState
 
       for (final row in rows) {
         final eventId =
-            (row['event'] ?? row['id'] ?? '').toString().trim();
+        (row['event'] ?? row['id'] ?? '').toString().trim();
         if (eventId.isEmpty) continue;
 
         final values = await _eventValues(db, eventId);
@@ -270,7 +270,7 @@ class _MgysdReportingWorkspaceState
 
         Map<String, dynamic> payload = {};
         final payloadText =
-            (values[MgysdDhis2Uids.deReportPayloadJson] ?? '').trim();
+        (values[MgysdDhis2Uids.deReportPayloadJson] ?? '').trim();
         if (payloadText.isNotEmpty) {
           try {
             final decoded = jsonDecode(payloadText);
@@ -282,7 +282,7 @@ class _MgysdReportingWorkspaceState
         final clients = payload['clients'];
         if (clients is List && clients.isNotEmpty && clients.first is Map) {
           firstClient =
-              Map<String, dynamic>.from(clients.first as Map);
+          Map<String, dynamic>.from(clients.first as Map);
         }
 
         final concerns = payload['concerns'] is Map
@@ -324,36 +324,36 @@ class _MgysdReportingWorkspaceState
               'MGYSD_CONCERN_REASON',
             ]).isNotEmpty
                 ? _first(values, const [
-                    'MGYSD_DE_CONCERN_REASON',
-                    'MGYSD_CONCERN_REASON',
-                  ])
+              'MGYSD_DE_CONCERN_REASON',
+              'MGYSD_CONCERN_REASON',
+            ])
                 : (concerns.values.isNotEmpty
-                    ? concerns.values.first.toString()
-                    : ''),
+                ? concerns.values.first.toString()
+                : ''),
             incidentDate:
-                (concerns['MGYSD_DE_WHEN_HAPPENED'] ??
-                        concerns['incidentDate'] ??
-                        '')
-                    .toString(),
+            (concerns['MGYSD_DE_WHEN_HAPPENED'] ??
+                concerns['incidentDate'] ??
+                '')
+                .toString(),
             incidentLocation:
-                (concerns['MGYSD_DE_INCIDENT_LOCATION'] ??
-                        concerns['incidentLocation'] ??
-                        '')
-                    .toString(),
+            (concerns['MGYSD_DE_INCIDENT_LOCATION'] ??
+                concerns['incidentLocation'] ??
+                '')
+                .toString(),
             description:
-                (concerns['MGYSD_DE_INCIDENT_DESCRIPTION'] ??
-                        concerns['description'] ??
-                        '')
-                    .toString(),
+            (concerns['MGYSD_DE_INCIDENT_DESCRIPTION'] ??
+                concerns['description'] ??
+                '')
+                .toString(),
             linkedTei: (link['teiId'] ??
-                    link['tei'] ??
-                    link['householdTei'] ??
-                    link['trackedEntityInstance'] ??
-                    '')
+                link['tei'] ??
+                link['householdTei'] ??
+                link['trackedEntityInstance'] ??
+                '')
                 .toString(),
             linkedEnrollment: (link['enrollmentId'] ??
-                    link['enrollment'] ??
-                    '')
+                link['enrollment'] ??
+                '')
                 .toString(),
             reportPayload: payload,
           ),
@@ -403,7 +403,7 @@ class _MgysdReportingWorkspaceState
           prefillClientPhone: item.phone,
           prefillCaseType: item.concern,
           prefillIncidentDate:
-              item.incidentDate.isEmpty ? item.eventDate : item.incidentDate,
+          item.incidentDate.isEmpty ? item.eventDate : item.incidentDate,
         ),
       ),
     );
@@ -439,7 +439,7 @@ class _MgysdReportingWorkspaceState
       await _load();
       if (mounted) {
         final stillPending = _items.any(
-          (current) => current.eventId == item.eventId && !current.hasIntake,
+              (current) => current.eventId == item.eventId && !current.hasIntake,
         );
         if (stillPending) {
           await Future<void>.delayed(const Duration(milliseconds: 350));
@@ -466,7 +466,7 @@ class _MgysdReportingWorkspaceState
           color: widget.color,
           reportedEventId: item.eventId,
           existingHouseholdTei: item.linkedTei,
-          existingAssessedEnrollment: item.linkedEnrollment,
+          //existingAssessedEnrollment: item.linkedEnrollment,
         ),
       ),
     );
@@ -532,21 +532,21 @@ class _MgysdReportingWorkspaceState
         if (decoded is List) {
           return decoded
               .map((item) {
-                if (item is Map) {
-                  return item.values
-                      .map((part) => part.toString().trim())
-                      .where((part) => part.isNotEmpty)
-                      .join(' — ');
-                }
-                return item.toString().trim();
-              })
+            if (item is Map) {
+              return item.values
+                  .map((part) => part.toString().trim())
+                  .where((part) => part.isNotEmpty)
+                  .join(' — ');
+            }
+            return item.toString().trim();
+          })
               .where((item) => item.isNotEmpty)
               .join(', ');
         }
         if (decoded is Map) {
           return decoded.entries
               .map((entry) =>
-                  '${_reportLabel(entry.key.toString())}: ${entry.value}')
+          '${_reportLabel(entry.key.toString())}: ${entry.value}')
               .join(', ');
         }
       } catch (_) {}
@@ -655,9 +655,9 @@ class _MgysdReportingWorkspaceState
   }
 
   Widget _viewerSection(
-    String title,
-    List<MapEntry<String, String>> entries,
-  ) {
+      String title,
+      List<MapEntry<String, String>> entries,
+      ) {
     if (entries.isEmpty) return const SizedBox.shrink();
 
     return Container(
@@ -730,9 +730,9 @@ class _MgysdReportingWorkspaceState
   }
 
   Future<void> _viewSavedIntake(
-    _ReportedCaseItem item, {
-    required bool riskOnly,
-  }) async {
+      _ReportedCaseItem item, {
+        required bool riskOnly,
+      }) async {
     final householdValues = await _teiAttributes(item.linkedTei);
     final db = await _db();
     var clientValues = <String, String>{};
@@ -759,11 +759,11 @@ class _MgysdReportingWorkspaceState
 
     final filtered = combined.entries
         .where((entry) =>
-            riskOnly ? _isRiskAttribute(entry.key) : !_isRiskAttribute(entry.key))
+    riskOnly ? _isRiskAttribute(entry.key) : !_isRiskAttribute(entry.key))
         .where((entry) => _displayStoredValue(entry.value).isNotEmpty)
         .toList()
       ..sort(
-        (a, b) => _friendlyIntakeLabel(a.key)
+            (a, b) => _friendlyIntakeLabel(a.key)
             .compareTo(_friendlyIntakeLabel(b.key)),
       );
 
@@ -833,7 +833,7 @@ class _MgysdReportingWorkspaceState
                       )
                     else
                       ...grouped.entries.map(
-                        (section) =>
+                            (section) =>
                             _viewerSection(section.key, section.value),
                       ),
                     const SizedBox(height: 16),
@@ -887,16 +887,16 @@ class _MgysdReportingWorkspaceState
     final value = key
         .replaceAll(RegExp(r'[_\-]+'), ' ')
         .replaceAllMapped(
-          RegExp(r'([a-z0-9])([A-Z])'),
+      RegExp(r'([a-z0-9])([A-Z])'),
           (match) => '${match.group(1)} ${match.group(2)}',
-        )
+    )
         .trim();
     if (value.isEmpty) return key;
     return value
         .split(RegExp(r'\s+'))
         .map((part) => part.isEmpty
-            ? part
-            : '${part[0].toUpperCase()}${part.substring(1)}')
+        ? part
+        : '${part[0].toUpperCase()}${part.substring(1)}')
         .join(' ');
   }
 
@@ -915,9 +915,9 @@ class _MgysdReportingWorkspaceState
   }
 
   List<Widget> _reportPayloadWidgets(
-    dynamic value, {
-    String prefix = '',
-  }) {
+      dynamic value, {
+        String prefix = '',
+      }) {
     final widgets = <Widget>[];
 
     if (value is Map) {
@@ -1537,7 +1537,7 @@ class _MgysdReportingWorkspaceState
                             hintText: 'Search this device',
                             prefixIcon: Tooltip(
                               message:
-                                  'Offline search: searches records stored on this device',
+                              'Offline search: searches records stored on this device',
                               child: Padding(
                                 padding: const EdgeInsets.all(15),
                                 child: Icon(
@@ -1549,22 +1549,22 @@ class _MgysdReportingWorkspaceState
                             ),
                             suffixIcon: _searchController.text.isEmpty
                                 ? const Tooltip(
-                                    message:
-                                        'Online search will use the globe icon in a later update',
-                                    child: Icon(
-                                      Icons.public_outlined,
-                                      color: Colors.blueGrey,
-                                      size: 20,
-                                    ),
-                                  )
+                              message:
+                              'Online search will use the globe icon in a later update',
+                              child: Icon(
+                                Icons.public_outlined,
+                                color: Colors.blueGrey,
+                                size: 20,
+                              ),
+                            )
                                 : IconButton(
-                                    onPressed: () {
-                                      _searchController.clear();
-                                      setState(() {});
-                                      _applyFilters();
-                                    },
-                                    icon: const Icon(Icons.close),
-                                  ),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {});
+                                _applyFilters();
+                              },
+                              icon: const Icon(Icons.close),
+                            ),
                             filled: true,
                             fillColor: Colors.white,
                             border: OutlineInputBorder(
@@ -1666,7 +1666,7 @@ class _MgysdReportingWorkspaceState
           else
             SliverList(
               delegate: SliverChildBuilderDelegate(
-                (context, index) => _caseCard(_filtered[index]),
+                    (context, index) => _caseCard(_filtered[index]),
                 childCount: _filtered.length,
               ),
             ),
