@@ -247,10 +247,8 @@ class _MgysdRepeatableStageListPageState
     if (raw == 'COMPLETED' || raw == 'DONE' || raw == 'COMPLETE') {
       return 'COMPLETED';
     }
-    if (raw == 'DRAFT') {
-      return 'DRAFT';
-    }
-    if (raw == 'ACTIVE' ||
+    if (raw == 'DRAFT' ||
+        raw == 'ACTIVE' ||
         raw == 'IN_PROGRESS' ||
         raw == 'IN PROGRESS' ||
         raw == 'STARTED') {
@@ -264,9 +262,8 @@ class _MgysdRepeatableStageListPageState
     switch (status.toUpperCase()) {
       case 'COMPLETED':
         return 'Completed';
-      case 'DRAFT':
-        return 'Draft';
       case 'IN_PROGRESS':
+      case 'DRAFT':
       case 'ACTIVE':
         return 'In progress';
       case 'SUPERSEDED':
@@ -997,9 +994,13 @@ class _MgysdRepeatableStageListPageState
       ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: widget.color,
+        foregroundColor: Colors.white,
         onPressed: _addNew,
-        icon: const Icon(Icons.add),
-        label: const Text('Add New'),
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text(
+          'Add New',
+          style: TextStyle(color: Colors.white),
+        ),
       ),
       body: RefreshIndicator(
         onRefresh: _refresh,

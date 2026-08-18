@@ -794,6 +794,7 @@ class _MgysdCaseClosurePageState extends State<MgysdCaseClosurePage> {
             label: Text(_saving ? 'Saving...' : 'Close Case'),
             style: ElevatedButton.styleFrom(
               backgroundColor: widget.color,
+              foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 13),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),

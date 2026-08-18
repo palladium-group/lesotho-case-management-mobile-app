@@ -900,6 +900,7 @@ class _MgysdServiceProvisionPageState extends State<MgysdServiceProvisionPage> {
                           child: ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: widget.color,
+                              foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 13),
                             ),
                             onPressed: _saving
@@ -1449,6 +1450,7 @@ class _MgysdServiceProvisionPageState extends State<MgysdServiceProvisionPage> {
               label: Text(goal.isAchieved ? 'Achieved' : 'Provide Service'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: widget.color,
+                foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(999),
                 ),

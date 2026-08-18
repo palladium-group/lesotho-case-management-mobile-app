@@ -235,6 +235,7 @@ class _CaregiverEntry {
   final TextEditingController nameController;
   final TextEditingController surnameController;
   final TextEditingController relationshipController;
+  final TextEditingController relationshipOtherController;
   final TextEditingController dobController;
   final TextEditingController occupationController;
   final TextEditingController phoneController;
@@ -251,6 +252,7 @@ class _CaregiverEntry {
   })  : nameController = TextEditingController(),
         surnameController = TextEditingController(),
         relationshipController = TextEditingController(),
+        relationshipOtherController = TextEditingController(),
         dobController = TextEditingController(),
         occupationController = TextEditingController(),
         phoneController = TextEditingController();
@@ -259,6 +261,7 @@ class _CaregiverEntry {
     return nameController.text.trim().isNotEmpty ||
         surnameController.text.trim().isNotEmpty ||
         relationshipController.text.trim().isNotEmpty ||
+        relationshipOtherController.text.trim().isNotEmpty ||
         dobController.text.trim().isNotEmpty ||
         occupationController.text.trim().isNotEmpty ||
         phoneController.text.trim().isNotEmpty ||
@@ -269,6 +272,7 @@ class _CaregiverEntry {
     nameController.dispose();
     surnameController.dispose();
     relationshipController.dispose();
+    relationshipOtherController.dispose();
     dobController.dispose();
     occupationController.dispose();
     phoneController.dispose();
@@ -364,6 +368,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   final _personalAssistantNameController = TextEditingController();
   final _personalAssistantSurnameController = TextEditingController();
   final _personalAssistantRelationshipController = TextEditingController();
+  final _personalAssistantRelationshipOtherController = TextEditingController();
   final _personalAssistantDobController = TextEditingController();
   final _personalAssistantOccupationController = TextEditingController();
   final _personalAssistantPhoneController = TextEditingController();
@@ -865,6 +870,25 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _Opt('OTHER', 'Other'),
   ];
 
+  static const List<_Opt> caregiverRelationshipOptions = [
+    _Opt('Mother', 'Mother'),
+    _Opt('Father', 'Father'),
+    _Opt('Grandmother', 'Grandmother'),
+    _Opt('Grandfather', 'Grandfather'),
+    _Opt('Aunt', 'Aunt'),
+    _Opt('Uncle', 'Uncle'),
+    _Opt('Sister', 'Sister'),
+    _Opt('Brother', 'Brother'),
+    _Opt('Cousin', 'Cousin'),
+    _Opt('Spouse', 'Spouse'),
+    _Opt('Guardian', 'Guardian'),
+    _Opt('Caregiver', 'Caregiver'),
+    _Opt('Personal Assistant', 'Personal Assistant'),
+    _Opt('Other relative', 'Other relative'),
+    _Opt('Non-relative', 'Non-relative'),
+    _Opt('Other', 'Other'),
+  ];
+
   static const List<_Opt> emergencyNoActionOptions = [
     _Opt('NOT_REQUIRED', 'Not required'),
     _Opt('REFUSED', 'Refused'),
@@ -1160,12 +1184,17 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       _personalAssistantSurnameController.clear();
       _personalAssistantSex = '';
       _personalAssistantRelationshipController.clear();
+      _personalAssistantRelationshipOtherController.clear();
       _personalAssistantDobController.clear();
       _personalAssistantOccupationController.clear();
       _personalAssistantPhoneController.clear();
     }
   }
   bool get _reasonOtherSelected => _selectedReasonOptions.contains('OTHER');
+
+  bool _isOtherRelationship(String value) {
+    return value.trim().toUpperCase() == 'OTHER';
+  }
 
   int? get _clientAge => int.tryParse(_clientAgeController.text.trim());
 
@@ -1398,6 +1427,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       'name': caregiver.nameController.text.trim(),
       'surname': caregiver.surnameController.text.trim(),
       'relationship': caregiver.relationshipController.text.trim(),
+      'relationshipOther': caregiver.relationshipOtherController.text.trim(),
       'dob': caregiver.dobController.text.trim(),
       'occupation': caregiver.occupationController.text.trim(),
       'phone': caregiver.phoneController.text.trim(),
@@ -1487,6 +1517,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       'personalAssistantSex': _personalAssistantSex,
       'personalAssistantRelationship':
       _personalAssistantRelationshipController.text.trim(),
+      'personalAssistantRelationshipOther':
+      _personalAssistantRelationshipOtherController.text.trim(),
       'personalAssistantDob': _personalAssistantDobController.text.trim(),
       'personalAssistantOccupation':
       _personalAssistantOccupationController.text.trim(),
@@ -1680,6 +1712,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       entry.nameController.text = _stringValue(map['name']);
       entry.surnameController.text = _stringValue(map['surname']);
       entry.relationshipController.text = _stringValue(map['relationship']);
+      entry.relationshipOtherController.text =
+          _stringValue(map['relationshipOther']);
       entry.dobController.text = _stringValue(map['dob']);
       entry.occupationController.text = _stringValue(map['occupation']);
       entry.phoneController.text = _stringValue(map['phone']);
@@ -1806,6 +1840,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _personalAssistantSex = _stringValue(payload['personalAssistantSex']);
     _personalAssistantRelationshipController.text =
         _stringValue(payload['personalAssistantRelationship']);
+    _personalAssistantRelationshipOtherController.text =
+        _stringValue(payload['personalAssistantRelationshipOther']);
     _personalAssistantDobController.text =
         _stringValue(payload['personalAssistantDob']);
     _personalAssistantOccupationController.text =
@@ -2331,6 +2367,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _personalAssistantNameController.dispose();
     _personalAssistantSurnameController.dispose();
     _personalAssistantRelationshipController.dispose();
+    _personalAssistantRelationshipOtherController.dispose();
     _personalAssistantDobController.dispose();
     _personalAssistantOccupationController.dispose();
     _personalAssistantPhoneController.dispose();
@@ -2830,6 +2867,17 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         .toList();
   }
 
+  List<_Opt> _caregiverRelationshipOptionsForValue(String value) {
+    final trimmed = value.trim();
+    final options = List<_Opt>.from(caregiverRelationshipOptions);
+
+    if (trimmed.isNotEmpty && !options.any((option) => option.code == trimmed)) {
+      options.add(_Opt(trimmed, trimmed));
+    }
+
+    return options;
+  }
+
   List<_Opt> _relationshipOptionsForMemberSex(String memberSex) {
     final options = <_Opt>[
       _Opt('GRANDPARENT', 'Grandparent'),
@@ -3047,6 +3095,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             _controllerHasData(_personalAssistantSurnameController) ||
             _personalAssistantSex.trim().isNotEmpty ||
             _controllerHasData(_personalAssistantRelationshipController) ||
+            _controllerHasData(_personalAssistantRelationshipOtherController) ||
             _controllerHasData(_personalAssistantDobController) ||
             _controllerHasData(_personalAssistantOccupationController) ||
             _controllerHasData(_personalAssistantPhoneController));
@@ -3880,6 +3929,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             attLastName: caregiver.surnameController.text,
             attSex: caregiver.sex,
             attRelationshipToClient: caregiver.relationshipController.text,
+            attRelationshipToClientOther:
+            _isOtherRelationship(caregiver.relationshipController.text)
+                ? caregiver.relationshipOtherController.text
+                : '',
             attDob: caregiver.dobController.text,
             attOccupation: caregiver.occupationController.text,
             attPhone: _normalisedPhoneNumber(
@@ -3923,6 +3976,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             attSex: _personalAssistantSex,
             attRelationshipToClient:
             _personalAssistantRelationshipController.text,
+            attRelationshipToClientOther:
+            _isOtherRelationship(_personalAssistantRelationshipController.text)
+                ? _personalAssistantRelationshipOtherController.text
+                : '',
             attDob: _personalAssistantDobController.text,
             attOccupation: _personalAssistantOccupationController.text,
             attPhone: _normalisedPhoneNumber(
@@ -5665,14 +5722,35 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 requiredField: true,
                 onChanged: (v) => setState(() => caregiver.sex = v ?? ''),
               ),
-              _Input(
-                controller: caregiver.relationshipController,
+              _dropdown(
                 label: 'Relationship with client',
-                hint: 'e.g. Aunt, Grandmother',
+                value: caregiver.relationshipController.text.trim(),
+                options: _caregiverRelationshipOptionsForValue(
+                  caregiver.relationshipController.text,
+                ),
                 requiredField: true,
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                onChanged: (v) {
+                  setState(() {
+                    caregiver.relationshipController.text = v ?? '';
+                    if (!_isOtherRelationship(caregiver.relationshipController.text)) {
+                      caregiver.relationshipOtherController.clear();
+                    }
+                  });
+                },
               ),
             ),
+            if (_isOtherRelationship(caregiver.relationshipController.text)) ...[
+              const SizedBox(height: 10),
+              _Input(
+                controller: caregiver.relationshipOtherController,
+                label: 'Specify other relationship',
+                hint: 'Enter relationship with client',
+                requiredField: true,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Required'
+                    : null,
+              ),
+            ],
             const SizedBox(height: 10),
             _row2(
               _dateInput(
@@ -5873,12 +5951,38 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 setState(() => _personalAssistantSex = v ?? '');
               },
             ),
-            _Input(
-              controller: _personalAssistantRelationshipController,
+            _dropdown(
               label: 'Relationship with client',
-              hint: 'Enter relationship',
+              value: _personalAssistantRelationshipController.text.trim(),
+              options: _caregiverRelationshipOptionsForValue(
+                _personalAssistantRelationshipController.text,
+              ),
+              onChanged: (v) {
+                setState(() {
+                  _personalAssistantRelationshipController.text = v ?? '';
+                  if (!_isOtherRelationship(
+                    _personalAssistantRelationshipController.text,
+                  )) {
+                    _personalAssistantRelationshipOtherController.clear();
+                  }
+                });
+              },
             ),
           ),
+          if (_isOtherRelationship(
+            _personalAssistantRelationshipController.text,
+          )) ...[
+            const SizedBox(height: 10),
+            _Input(
+              controller: _personalAssistantRelationshipOtherController,
+              label: 'Specify other relationship',
+              hint: 'Enter relationship with client',
+              requiredField: true,
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? 'Required'
+                  : null,
+            ),
+          ],
           const SizedBox(height: 10),
           _row2(
             _dateInput(
