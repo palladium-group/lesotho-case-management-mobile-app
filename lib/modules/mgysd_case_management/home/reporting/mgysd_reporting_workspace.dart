@@ -491,25 +491,120 @@ class _MgysdReportingWorkspaceState
     return values;
   }
 
-  bool _isRiskAttribute(String key) {
-    final upper = key.toUpperCase();
-    return upper.contains('RISK') ||
-        key == MgysdDhis2Uids.attRiskLevel ||
-        key == MgysdDhis2Uids.attRiskReason ||
-        key == MgysdDhis2Uids.attRiskImmediateReferrals ||
-        key == MgysdDhis2Uids.attRiskNextSteps ||
-        key == MgysdDhis2Uids.attRiskAdditionalNotes;
+  /// Initial Risk Assessment answers are not stored as tracked entity
+  /// attributes — they are posted as event data values under the
+  /// [MgysdDhis2Uids.initialRiskAssessmentStage] program stage. This reads the
+  /// most recent event for [teiId] on [programStage] and returns a map of
+  /// dataElement -> value, mirroring what the social investigation page does
+  /// when it needs the current risk level.
+  Future<Map<String, String>> _eventDataValues(
+      String teiId,
+      String programStage,
+      ) async {
+    final db = await _db();
+    final values = <String, String>{};
+    try {
+      if (teiId.trim().isEmpty || programStage.trim().isEmpty) return values;
+
+      final eventRows = await db.query(
+        'events',
+        columns: ['event'],
+        where: 'trackedEntityInstance = ? AND programStage = ?',
+        whereArgs: [teiId, programStage],
+        orderBy: 'eventDate DESC',
+        limit: 1,
+      );
+
+      if (eventRows.isEmpty) return values;
+
+      final eventId = (eventRows.first['event'] ?? '').toString();
+      if (eventId.isEmpty) return values;
+
+      final valueRows = await db.query(
+        'event_data_value',
+        where: 'event = ?',
+        whereArgs: [eventId],
+      );
+
+      for (final row in valueRows) {
+        final key = (row['dataElement'] ?? '').toString();
+        if (key.isEmpty) continue;
+        values[key] = (row['value'] ?? '').toString();
+      }
+    } catch (_) {}
+    return values;
   }
 
+  bool _isRiskAttribute(String key) {
+    return MgysdDhis2Uids.isInitialRiskAssessmentDataElement(key);
+  }
+
+  static final Map<String, String> _intakeAttributeLabels = <String, String>{
+    // Household
+    MgysdDhis2Uids.attHouseholdFileNumber: 'File Number',
+    MgysdDhis2Uids.attHouseholdDistrict: 'District',
+    MgysdDhis2Uids.attHouseholdCommunityCouncil: 'Community Council',
+    MgysdDhis2Uids.attHouseholdVillage: 'Village',
+    MgysdDhis2Uids.attHouseholdAddress: 'Physical Address',
+
+    // Client / generic person
+    MgysdDhis2Uids.attFirstName: 'First Name',
+    MgysdDhis2Uids.attLastName: 'Surname',
+    MgysdDhis2Uids.attDob: 'Date of Birth',
+    MgysdDhis2Uids.attAge: 'Age',
+    MgysdDhis2Uids.attPhone: 'Phone Number',
+    MgysdDhis2Uids.attAlternativePhone: 'Alternative Phone Number',
+    MgysdDhis2Uids.attSex: 'Sex',
+    MgysdDhis2Uids.attClientCategory: 'Client Category',
+    MgysdDhis2Uids.attIsDisabled: 'Living with Disability',
+    MgysdDhis2Uids.attIdentityNumber: 'Identity Number',
+    MgysdDhis2Uids.attHomeLanguage: 'Home Language',
+    MgysdDhis2Uids.attOccupation: 'Occupation',
+    MgysdDhis2Uids.attDisabilitySpecify: 'Disability Details',
+
+    // Schooling and employment
+    MgysdDhis2Uids.attIsClientInSchool: 'In School',
+    MgysdDhis2Uids.attSchoolName: 'School Name',
+    MgysdDhis2Uids.attSchoolAttendanceStatus: 'School Attendance Status',
+    MgysdDhis2Uids.attIsAdultEmployed: 'Employed',
+    MgysdDhis2Uids.attEmployerName: 'Employer Name',
+
+    // Initial Risk Assessment (event data elements)
+    MgysdDhis2Uids.deRiskSocialWorker: 'Social Worker',
+    MgysdDhis2Uids.deRiskFamilyBackground: 'Family Background',
+    MgysdDhis2Uids.deRiskFamilyBackgroundNotes: 'Family Background Notes',
+    MgysdDhis2Uids.deRiskExtendedFamilyRelationships:
+    'Extended Family Relationships',
+    MgysdDhis2Uids.deRiskExtendedFamilyNotes: 'Extended Family Notes',
+    MgysdDhis2Uids.deRiskClientRelationships: 'Client Relationships',
+    MgysdDhis2Uids.deRiskClientRelationshipsNotes:
+    'Client Relationships Notes',
+    MgysdDhis2Uids.deRiskLivingCircumstances: 'Living Circumstances',
+    MgysdDhis2Uids.deRiskLivingCircumstancesNotes:
+    'Living Circumstances Notes',
+    MgysdDhis2Uids.deRiskHousing: 'Housing',
+    MgysdDhis2Uids.deRiskHousingNotes: 'Housing Notes',
+    MgysdDhis2Uids.deRiskPhysicalHealth: 'Physical Health',
+    MgysdDhis2Uids.deRiskPhysicalHealthNotes: 'Physical Health Notes',
+    MgysdDhis2Uids.deRiskNutrition: 'Nutrition',
+    MgysdDhis2Uids.deRiskNutritionNotes: 'Nutrition Notes',
+    MgysdDhis2Uids.deRiskEmotionalHealth: 'Emotional Health',
+    MgysdDhis2Uids.deRiskEmotionalHealthNotes: 'Emotional Health Notes',
+    MgysdDhis2Uids.deRiskSupervision: 'Supervision',
+    MgysdDhis2Uids.deRiskSupervisionNotes: 'Supervision Notes',
+    MgysdDhis2Uids.deRiskEducation: 'Education',
+    MgysdDhis2Uids.deRiskEducationNotes: 'Education Notes',
+    MgysdDhis2Uids.deRiskLevel: 'Risk Level',
+    MgysdDhis2Uids.deRiskReason: 'Risk Reason',
+    MgysdDhis2Uids.deRiskImmediateReferrals: 'Immediate Referrals',
+    MgysdDhis2Uids.deRiskSelfCare: 'Self-care',
+    MgysdDhis2Uids.deRiskDisabilityDiagnosis: 'Disability Diagnosis',
+    MgysdDhis2Uids.deRiskAssistiveDevices: 'Assistive Devices',
+    MgysdDhis2Uids.deRiskRehabilitationServices: 'Rehabilitation Services',
+  };
+
   String _friendlyIntakeLabel(String key) {
-    const labels = <String, String>{
-      'ATTR_HH_FILE_NUMBER': 'Household file number',
-      'district': 'District',
-      'communityCouncil': 'Community Council',
-      'village': 'Village',
-      'clientType': 'Client type',
-      'clientCategory': 'Client category',
-    };
+    final labels = _intakeAttributeLabels;
 
     if (labels.containsKey(key)) return labels[key]!;
     var value = _reportLabel(key);
@@ -733,33 +828,42 @@ class _MgysdReportingWorkspaceState
       _ReportedCaseItem item, {
         required bool riskOnly,
       }) async {
-    final householdValues = await _teiAttributes(item.linkedTei);
-    final db = await _db();
-    var clientValues = <String, String>{};
+    Map<String, String> combined;
 
-    try {
-      final rows = await db.query(
-        'mgysd_household_member',
-        columns: ['memberTei'],
-        where: 'householdTei = ? AND isPrimaryClient = ?',
-        whereArgs: [item.linkedTei, 1],
-        limit: 1,
+    if (riskOnly) {
+      // Initial Risk Assessment answers live on the risk-assessment event,
+      // not on the household/client tracked entity attributes.
+      combined = await _eventDataValues(
+        item.linkedTei,
+        MgysdDhis2Uids.initialRiskAssessmentStage,
       );
-      if (rows.isNotEmpty) {
-        clientValues = await _teiAttributes(
-          (rows.first['memberTei'] ?? '').toString(),
-        );
-      }
-    } catch (_) {}
+    } else {
+      final householdValues = await _teiAttributes(item.linkedTei);
+      final db = await _db();
+      var clientValues = <String, String>{};
 
-    final combined = <String, String>{
-      ...householdValues,
-      ...clientValues,
-    };
+      try {
+        final rows = await db.query(
+          'mgysd_household_member',
+          columns: ['memberTei'],
+          where: 'householdTei = ? AND isPrimaryClient = ?',
+          whereArgs: [item.linkedTei, 1],
+          limit: 1,
+        );
+        if (rows.isNotEmpty) {
+          clientValues = await _teiAttributes(
+            (rows.first['memberTei'] ?? '').toString(),
+          );
+        }
+      } catch (_) {}
+
+      combined = <String, String>{
+        ...householdValues,
+        ...clientValues,
+      };
+    }
 
     final filtered = combined.entries
-        .where((entry) =>
-    riskOnly ? _isRiskAttribute(entry.key) : !_isRiskAttribute(entry.key))
         .where((entry) => _displayStoredValue(entry.value).isNotEmpty)
         .toList()
       ..sort(
