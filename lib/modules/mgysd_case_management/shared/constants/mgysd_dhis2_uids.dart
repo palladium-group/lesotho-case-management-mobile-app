@@ -34,12 +34,15 @@ class MgysdDhis2Uids {
   // ---------------------------------------------------------------------------
   static const String initialRiskAssessmentStage = 'Yd9HAhIUdZT';
   static const String socialInvestigationStage = 'KoYx0zLUSC7';
-  // Not present in the supplied metadata export. Reassessment remains local until the stage is added to DHIS2.
-  static const String enrolledsocialInvestigationStage = '';
+  // Repeatable Social Investigation stage in MGYSD Enrolled Households.
+  static const String enrolledsocialInvestigationStage = 'WLZlhndmqDg';
   static const String carePlanStage = 'jvfi6JnZPxU';
   static const String referralStage = 'uijeGa1d3ZW';
-  // Not present in the supplied metadata export. Monitoring remains local until the stage is added to DHIS2.
-  static const String monitoringStage = '';
+  // Monitoring stages by program. Existing workflow code uses monitoringStage
+  // for Enrolled Households.
+  static const String assessedMonitoringStage = 'GxHpVfPNKfm';
+  static const String monitoringStage = 'KsXYZNs9LAk';
+  static const String familyMonitoringStage = 'v5jBuqKC9Aw';
   static const String familyServiceProvisionStage = 'JusjUjRXKCN';
   static const String familyReferralStage = 'lRLikYWFv5u';
 
@@ -47,6 +50,23 @@ class MgysdDhis2Uids {
   static const String enrolledCaseClosureStage = 'JvJ3YxzV9GT';
   static const String familyCarePlanStage = 'cmdutyjEbKj';
   static const String familyCaseClosureStage = 'knCYcUv7MOP';
+
+  // ---------------------------------------------------------------------------
+  // COMPATIBILITY ALIASES
+  // Keep naming consistent across older and newer MGYSD modules.
+  // These aliases point to the same real DHIS2 stage UIDs.
+  // ---------------------------------------------------------------------------
+  static const String assessedSocialInvestigationStage =
+      socialInvestigationStage;
+  static const String enrolledSocialInvestigationStage =
+      enrolledsocialInvestigationStage;
+  static const String serviceProvisionStage =
+      enrolledServiceProvisionStage;
+  static const String enrolledMonitoringStage =
+      monitoringStage;
+  static const String familyMemberMonitoringStage =
+      familyMonitoringStage;
+
 
   // ---------------------------------------------------------------------------
   // PROGRAM STAGE DATA ELEMENTS
@@ -93,6 +113,24 @@ class MgysdDhis2Uids {
   static const String deSiChangeReason = 'ZwsovAKkbT0';
   static const String deSiAdditionalObservations = 'owwT4uo6Q1A';
 
+
+  // Monitoring (shared by Assessed/Enrolled household Monitoring stages)
+  static const String deMonitoringOverallChallenges = 'L46bDs7gPW8';
+  static const String deMonitoringDate = 'eYj942VeEea';
+  static const String deMonitoringInterviewRole = 'kfoX3fIWj2s';
+  static const String deMonitoringInterviewPurpose = 'Pxi8jOv4DoS';
+  static const String deMonitoringOverallProgressSummary = 'kolWzfu5OSd';
+  static const String deMonitoringNextActions = 'cFBZ8IAJadF';
+  static const String deMonitoringNextVisitDate = 'Dr1Dr03I8QC';
+  static const String deMonitoringReassessmentReason = 'V8wey9sFdMj';
+  static const String deMonitoringReassessmentFindings = 'LYeWAjxPxGQ';
+  static const String deMonitoringImmediateActions = 'ZbbrRn6gaiL';
+  static const String deMonitoringProgressObserved = 'Hy6RaVTthD8';
+  static const String deMonitoringChallengesStillPresent = 'PIZ2usO2IlW';
+  static const String deMonitoringGoalRecommendation = 'ozbMIZRNwEs';
+  static const String deMonitoringInterviewFirstName = 'jB1vdGn6Eic';
+  static const String deMonitoringGoalFollowupDate = 'S4J0mid39AT';
+
   // Care Plan (shared DEs for household and family-member stages)
   static const String deCareClientLongTermGoals = 'MGcvdwB9an1';
   static const String deCareClientMediumTermGoals = 'XccSRDYOuIi';
@@ -138,15 +176,24 @@ class MgysdDhis2Uids {
   static const String deClosureRelationshipToClient = 'XYmD9IE4KJx';
 
   static String programForStage(String stage) {
-    if (stage == initialRiskAssessmentStage || stage == socialInvestigationStage) {
+    if (stage == initialRiskAssessmentStage ||
+        stage == socialInvestigationStage ||
+        stage == assessedMonitoringStage) {
       return assessedHouseholdsProgram;
     }
-    if (stage == carePlanStage || stage == referralStage ||
-        stage == enrolledServiceProvisionStage || stage == enrolledCaseClosureStage) {
+    if (stage == enrolledsocialInvestigationStage ||
+        stage == monitoringStage ||
+        stage == carePlanStage ||
+        stage == referralStage ||
+        stage == enrolledServiceProvisionStage ||
+        stage == enrolledCaseClosureStage) {
       return enrolledHouseholdsProgram;
     }
-    if (stage == familyCarePlanStage || stage == familyReferralStage ||
-        stage == familyServiceProvisionStage || stage == familyCaseClosureStage) {
+    if (stage == familyMonitoringStage ||
+        stage == familyCarePlanStage ||
+        stage == familyReferralStage ||
+        stage == familyServiceProvisionStage ||
+        stage == familyCaseClosureStage) {
       return familyMemberTrackerProgram;
     }
     if (stage == reportedCasesProgramStage) return reportedCasesEventProgram;
@@ -169,11 +216,15 @@ class MgysdDhis2Uids {
   static const String deReporterRelationship = 'vXKcqU7V0xQ';
   static const String deReporterRelationshipOther = 'wIAHzLOccWk';
   static const String deReporterAnonymous = 'gG7pCI0Ma5v';
-  static const String deReporterPhysicalAddress = 'kDUkHc2D6wo';
-  static const String deReporterDob = 'heErfQ9Chl3';
-  static const String deReporterAge = 'NwCn5RVitx1';
+  static const String deReporterCommunityCouncil = 'arawTWdOCOZ';
+  static const String deReportingDate = 'EG9wNvu6kGY';
+  static const String deFirstClientAge = 'NwCn5RVitx1';
+  static const String deFirstClientCategory = 'hxxH8RmZrV2';
+  static const String deReporterPhysicalAddress = 'LOCAL_REPORTER_ADDRESS';
+  static const String deReporterDob = 'LOCAL_REPORTER_DOB';
+  static const String deReporterAge = 'LOCAL_REPORTER_AGE';
   static const String deReporterSex = 'kwL1QEdrChg';
-  static const String deReporterOccupation = 'TiIFI4bHP6z';
+  static const String deReporterOccupation = 'LOCAL_REPORTER_OCCUPATION';
 
   // Local-only helper payload fields. These are kept locally for display/debug.
   // They must not be posted to DHIS2 unless you create real Data Elements for them.
@@ -183,16 +234,16 @@ class MgysdDhis2Uids {
 
 
   static const String deConcernReason = 'UJIrqEgPMn1';
-  static const String deConcernReasonOther = 'UJIrqEgPMn1_OTHER';
+  static const String deConcernReasonOther = 'UlxSVhptSPi';
   static const String deIncidentDescription = 'rOo1QAaJ23F';
   static const String deWhenHappened = 'UImPhy5oOOq';
-  static const String deIncidentLocation = 'DE_INCIDENT_LOCATION';
+  static const String deIncidentLocation = 'mEUV26PcDKZ';
 
   static const String deFirstClientFirstName = 'wOIx1Tism5p';
   static const String deFirstClientLastName = 'mclj3oLRpiv';
   static const String deFirstClientPhone = 'fBB08qRfTCp';
-  static const String deFirstClientSex = 'COIWHHGCoCl';
-  static const String deFirstClientDistrict = 'MGYSD_CLIENT_DISTRICT';
+  static const String deFirstClientSex = 'LOCAL_CLIENT_SEX';
+  static const String deFirstClientDistrict = 'LOCAL_CLIENT_DISTRICT';
 
   // ---------------------------------------------------------------------------
   // TRACKER ATTRIBUTES FOR HOUSEHOLD / PERSON / CASE INTAKE
@@ -223,7 +274,7 @@ class MgysdDhis2Uids {
   static const String attOccupation = 'qzPKtlcljyU';
   static const String attRelationshipToClient = 'ATTR_RELATIONSHIP_TO_CLIENT';
   static const String attRelationshipToClientOther = 'ATTR_RELATIONSHIP_TO_CLIENT_OTHER';
-  static const String attHasDisability = 'ATTR_HAS_DISABILITY';
+  static const String attHasDisability = 'qplFRHPhrMJ';
   static const String attDisabilitySpecify = 'PeuzIMl3kI9';
 
   static const String attIsClientInSchool = 'doT78HXVVtZ';
@@ -234,19 +285,19 @@ class MgysdDhis2Uids {
   static const String attIsAdultEmployed = 'jfjsu5QL6Ce';
   static const String attEmployerName = 'RIKBsXclI3i';
 
-  static const String attNextOfKinFirstName = 'ATTR_NOK_FIRST_NAME';
-  static const String attNextOfKinSurname = 'ATTR_NOK_SURNAME';
+  static const String attNextOfKinFirstName = 'jneawlWhqnx';
+  static const String attNextOfKinSurname = 'vWlFqdiLjG2';
   static const String attNextOfKinPhone = 'ATTR_NOK_PHONE';
-  static const String attNextOfKinPhysicalAddress = 'ATTR_NOK_PHYSICAL_ADDRESS';
-  static const String attNextOfKinRelationship = 'ATTR_NOK_RELATIONSHIP';
+  static const String attNextOfKinPhysicalAddress = 'd5DcZpk66V1';
+  static const String attNextOfKinRelationship = 'z1vIT95rl44';
   static const String attNextOfKinRelationshipOther = 'ATTR_NOK_RELATIONSHIP_OTHER';
 
   // Case-specific parent status attributes remain on the CLIENT TEI.
-  static const String attFatherAlive = 'ATTR_FATHER_ALIVE';
+  static const String attFatherAlive = 'Tt2wTRrTiIP';
   static const String attFatherLivingWithChild = 'ATTR_FATHER_LIVING_WITH_CHILD';
   static const String attFatherWhyNotLiving = 'ATTR_FATHER_WHY_NOT_LIVING';
 
-  static const String attMotherAlive = 'ATTR_MOTHER_ALIVE';
+  static const String attMotherAlive = 'TjjN3rriKRW';
   static const String attMotherLivingWithChild = 'ATTR_MOTHER_LIVING_WITH_CHILD';
   static const String attMotherWhyNotLiving = 'ATTR_MOTHER_WHY_NOT_LIVING';
 

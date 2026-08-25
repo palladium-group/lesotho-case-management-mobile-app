@@ -1261,9 +1261,9 @@ class _OfflineDataSummaryState extends State<OfflineDataSummary> {
                 ? (widget.beneficiaryCount + widget.beneficiaryServiceCount)
                 : 0;
 
-            final totalPending = specificCount > counterTotal
-                ? specificCount + _issueItemsTotal(widget.issueItems)
-                : counterTotal + genericCount;
+            // SQLite-backed counters are authoritative after sync.
+            // The detailed list can briefly hold the previous snapshot.
+            final totalPending = counterTotal + genericCount;
 
             final statusColor = _statusColor(
               primaryColor: primaryColor,

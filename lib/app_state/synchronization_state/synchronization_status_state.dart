@@ -58,36 +58,30 @@ class SynchronizationStatusState with ChangeNotifier {
   bool get hasUnsyncedData => totalUnsynced > 0;
 
   static const List<String> _assessmentStages = [
-    'MGYSD_PS_INITIAL_RISK_ASSESSMENT',
-    'MGYSD_PS_INTAKE',
-    'MGYSD_INITIAL_RISK_ASSESSMENT',
+    MgysdDhis2Uids.initialRiskAssessmentStage,
   ];
 
   static const List<String> _investigationStages = [
-    'MGYSD_PS_SOCIAL_INVESTIGATION',
-    'MGYSD_SOCIAL_INVESTIGATION',
+    MgysdDhis2Uids.socialInvestigationStage,
+    MgysdDhis2Uids.enrolledsocialInvestigationStage,
   ];
 
   static const List<String> _carePlanStages = [
-    'MGYSD_PS_CARE_PLAN',
-    'MGYSD_CARE_PLAN',
+    MgysdDhis2Uids.carePlanStage,
   ];
 
   static const List<String> _serviceProvisionStages = [
-    'MGYSD_PS_SERVICE_PROVISION',
-    'MGYSD_FAMILY_PS_SERVICE_PROVISION',
-    'MGYSD_SERVICE_PROVISION',
+    MgysdDhis2Uids.enrolledServiceProvisionStage,
   ];
 
   static const List<String> _referralStages = [
-    'MGYSD_PS_REFERRAL',
-    'MGYSD_FAMILY_PS_REFERRAL',
-    'MGYSD_REFERRAL',
+    MgysdDhis2Uids.referralStage,
   ];
 
   static const List<String> _monitoringStages = [
-    'MGYSD_PS_MONITORING',
-    'MGYSD_MONITORING',
+    MgysdDhis2Uids.assessedMonitoringStage,
+    MgysdDhis2Uids.monitoringStage,
+    MgysdDhis2Uids.familyMonitoringStage,
   ];
 
   Future<void> resetSyncStatusReferences() async {
@@ -169,6 +163,20 @@ class SynchronizationStatusState with ChangeNotifier {
           enrollmentTable,
           extraWhere: programWhere,
           extraArgs: programWhere == null ? const [] : programArgs,
+        );
+
+        final familyProgramWhere = await _programWhere(
+          db,
+          enrollmentTable,
+          const [MgysdDhis2Uids.familyMemberTrackerProgram],
+        );
+        _unsyncedClients += await _countUnsyncedRows(
+          db,
+          enrollmentTable,
+          extraWhere: familyProgramWhere,
+          extraArgs: familyProgramWhere == null
+              ? const []
+              : const [MgysdDhis2Uids.familyMemberTrackerProgram],
         );
       }
 

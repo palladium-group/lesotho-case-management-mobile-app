@@ -13,8 +13,11 @@ class EventOfflineDataValueProvider extends OfflineDbProvider {
   final String value = 'value';
 
   static const Set<String> _dhis2BooleanDataElementIds = {
-    // Initial Risk Assessment - Rehabilitation services
-    'aNCWaj2uiNT',
+    // Initial Risk Assessment
+    'MueBNV7Q8Dv', // Self-Care
+    'LP3qsc3lbwf', // Disability diagnosis
+    'fMIT7ZRxfJa', // Assistive devices
+    'aNCWaj2uiNT', // Rehabilitation services
   };
 
   String _normaliseEventDataValue(String dataElementId, String rawValue) {
@@ -86,7 +89,10 @@ class EventOfflineDataValueProvider extends OfflineDbProvider {
         );
       }
     } catch (e) {
-      //
+      // Saving event data values is part of the transaction from the user's
+      // point of view. Do not hide write failures because that produces a
+      // "saved" form that can never synchronize correctly.
+      rethrow;
     }
   }
 

@@ -26,6 +26,7 @@ class MgysdNewCasePage extends StatefulWidget {
     required this.color,
     this.reportedEventId,
     this.existingHouseholdTei,
+    this.existingAssessedEnrollment,
     this.prefillClientFirstName,
     this.prefillClientLastName,
     this.prefillClientPhone,
@@ -36,6 +37,7 @@ class MgysdNewCasePage extends StatefulWidget {
   final Color color;
   final String? reportedEventId;
   final String? existingHouseholdTei;
+  final String? existingAssessedEnrollment;
   final String? prefillClientFirstName;
   final String? prefillClientLastName;
   final String? prefillClientPhone;
@@ -70,10 +72,12 @@ class _ReasonGroup {
 class _DynamicTextItem {
   final String id;
   final TextEditingController controller;
+  String phoneCountryCode;
 
   _DynamicTextItem({
     required this.id,
     String value = '',
+    this.phoneCountryCode = 'LS',
   }) : controller = TextEditingController(text: value);
 
   void dispose() => controller.dispose();
@@ -93,6 +97,7 @@ class _HouseholdMemberEntry {
   String sex;
   String relationshipToClient;
   String hasDisability;
+  String contactsCountryCode;
   bool isExpanded;
 
   _HouseholdMemberEntry({
@@ -100,6 +105,7 @@ class _HouseholdMemberEntry {
     this.sex = '',
     this.relationshipToClient = '',
     this.hasDisability = '',
+    this.contactsCountryCode = 'LS',
     this.isExpanded = true,
   })  : firstNameController = TextEditingController(),
         surnameController = TextEditingController(),
@@ -150,11 +156,13 @@ class _CaregiverEntry {
   final TextEditingController phoneController;
 
   String sex;
+  String phoneCountryCode;
   bool isExpanded;
 
   _CaregiverEntry({
     required this.id,
     this.sex = '',
+    this.phoneCountryCode = 'LS',
     this.isExpanded = true,
   })  : nameController = TextEditingController(),
         surnameController = TextEditingController(),
@@ -195,12 +203,14 @@ class _NextOfKinEntry {
   final TextEditingController relationshipOtherController;
 
   String relationship;
+  String phoneCountryCode;
   bool isExpanded;
 
 
   _NextOfKinEntry({
     required this.id,
     this.relationship = '',
+    this.phoneCountryCode = 'LS',
     this.isExpanded = true,
   })  : firstNameController = TextEditingController(),
         surnameController = TextEditingController(),
@@ -295,6 +305,22 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   DateTime? _selectedDob;
   bool _saving = false;
   bool _loadingOrgUnits = false;
+  bool _restoringCachedState = false;
+  bool _loadingExistingCase = false;
+  bool _cacheWriteQueued = false;
+
+  String _existingClientTeiId = '';
+  String _existingFatherTeiId = '';
+  String _existingMotherTeiId = '';
+  String _existingPersonalAssistantTeiId = '';
+  final Set<String> _existingFamilyMemberTeis = <String>{};
+  final Set<String> _existingNextOfKinTeis = <String>{};
+
+  String _clientPhoneCountryCode = 'LS';
+  String _clientAlternativePhoneCountryCode = 'LS';
+  String _fatherPhoneCountryCode = 'LS';
+  String _motherPhoneCountryCode = 'LS';
+  String _personalAssistantPhoneCountryCode = 'LS';
 
   List<OrganisationUnit> _districtOrgUnits = [];
   List<OrganisationUnit> _communityCouncilOrgUnits = [];
@@ -1892,6 +1918,576 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     await _saveFormState(status: 'DRAFT', showToast: true);
   }
 
+
+  Future<String> _findEnrollmentId(
+      Database db, {
+        required String teiId,
+        required String programId,
+      }) async {
+    if (teiId.trim().isEmpty || programId.trim().isEmpty) return '';
+    try {
+      final rows = await db.query(
+        'enrollment',
+        columns: ['enrollment'],
+        where: 'trackedEntityInstance = ? AND program = ?',
+        whereArgs: [teiId, programId],
+        orderBy: 'enrollmentDate DESC',
+        limit: 1,
+      );
+      if (rows.isNotEmpty) {
+        return (rows.first['enrollment'] ?? '').toString().trim();
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  Future<String> _findInitialRiskEventId(
+      Database db, {
+        required String householdTei,
+        required String enrollmentId,
+      }) async {
+    try {
+      final whereParts = <String>[
+        'programStage = ?',
+        'trackedEntityInstance = ?',
+      ];
+      final whereArgs = <Object?>[
+        MgysdDhis2Uids.initialRiskAssessmentStage,
+        householdTei,
+      ];
+
+      if (enrollmentId.trim().isNotEmpty) {
+        whereParts.add('enrollment = ?');
+        whereArgs.add(enrollmentId);
+      }
+
+      final rows = await db.query(
+        'events',
+        columns: ['event'],
+        where: whereParts.join(' AND '),
+        whereArgs: whereArgs,
+        orderBy: 'eventDate DESC',
+        limit: 1,
+      );
+      if (rows.isNotEmpty) {
+        return (rows.first['event'] ?? '').toString().trim();
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  Future<Map<String, String>> _loadEventDataValues(
+      Database db,
+      String eventId,
+      ) async {
+    final values = <String, String>{};
+    if (eventId.trim().isEmpty) return values;
+    try {
+      final rows = await db.query(
+        'event_data_value',
+        where: 'event = ?',
+        whereArgs: [eventId],
+      );
+      for (final row in rows) {
+        final de = (row['dataElement'] ?? '').toString().trim();
+        if (de.isEmpty) continue;
+        values[de] = (row['value'] ?? '').toString();
+      }
+    } catch (_) {}
+    return values;
+  }
+
+  String _fromDhis2Boolean(String value) {
+    switch (value.trim().toLowerCase()) {
+      case 'true':
+      case '1':
+      case 'yes':
+        return 'YES';
+      case 'false':
+      case '0':
+      case 'no':
+        return 'NO';
+      default:
+        return value.trim();
+    }
+  }
+
+  String _fromDhis2ClientCategory(String value) {
+    switch (value.trim().toUpperCase()) {
+      case 'CHILD':
+        return 'CHILD';
+      case 'ADULT':
+        return 'ADULT_ELDERLY_PERSON';
+      case 'PERSONS WITH DISABILITY':
+        return 'PERSONS_WITH_DISABILITY';
+      default:
+        return value.trim();
+    }
+  }
+
+  String _fromDhis2InitialRiskOption(String dataElement, String value) {
+    final code = value.trim();
+    if (code.isEmpty) return code;
+    final upper = code.toUpperCase();
+
+    if (dataElement == MgysdDhis2Uids.deRiskFamilyBackground) {
+      const values = <String, String>{
+        'STABLE': 'STABLE',
+        'RECENT CHANGES': 'RECENT_CHANGES',
+        'ONGOING CHALLANGES': 'ONGOING_CHALLENGES',
+        'UNPREDICTABLE': 'UNPREDICTABLE_OR_VIOLENT',
+      };
+      return values[upper] ?? code;
+    }
+
+    if (dataElement == MgysdDhis2Uids.deRiskExtendedFamilyRelationships ||
+        dataElement == MgysdDhis2Uids.deRiskClientRelationships) {
+      const values = <String, String>{
+        'STABLE/GOOD': 'STABLE_GOOD',
+        'INCONSISTENT': 'INCONSISTENT',
+        'NON-EXISTENT/POOR': 'NON_EXISTENT_POOR',
+      };
+      return values[upper] ?? code;
+    }
+
+    if (dataElement == MgysdDhis2Uids.deRiskLivingCircumstances) {
+      const values = <String, String>{
+        'STABLE/GOOD': 'STABLE_GOOD',
+        'SAFE/OKAY': 'SAFE_OKAY',
+        'INCONSISTENT': 'INCONSISTENT',
+        'UNSTABLE/UNSAFE': 'UNSTABLE_UNSAFE',
+      };
+      return values[upper] ?? code;
+    }
+
+    if (dataElement == MgysdDhis2Uids.deRiskHousing) {
+      const values = <String, String>{
+        'STABLE/GOOD': 'STABLE_GOOD',
+        'SAFE / SUFFICIENT': 'SAFE_SUFFICIENT',
+        'INCONSISTENT': 'INCONSISTENT',
+        'NOT HABITABLE': 'NOT_HABITABLE',
+      };
+      return values[upper] ?? code;
+    }
+
+    if (dataElement == MgysdDhis2Uids.deRiskPhysicalHealth) {
+      const values = <String, String>{
+        'IN GOOD HEALTH / STABLE': 'GOOD_STABLE',
+        'CONCERNS BUT RECEIVING SUPPORT': 'CONCERNS_WITH_SUPPORT',
+        'FRAGILE / INCONSISTENT': 'FRAGILE_INCONSISTENT',
+        'SIGNIFICANT ISSUES': 'SIGNIFICANT_ISSUES',
+      };
+      return values[upper] ?? code;
+    }
+
+    if (dataElement == MgysdDhis2Uids.deRiskNutrition) {
+      const values = <String, String>{
+        'STABLE / GOOD': 'STABLE_GOOD',
+        'INCONSISTENT': 'INCONSISTENT',
+        'POOR': 'POOR',
+      };
+      return values[upper] ?? code;
+    }
+
+    if (dataElement == MgysdDhis2Uids.deRiskEmotionalHealth) {
+      const values = <String, String>{
+        'IN GOOD HEALTH / STABLE': 'GOOD_STABLE',
+        'CONCERNS BUT RECEIVING SUPPORT': 'CONCERNS_WITH_SUPPORT',
+        'FRAGILE / INCONSISTENT': 'FRAGILE_INCONSISTENT',
+        'SIGNIFICANT ISSUES / POOR': 'SIGNIFICANT_POOR',
+      };
+      return values[upper] ?? code;
+    }
+
+    if (dataElement == MgysdDhis2Uids.deRiskSupervision) {
+      const values = <String, String>{
+        'WELL SUPERVISED / SUPPORTED': 'WELL_SUPERVISED',
+        'OFTEN LEFT ALONE': 'BASIC_SUPPORT_LEFT_ALONE',
+        'SIGNIFICANT ISSUES / UNSAFE SUPERVISION': 'UNSAFE_SUPERVISION',
+      };
+      return values[upper] ?? code;
+    }
+
+    if (dataElement == MgysdDhis2Uids.deRiskEducation) {
+      const values = <String, String>{
+        'STABLE / GOOD': 'STABLE_GOOD',
+        'REASONABLE BUT INCONSISTENT': 'REASONABLE_INCONSISTENT',
+        'ONGOING CONCERNS': 'ONGOING_CONCERNS',
+        'SIGNIFICANT ISSUES / DROPOUT': 'SIGNIFICANT_DROPOUT',
+      };
+      return values[upper] ?? code;
+    }
+
+    if (dataElement == MgysdDhis2Uids.deRiskLevel) {
+      const values = <String, String>{
+        'NO RISK': 'NO_RISK',
+        'LOW RISK': 'LOW',
+        'MEDIUM RISK': 'MEDIUM',
+        'HIGH RISK': 'HIGH',
+      };
+      return values[upper] ?? code;
+    }
+
+    return code;
+  }
+
+  Future<void> _loadInitialRiskAssessment(
+      Database db, {
+        required String householdTei,
+        required String enrollmentId,
+      }) async {
+    final eventId = await _findInitialRiskEventId(
+      db,
+      householdTei: householdTei,
+      enrollmentId: enrollmentId,
+    );
+    if (eventId.isEmpty) return;
+
+    try {
+      final eventRows = await db.query(
+        'events',
+        where: 'event = ?',
+        whereArgs: [eventId],
+        limit: 1,
+      );
+      if (eventRows.isNotEmpty) {
+        final eventDate = (eventRows.first['eventDate'] ?? '').toString().trim();
+        if (eventDate.isNotEmpty) _riskAssessmentDateController.text = eventDate;
+      }
+    } catch (_) {}
+
+    final values = await _loadEventDataValues(db, eventId);
+    String v(String de) => values[de] ?? '';
+
+    if (v(MgysdDhis2Uids.deFirstClientCategory).isNotEmpty) {
+      _clientCategory =
+          _fromDhis2ClientCategory(v(MgysdDhis2Uids.deFirstClientCategory));
+    }
+    _riskSocialWorkerController.text =
+        v(MgysdDhis2Uids.deRiskSocialWorker);
+    _riskFamilyBackground = _fromDhis2InitialRiskOption(
+      MgysdDhis2Uids.deRiskFamilyBackground,
+      v(MgysdDhis2Uids.deRiskFamilyBackground),
+    );
+    _riskFamilyBackgroundNotesController.text =
+        v(MgysdDhis2Uids.deRiskFamilyBackgroundNotes);
+    _riskExtendedFamilyRelationships = _fromDhis2InitialRiskOption(
+      MgysdDhis2Uids.deRiskExtendedFamilyRelationships,
+      v(MgysdDhis2Uids.deRiskExtendedFamilyRelationships),
+    );
+    _riskExtendedFamilyNotesController.text =
+        v(MgysdDhis2Uids.deRiskExtendedFamilyNotes);
+    _riskClientRelationships = _fromDhis2InitialRiskOption(
+      MgysdDhis2Uids.deRiskClientRelationships,
+      v(MgysdDhis2Uids.deRiskClientRelationships),
+    );
+    _riskClientRelationshipsNotesController.text =
+        v(MgysdDhis2Uids.deRiskClientRelationshipsNotes);
+    _riskLivingCircumstances = _fromDhis2InitialRiskOption(
+      MgysdDhis2Uids.deRiskLivingCircumstances,
+      v(MgysdDhis2Uids.deRiskLivingCircumstances),
+    );
+    _riskLivingCircumstancesNotesController.text =
+        v(MgysdDhis2Uids.deRiskLivingCircumstancesNotes);
+    _riskHousing = _fromDhis2InitialRiskOption(
+      MgysdDhis2Uids.deRiskHousing,
+      v(MgysdDhis2Uids.deRiskHousing),
+    );
+    _riskHousingNotesController.text =
+        v(MgysdDhis2Uids.deRiskHousingNotes);
+    _riskPhysicalHealth = _fromDhis2InitialRiskOption(
+      MgysdDhis2Uids.deRiskPhysicalHealth,
+      v(MgysdDhis2Uids.deRiskPhysicalHealth),
+    );
+    _riskPhysicalHealthNotesController.text =
+        v(MgysdDhis2Uids.deRiskPhysicalHealthNotes);
+    _riskNutrition = _fromDhis2InitialRiskOption(
+      MgysdDhis2Uids.deRiskNutrition,
+      v(MgysdDhis2Uids.deRiskNutrition),
+    );
+    _riskNutritionNotesController.text =
+        v(MgysdDhis2Uids.deRiskNutritionNotes);
+    _riskEmotionalHealth = _fromDhis2InitialRiskOption(
+      MgysdDhis2Uids.deRiskEmotionalHealth,
+      v(MgysdDhis2Uids.deRiskEmotionalHealth),
+    );
+    _riskEmotionalHealthNotesController.text =
+        v(MgysdDhis2Uids.deRiskEmotionalHealthNotes);
+    _riskSupervision = _fromDhis2InitialRiskOption(
+      MgysdDhis2Uids.deRiskSupervision,
+      v(MgysdDhis2Uids.deRiskSupervision),
+    );
+    _riskSupervisionNotesController.text =
+        v(MgysdDhis2Uids.deRiskSupervisionNotes);
+    _riskEducation = _fromDhis2InitialRiskOption(
+      MgysdDhis2Uids.deRiskEducation,
+      v(MgysdDhis2Uids.deRiskEducation),
+    );
+    _riskEducationNotesController.text =
+        v(MgysdDhis2Uids.deRiskEducationNotes);
+    _riskLevel = _fromDhis2InitialRiskOption(
+      MgysdDhis2Uids.deRiskLevel,
+      v(MgysdDhis2Uids.deRiskLevel),
+    );
+    _riskReasonController.text = v(MgysdDhis2Uids.deRiskReason);
+    _riskImmediateReferralsController.text =
+        v(MgysdDhis2Uids.deRiskImmediateReferrals);
+
+    if (v(MgysdDhis2Uids.deRiskSelfCare).isNotEmpty) {
+      _selfCareIndependent =
+          _fromDhis2Boolean(v(MgysdDhis2Uids.deRiskSelfCare));
+    }
+    if (v(MgysdDhis2Uids.deRiskDisabilityDiagnosis).isNotEmpty) {
+      _hasDisabilityDiagnosis =
+          _fromDhis2Boolean(v(MgysdDhis2Uids.deRiskDisabilityDiagnosis));
+    }
+    if (v(MgysdDhis2Uids.deRiskAssistiveDevices).isNotEmpty) {
+      _usesAssistiveDevice =
+          _fromDhis2Boolean(v(MgysdDhis2Uids.deRiskAssistiveDevices));
+    }
+    if (v(MgysdDhis2Uids.deRiskRehabilitationServices).isNotEmpty) {
+      _receivesRehabilitationServices =
+          _fromDhis2Boolean(v(MgysdDhis2Uids.deRiskRehabilitationServices));
+    }
+  }
+
+  Future<void> _loadExistingFamilyMembers(
+      Database db,
+      String householdTei,
+      ) async {
+    _existingFamilyMemberTeis.clear();
+    _existingNextOfKinTeis.clear();
+    try {
+      final rows = await db.query(
+        'mgysd_household_member',
+        where: 'householdTei = ?',
+        whereArgs: [householdTei],
+      );
+
+      for (final row in rows) {
+        final isPrimary =
+            (row['isPrimaryClient'] ?? '').toString().toLowerCase() == 'true' ||
+                (row['isPrimaryClient'] ?? '').toString() == '1';
+        if (isPrimary) continue;
+
+        final memberTei = (row['memberTei'] ?? '').toString().trim();
+        if (memberTei.isEmpty) continue;
+        _existingFamilyMemberTeis.add(memberTei);
+
+        final role = (row['memberRole'] ?? '')
+            .toString()
+            .trim()
+            .toUpperCase();
+        final attrs = await _loadAttributes(db, memberTei);
+
+        if (role == 'FATHER') {
+          _existingFatherTeiId = memberTei;
+          _fatherFirstNameController.text = attrs[attFirstName] ?? '';
+          _fatherSurnameController.text = attrs[attLastName] ?? '';
+          _fatherDobController.text = attrs[attDob] ?? '';
+          _fatherOccupationController.text = attrs[attOccupation] ?? '';
+          _fatherPhoneController.text = attrs[attPhone] ?? '';
+          continue;
+        }
+
+        if (role == 'MOTHER') {
+          _existingMotherTeiId = memberTei;
+          _motherFirstNameController.text = attrs[attFirstName] ?? '';
+          _motherSurnameController.text = attrs[attLastName] ?? '';
+          _motherDobController.text = attrs[attDob] ?? '';
+          _motherOccupationController.text = attrs[attOccupation] ?? '';
+          _motherPhoneController.text = attrs[attPhone] ?? '';
+          continue;
+        }
+
+        if (role == 'PERSONAL_ASSISTANT') {
+          _existingPersonalAssistantTeiId = memberTei;
+          _personalAssistantNameController.text = attrs[attFirstName] ?? '';
+          _personalAssistantSurnameController.text = attrs[attLastName] ?? '';
+          _personalAssistantDobController.text = attrs[attDob] ?? '';
+          _personalAssistantOccupationController.text =
+              attrs[attOccupation] ?? '';
+          _personalAssistantPhoneController.text = attrs[attPhone] ?? '';
+          _personalAssistantSex = attrs[attSex] ?? '';
+          continue;
+        }
+
+        final hasDedicatedNextOfKinData =
+            (attrs[attNextOfKinFirstName] ?? '').trim().isNotEmpty ||
+                (attrs[attNextOfKinSurname] ?? '').trim().isNotEmpty ||
+                (attrs[attNextOfKinPhysicalAddress] ?? '').trim().isNotEmpty ||
+                (attrs[attNextOfKinRelationship] ?? '').trim().isNotEmpty;
+
+        if (role == 'NEXT_OF_KIN' || hasDedicatedNextOfKinData) {
+          _existingNextOfKinTeis.add(memberTei);
+
+          final relationship =
+          (attrs[attNextOfKinRelationship] ??
+              attrs[attRelationshipToClient] ??
+              '')
+              .trim();
+
+          final entry = _NextOfKinEntry(
+            id: memberTei,
+            relationship: relationship,
+            phoneCountryCode: 'LS',
+            isExpanded: false,
+          );
+
+          entry.firstNameController.text =
+              attrs[attNextOfKinFirstName] ??
+                  attrs[attFirstName] ??
+                  '';
+          entry.surnameController.text =
+              attrs[attNextOfKinSurname] ??
+                  attrs[attLastName] ??
+                  '';
+          entry.phoneController.text =
+              attrs[attNextOfKinPhone] ??
+                  attrs[attPhone] ??
+                  '';
+          entry.physicalAddressController.text =
+              attrs[attNextOfKinPhysicalAddress] ?? '';
+          entry.relationshipOtherController.text =
+              attrs[attNextOfKinRelationshipOther] ??
+                  attrs[attRelationshipToClientOther] ??
+                  '';
+
+          _nextOfKins.add(entry);
+          continue;
+        }
+
+        if (role == 'CAREGIVER') {
+          final entry = _CaregiverEntry(
+            id: memberTei,
+            sex: attrs[attSex] ?? '',
+            isExpanded: false,
+          );
+          entry.nameController.text = attrs[attFirstName] ?? '';
+          entry.surnameController.text = attrs[attLastName] ?? '';
+          entry.dobController.text = attrs[attDob] ?? '';
+          entry.occupationController.text = attrs[attOccupation] ?? '';
+          entry.phoneController.text = attrs[attPhone] ?? '';
+          entry.relationshipController.text =
+              attrs[attRelationshipToClient] ?? '';
+          entry.relationshipOtherController.text =
+              attrs[attRelationshipToClientOther] ?? '';
+          _caregivers.add(entry);
+          continue;
+        }
+
+        final entry = _HouseholdMemberEntry(
+          id: memberTei,
+          sex: attrs[attSex] ?? '',
+          relationshipToClient:
+          attrs[attRelationshipToClient] ?? role,
+          hasDisability: attrs[attHasDisability] ?? '',
+          isExpanded: false,
+        );
+        entry.firstNameController.text = attrs[attFirstName] ?? '';
+        entry.surnameController.text = attrs[attLastName] ?? '';
+        entry.dobController.text = attrs[attDob] ?? '';
+        entry.ageController.text = attrs[attAge] ?? '';
+        entry.occupationController.text = attrs[attOccupation] ?? '';
+        entry.contactsController.text = attrs[attPhone] ?? '';
+        entry.disabilitySpecifyController.text =
+            attrs[attDisabilitySpecify] ?? '';
+        entry.relationshipOtherController.text =
+            attrs[attRelationshipToClientOther] ?? '';
+        _otherHouseholdMembers.add(entry);
+      }
+    } catch (_) {}
+  }
+
+
+  Future<void> _restoreExistingLocationSelection({
+    required String storedDistrict,
+    required String storedCommunityCouncil,
+  }) async {
+    final districtRaw = storedDistrict.trim();
+    final councilRaw = storedCommunityCouncil.trim();
+
+    if (_districtOrgUnits.isEmpty) {
+      await _loadLocationTree();
+    }
+
+    OrganisationUnit? district;
+
+    if (districtRaw.isNotEmpty) {
+      for (final candidate in _districtOrgUnits) {
+        final id = (candidate.id ?? '').trim();
+        final name = (candidate.name ?? '').trim();
+        if (id == districtRaw ||
+            name.toLowerCase() == districtRaw.toLowerCase()) {
+          district = candidate;
+          break;
+        }
+      }
+    }
+
+    if (district == null && councilRaw.isNotEmpty) {
+      try {
+        final service = OrganisationUnitService();
+        final level3Units = await service.getOrganisationUnitsByLevel(3);
+        OrganisationUnit? councilCandidate;
+
+        for (final candidate in level3Units) {
+          final id = (candidate.id ?? '').trim();
+          final name = (candidate.name ?? '').trim();
+          if (id == councilRaw ||
+              name.toLowerCase() == councilRaw.toLowerCase()) {
+            councilCandidate = candidate;
+            break;
+          }
+        }
+
+        final parentId = (councilCandidate?.parent ?? '').trim();
+        if (parentId.isNotEmpty) {
+          for (final candidate in _districtOrgUnits) {
+            if ((candidate.id ?? '').trim() == parentId) {
+              district = candidate;
+              break;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (district != null) {
+      _selectedDistrictId = (district.id ?? '').trim();
+      _selectedDistrictName = (district.name ?? '').trim();
+      _districtController.text = _selectedDistrictName;
+      await _loadCommunityCouncilsForDistrict(_selectedDistrictId);
+    } else {
+      _selectedDistrictId = '';
+      _selectedDistrictName = districtRaw;
+      _districtController.text = districtRaw;
+    }
+
+    OrganisationUnit? council;
+    if (councilRaw.isNotEmpty) {
+      for (final candidate in _communityCouncilOrgUnits) {
+        final id = (candidate.id ?? '').trim();
+        final name = (candidate.name ?? '').trim();
+        if (id == councilRaw ||
+            name.toLowerCase() == councilRaw.toLowerCase()) {
+          council = candidate;
+          break;
+        }
+      }
+    }
+
+    if (council != null) {
+      _selectedCommunityCouncilId = (council.id ?? '').trim();
+      _selectedCommunityCouncilName = (council.name ?? '').trim();
+      _communityCouncilController.text = _selectedCommunityCouncilName;
+    } else {
+      _selectedCommunityCouncilId = '';
+      _selectedCommunityCouncilName = councilRaw;
+      _communityCouncilController.text = councilRaw;
+    }
+  }
+
   Future<void> _loadExistingCase() async {
     final householdTei = (widget.existingHouseholdTei ?? '').trim();
     if (householdTei.isEmpty) return;
@@ -1901,19 +2497,22 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       final db = await _db();
       final household = await _loadAttributes(db, householdTei);
       final clientTei = await _loadPrimaryClientTei(db, householdTei);
+      _existingClientTeiId = clientTei;
       final client = clientTei.isEmpty
           ? <String, String>{}
           : await _loadAttributes(db, clientTei);
 
       _fileNumberController.text = household[attHouseholdFileNumber] ?? '';
-      _districtController.text = household[attHouseholdDistrict] ?? '';
-      _communityCouncilController.text =
+      final storedDistrict = household[attHouseholdDistrict] ?? '';
+      final storedCommunityCouncil =
           household[attHouseholdCommunityCouncil] ?? '';
       _villageController.text = household[attHouseholdVillage] ?? '';
       _physicalAddressController.text = household[attHouseholdAddress] ?? '';
 
-      _selectedDistrictName = _districtController.text.trim();
-      _selectedCommunityCouncilName = _communityCouncilController.text.trim();
+      await _restoreExistingLocationSelection(
+        storedDistrict: storedDistrict,
+        storedCommunityCouncil: storedCommunityCouncil,
+      );
 
       _reasonOtherController.text =
           household[attReasonForEnrolmentOther] ?? '';
@@ -2069,6 +2668,36 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         ..clear()
         ..addAll(_socialInvestigationNextSteps());
 
+      final assessedEnrollment = (widget.existingAssessedEnrollment ?? '').trim().isNotEmpty
+          ? (widget.existingAssessedEnrollment ?? '').trim()
+          : await _findEnrollmentId(
+        db,
+        teiId: householdTei,
+        programId: mgysdAssessedHouseholdsProgramId,
+      );
+
+      await _loadInitialRiskAssessment(
+        db,
+        householdTei: householdTei,
+        enrollmentId: assessedEnrollment,
+      );
+
+      for (final item in _caregivers) {
+        item.dispose();
+      }
+      _caregivers.clear();
+      for (final item in _otherHouseholdMembers) {
+        item.dispose();
+      }
+      _otherHouseholdMembers.clear();
+
+      for (final item in _nextOfKins) {
+        item.dispose();
+      }
+      _nextOfKins.clear();
+
+      await _loadExistingFamilyMembers(db, householdTei);
+
       _clearEmploymentFieldsForChild();
 
       if (mounted) setState(() {});
@@ -2095,7 +2724,15 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
 
     _addContactedPhoneNumber();
     _addServiceProvided();
-    _loadLocationTree();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await _loadLocationTree();
+      if ((widget.existingHouseholdTei ?? '').trim().isNotEmpty) {
+        await _loadExistingCase();
+      }
+      await _loadFormStateIfAvailable();
+    });
   }
 
   @override
@@ -2642,17 +3279,30 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required String teiTypeId,
     required String orgUnit,
   }) async {
-    await db.insert(
+    final values = <String, dynamic>{
+      'trackedEntityInstance': teiId,
+      'trackedEntityType': teiTypeId,
+      'orgUnit': orgUnit,
+      'syncStatus': 'not-synced',
+    };
+
+    final updated = await db.update(
       'tracked_entity_instance',
-      {
-        'id': _newId(),
-        'trackedEntityInstance': teiId,
-        'trackedEntityType': teiTypeId,
-        'orgUnit': orgUnit,
-        'syncStatus': 'not-synced',
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      values,
+      where: 'trackedEntityInstance = ?',
+      whereArgs: [teiId],
     );
+
+    if (updated == 0) {
+      await db.insert(
+        'tracked_entity_instance',
+        {
+          'id': _newId(),
+          ...values,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
   }
 
   bool _isBooleanTrackedEntityAttribute(String attribute) {
@@ -2694,6 +3344,12 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     );
     if (v.isEmpty) return;
 
+    await db.delete(
+      'tracked_entity_instance_attribute',
+      where: 'trackedEntityInstance = ? AND attribute = ?',
+      whereArgs: [teiId, attr],
+    );
+
     await db.insert(
       'tracked_entity_instance_attribute',
       {
@@ -2727,13 +3383,45 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required String fromTei,
     required String toTei,
   }) async {
+    final relType = relationshipTypeCode.trim();
+    final from = fromTei.trim();
+    final to = toTei.trim();
+    if (relType.isEmpty || from.isEmpty || to.isEmpty) return;
+
+    final existing = await db.query(
+      'tei_relationships',
+      columns: ['id', 'syncStatus'],
+      where: 'relationshipType = ? AND fromTei = ? AND toTei = ?',
+      whereArgs: [relType, from, to],
+      orderBy: 'rowid ASC',
+    );
+
+    if (existing.isNotEmpty) {
+      final keepId = (existing.first['id'] ?? '').toString().trim();
+
+      // Keep one relationship only. Older builds could create several local
+      // relationship rows for the same household/member pair.
+      if (existing.length > 1 && keepId.isNotEmpty) {
+        await db.delete(
+          'tei_relationships',
+          where:
+          'relationshipType = ? AND fromTei = ? AND toTei = ? AND id <> ?',
+          whereArgs: [relType, from, to, keepId],
+        );
+      }
+
+      // Do not create another DHIS2 relationship UID. If the existing link
+      // has already synced, nothing changed about the link itself.
+      return;
+    }
+
     await db.insert(
       'tei_relationships',
       {
         'id': _newDhis2Uid(),
-        'relationshipType': relationshipTypeCode,
-        'fromTei': fromTei,
-        'toTei': toTei,
+        'relationshipType': relType,
+        'fromTei': from,
+        'toTei': to,
         'syncStatus': 'not-synced',
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
@@ -2747,18 +3435,48 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required String memberRole,
     required bool isPrimaryClient,
   }) async {
-    await db.insert(
+    final household = householdTei.trim();
+    final member = memberTei.trim();
+    if (household.isEmpty || member.isEmpty) return;
+
+    final values = <String, dynamic>{
+      'memberRole': memberRole.trim(),
+      'isPrimaryClient': isPrimaryClient ? 'true' : 'false',
+      'syncStatus': 'not-synced',
+    };
+
+    final updated = await db.update(
       'mgysd_household_member',
-      {
-        'id': _newId(),
-        'householdTei': householdTei,
-        'memberTei': memberTei,
-        'memberRole': memberRole,
-        'isPrimaryClient': isPrimaryClient ? 'true' : 'false',
-        'syncStatus': 'not-synced',
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      values,
+      where: 'householdTei = ? AND memberTei = ?',
+      whereArgs: [household, member],
     );
+
+    if (updated == 0) {
+      await db.insert(
+        'mgysd_household_member',
+        {
+          'id': _newId(),
+          'householdTei': household,
+          'memberTei': member,
+          ...values,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } else {
+      // Clean duplicates created by older builds.
+      try {
+        await db.rawDelete(
+          'DELETE FROM mgysd_household_member '
+              'WHERE householdTei = ? AND memberTei = ? '
+              'AND rowid NOT IN ('
+              'SELECT MIN(rowid) FROM mgysd_household_member '
+              'WHERE householdTei = ? AND memberTei = ?'
+              ')',
+          [household, member, household, member],
+        );
+      } catch (_) {}
+    }
   }
 
   Future<void> _saveEnrollmentOffline({
@@ -2770,22 +3488,34 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required String searchableValue,
   }) async {
     final nowIso = DateTime.now().toIso8601String();
-    await db.insert(
+    final values = <String, dynamic>{
+      'enrollment': enrollmentId,
+      'enrollmentDate': nowIso.substring(0, 10),
+      'incidentDate': nowIso.substring(0, 10),
+      'program': programId,
+      'orgUnit': orgUnit,
+      'trackedEntityInstance': teiId,
+      'status': 'ACTIVE',
+      'searchableValue': searchableValue,
+      'syncStatus': 'not-synced',
+    };
+
+    final updated = await db.update(
       'enrollment',
-      {
-        'id': _newId(),
-        'enrollment': enrollmentId,
-        'enrollmentDate': nowIso.substring(0, 10),
-        'incidentDate': nowIso.substring(0, 10),
-        'program': programId,
-        'orgUnit': orgUnit,
-        'trackedEntityInstance': teiId,
-        'status': 'ACTIVE',
-        'searchableValue': searchableValue,
-        'syncStatus': 'not-synced',
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      values,
+      where: 'enrollment = ?',
+      whereArgs: [enrollmentId],
     );
+    if (updated == 0) {
+      await db.insert(
+        'enrollment',
+        {
+          'id': _newId(),
+          ...values,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
   }
 
   Future<void> _saveLinkToReportEvent({
@@ -2808,6 +3538,143 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   }
 
 
+  String _dhis2ClientCategory(String value) {
+    switch (value.trim().toUpperCase()) {
+      case 'CHILD':
+        return 'Child';
+      case 'ADULT_ELDERLY_PERSON':
+      case 'ADULT':
+        return 'Adult';
+      case 'PERSONS_WITH_DISABILITY':
+      case 'PERSON_WITH_DISABILITY':
+      case 'DISABLED':
+        return 'Persons with disability';
+      default:
+        return value.trim();
+    }
+  }
+
+
+  String _dhis2BooleanValue(String value) {
+    switch (value.trim().toUpperCase()) {
+      case 'YES':
+      case 'TRUE':
+      case '1':
+        return 'true';
+      case 'NO':
+      case 'FALSE':
+      case '0':
+        return 'false';
+      default:
+        return value.trim().toLowerCase();
+    }
+  }
+
+  String _dhis2InitialRiskOption(String dataElement, String value) {
+    final code = value.trim();
+    if (code.isEmpty) return code;
+
+    if (dataElement == MgysdDhis2Uids.deRiskFamilyBackground) {
+      const values = <String, String>{
+        'STABLE': 'STABLE',
+        'RECENT_CHANGES': 'RECENT CHANGES',
+        'ONGOING_CHALLENGES': 'ONGOING CHALLANGES',
+        'UNPREDICTABLE_OR_VIOLENT': 'UNPREDICTABLE',
+      };
+      return values[code] ?? code;
+    }
+
+    if (dataElement == MgysdDhis2Uids.deRiskExtendedFamilyRelationships ||
+        dataElement == MgysdDhis2Uids.deRiskClientRelationships) {
+      const values = <String, String>{
+        'STABLE_GOOD': 'STABLE/GOOD',
+        'INCONSISTENT': 'INCONSISTENT',
+        'NON_EXISTENT_POOR': 'NON-EXISTENT/POOR',
+      };
+      return values[code] ?? code;
+    }
+
+    if (dataElement == MgysdDhis2Uids.deRiskLivingCircumstances) {
+      const values = <String, String>{
+        'STABLE_GOOD': 'STABLE/GOOD',
+        'SAFE_OKAY': 'SAFE/OKAY',
+        'INCONSISTENT': 'INCONSISTENT',
+        'UNSTABLE_UNSAFE': 'UNSTABLE/UNSAFE',
+      };
+      return values[code] ?? code;
+    }
+
+    if (dataElement == MgysdDhis2Uids.deRiskHousing) {
+      const values = <String, String>{
+        'STABLE_GOOD': 'STABLE/GOOD',
+        'SAFE_SUFFICIENT': 'SAFE / SUFFICIENT',
+        'INCONSISTENT': 'INCONSISTENT',
+        'NOT_HABITABLE': 'NOT HABITABLE',
+      };
+      return values[code] ?? code;
+    }
+
+    if (dataElement == MgysdDhis2Uids.deRiskPhysicalHealth) {
+      const values = <String, String>{
+        'GOOD_STABLE': 'IN GOOD HEALTH / STABLE',
+        'CONCERNS_WITH_SUPPORT': 'CONCERNS BUT RECEIVING SUPPORT',
+        'FRAGILE_INCONSISTENT': 'FRAGILE / INCONSISTENT',
+        'SIGNIFICANT_ISSUES': 'SIGNIFICANT ISSUES',
+      };
+      return values[code] ?? code;
+    }
+
+    if (dataElement == MgysdDhis2Uids.deRiskNutrition) {
+      const values = <String, String>{
+        'STABLE_GOOD': 'STABLE / GOOD',
+        'INCONSISTENT': 'INCONSISTENT',
+        'POOR': 'POOR',
+      };
+      return values[code] ?? code;
+    }
+
+    if (dataElement == MgysdDhis2Uids.deRiskEmotionalHealth) {
+      const values = <String, String>{
+        'GOOD_STABLE': 'IN GOOD HEALTH / STABLE',
+        'CONCERNS_WITH_SUPPORT': 'CONCERNS BUT RECEIVING SUPPORT',
+        'FRAGILE_INCONSISTENT': 'FRAGILE / INCONSISTENT',
+        'SIGNIFICANT_POOR': 'SIGNIFICANT ISSUES / POOR',
+      };
+      return values[code] ?? code;
+    }
+
+    if (dataElement == MgysdDhis2Uids.deRiskSupervision) {
+      const values = <String, String>{
+        'WELL_SUPERVISED': 'WELL SUPERVISED / SUPPORTED',
+        'BASIC_SUPPORT_LEFT_ALONE': 'OFTEN LEFT ALONE',
+        'UNSAFE_SUPERVISION': 'SIGNIFICANT ISSUES / UNSAFE SUPERVISION',
+      };
+      return values[code] ?? code;
+    }
+
+    if (dataElement == MgysdDhis2Uids.deRiskEducation) {
+      const values = <String, String>{
+        'STABLE_GOOD': 'STABLE / GOOD',
+        'REASONABLE_INCONSISTENT': 'REASONABLE BUT INCONSISTENT',
+        'ONGOING_CONCERNS': 'ONGOING CONCERNS',
+        'SIGNIFICANT_DROPOUT': 'SIGNIFICANT ISSUES / DROPOUT',
+      };
+      return values[code] ?? code;
+    }
+
+    if (dataElement == MgysdDhis2Uids.deRiskLevel) {
+      const values = <String, String>{
+        'NO_RISK': 'NO RISK',
+        'LOW': 'LOW RISK',
+        'MEDIUM': 'MEDIUM RISK',
+        'HIGH': 'HIGH RISK',
+      };
+      return values[code] ?? code;
+    }
+
+    return code;
+  }
+
   bool _hasDhis2SyncValue(dynamic value) {
     if (value == null) return false;
 
@@ -2823,6 +3690,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required String householdTeiId,
     required String enrollmentId,
     required String orgUnit,
+    String? existingEventId,
   }) async {
     final eventDate = _riskAssessmentDateController.text.trim().isNotEmpty
         ? _riskAssessmentDateController.text.trim()
@@ -2831,60 +3699,95 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     final riskDataValues = <String, dynamic>{
       MgysdDhis2Uids.deRiskSocialWorker:
       _riskSocialWorkerController.text,
+      MgysdDhis2Uids.deFirstClientCategory:
+      _dhis2ClientCategory(_clientCategory),
       MgysdDhis2Uids.deRiskFamilyBackground:
-      _riskFamilyBackground,
+      _dhis2InitialRiskOption(
+        MgysdDhis2Uids.deRiskFamilyBackground,
+        _riskFamilyBackground,
+      ),
       MgysdDhis2Uids.deRiskFamilyBackgroundNotes:
       _riskFamilyBackgroundNotesController.text,
       MgysdDhis2Uids.deRiskExtendedFamilyRelationships:
-      _riskExtendedFamilyRelationships,
+      _dhis2InitialRiskOption(
+        MgysdDhis2Uids.deRiskExtendedFamilyRelationships,
+        _riskExtendedFamilyRelationships,
+      ),
       MgysdDhis2Uids.deRiskExtendedFamilyNotes:
       _riskExtendedFamilyNotesController.text,
       MgysdDhis2Uids.deRiskClientRelationships:
-      _riskClientRelationships,
+      _dhis2InitialRiskOption(
+        MgysdDhis2Uids.deRiskClientRelationships,
+        _riskClientRelationships,
+      ),
       MgysdDhis2Uids.deRiskClientRelationshipsNotes:
       _riskClientRelationshipsNotesController.text,
       MgysdDhis2Uids.deRiskLivingCircumstances:
-      _riskLivingCircumstances,
+      _dhis2InitialRiskOption(
+        MgysdDhis2Uids.deRiskLivingCircumstances,
+        _riskLivingCircumstances,
+      ),
       MgysdDhis2Uids.deRiskLivingCircumstancesNotes:
       _riskLivingCircumstancesNotesController.text,
       MgysdDhis2Uids.deRiskHousing:
-      _riskHousing,
+      _dhis2InitialRiskOption(
+        MgysdDhis2Uids.deRiskHousing,
+        _riskHousing,
+      ),
       MgysdDhis2Uids.deRiskHousingNotes:
       _riskHousingNotesController.text,
       MgysdDhis2Uids.deRiskPhysicalHealth:
-      _riskPhysicalHealth,
+      _dhis2InitialRiskOption(
+        MgysdDhis2Uids.deRiskPhysicalHealth,
+        _riskPhysicalHealth,
+      ),
       MgysdDhis2Uids.deRiskPhysicalHealthNotes:
       _riskPhysicalHealthNotesController.text,
       MgysdDhis2Uids.deRiskNutrition:
-      _riskNutrition,
+      _dhis2InitialRiskOption(
+        MgysdDhis2Uids.deRiskNutrition,
+        _riskNutrition,
+      ),
       MgysdDhis2Uids.deRiskNutritionNotes:
       _riskNutritionNotesController.text,
       MgysdDhis2Uids.deRiskEmotionalHealth:
-      _riskEmotionalHealth,
+      _dhis2InitialRiskOption(
+        MgysdDhis2Uids.deRiskEmotionalHealth,
+        _riskEmotionalHealth,
+      ),
       MgysdDhis2Uids.deRiskEmotionalHealthNotes:
       _riskEmotionalHealthNotesController.text,
       MgysdDhis2Uids.deRiskSupervision:
-      _riskSupervision,
+      _dhis2InitialRiskOption(
+        MgysdDhis2Uids.deRiskSupervision,
+        _riskSupervision,
+      ),
       MgysdDhis2Uids.deRiskSupervisionNotes:
       _riskSupervisionNotesController.text,
       MgysdDhis2Uids.deRiskEducation:
-      _riskEducation,
+      _dhis2InitialRiskOption(
+        MgysdDhis2Uids.deRiskEducation,
+        _riskEducation,
+      ),
       MgysdDhis2Uids.deRiskEducationNotes:
       _riskEducationNotesController.text,
       MgysdDhis2Uids.deRiskLevel:
-      _riskLevel,
+      _dhis2InitialRiskOption(
+        MgysdDhis2Uids.deRiskLevel,
+        _riskLevel,
+      ),
       MgysdDhis2Uids.deRiskReason:
       _riskReasonController.text,
       MgysdDhis2Uids.deRiskImmediateReferrals:
       _riskImmediateReferralsController.text,
       MgysdDhis2Uids.deRiskSelfCare:
-      _selfCareIndependent,
+      _dhis2BooleanValue(_selfCareIndependent),
       MgysdDhis2Uids.deRiskDisabilityDiagnosis:
-      _hasDisabilityDiagnosis,
+      _dhis2BooleanValue(_hasDisabilityDiagnosis),
       MgysdDhis2Uids.deRiskAssistiveDevices:
-      _usesAssistiveDevice,
+      _dhis2BooleanValue(_usesAssistiveDevice),
       MgysdDhis2Uids.deRiskRehabilitationServices:
-      _receivesRehabilitationServices,
+      _dhis2BooleanValue(_receivesRehabilitationServices),
     };
 
     riskDataValues.removeWhere((key, value) {
@@ -2901,8 +3804,12 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       );
     }).toList();
 
+    final eventId = (existingEventId ?? '').trim().isNotEmpty
+        ? (existingEventId ?? '').trim()
+        : _newDhis2Uid();
+
     final eventData = FormUtil.getEventPayload(
-      _newDhis2Uid(),
+      eventId,
       MgysdDhis2Uids.assessedHouseholdsProgram,
       MgysdDhis2Uids.initialRiskAssessmentStage,
       orgUnit,
@@ -2913,7 +3820,132 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       enrollmentId,
     );
 
+    final db = await _db();
+
+    // Editing an existing Initial Risk Assessment must replace the previous
+    // event values, not append/retain stale data-element rows.
+    await db.delete(
+      'event_data_value',
+      where: 'event = ?',
+      whereArgs: [eventId],
+    );
+
     await FormUtil.savingEvent(eventData);
+
+    // Be explicit: an edited event must be picked up by the next sync even
+    // when the same DHIS2 event UID already exists locally and on the server.
+    await db.update(
+      'events',
+      {
+        'syncStatus': 'not-synced',
+        'eventDate': eventDate,
+        'program': MgysdDhis2Uids.assessedHouseholdsProgram,
+        'programStage': MgysdDhis2Uids.initialRiskAssessmentStage,
+        'trackedEntityInstance': householdTeiId,
+        'enrollment': enrollmentId,
+        'orgUnit': orgUnit,
+        'status': 'COMPLETED',
+      },
+      where: 'event = ?',
+      whereArgs: [eventId],
+    );
+  }
+
+
+  String _normalizedIdentityValue(String value) {
+    return value.trim().toUpperCase().replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  Future<String> _findExistingHouseholdMemberByIdentity({
+    required Database db,
+    required String householdTeiId,
+    required String memberRole,
+    required Map<String, String> attrs,
+  }) async {
+    final household = householdTeiId.trim();
+    final role = memberRole.trim().toUpperCase();
+    if (household.isEmpty || role.isEmpty) return '';
+
+    try {
+      final rows = await db.query(
+        'mgysd_household_member',
+        columns: ['memberTei', 'memberRole'],
+        where: 'householdTei = ?',
+        whereArgs: [household],
+      );
+
+      final targetFirst = _normalizedIdentityValue(
+        attrs[attFirstName] ?? attrs[attCaregiverName] ?? '',
+      );
+      final targetLast = _normalizedIdentityValue(
+        attrs[attLastName] ?? attrs[attCaregiverSurname] ?? '',
+      );
+      final targetDob = _normalizedIdentityValue(attrs[attDob] ?? '');
+      final targetPhone = _normalizedIdentityValue(
+        attrs[attPhone] ?? attrs[attCaregiverPhone] ?? '',
+      );
+
+      String bestMatch = '';
+      var bestScore = 0;
+
+      for (final row in rows) {
+        final candidateTei = (row['memberTei'] ?? '').toString().trim();
+        final candidateRole =
+        (row['memberRole'] ?? '').toString().trim().toUpperCase();
+
+        if (candidateTei.isEmpty) continue;
+
+        // Father, Mother, Personal Assistant and Next of Kin are stable roles.
+        // For those, a matching role is already a strong signal.
+        if (candidateRole != role) continue;
+
+        final candidate = await _loadAttributes(db, candidateTei);
+
+        final first = _normalizedIdentityValue(
+          candidate[attFirstName] ?? candidate[attCaregiverName] ?? '',
+        );
+        final last = _normalizedIdentityValue(
+          candidate[attLastName] ?? candidate[attCaregiverSurname] ?? '',
+        );
+        final dob = _normalizedIdentityValue(candidate[attDob] ?? '');
+        final phone = _normalizedIdentityValue(
+          candidate[attPhone] ?? candidate[attCaregiverPhone] ?? '',
+        );
+
+        var score = 0;
+        if (targetFirst.isNotEmpty && targetFirst == first) score += 3;
+        if (targetLast.isNotEmpty && targetLast == last) score += 3;
+        if (targetDob.isNotEmpty && targetDob == dob) score += 2;
+        if (targetPhone.isNotEmpty && targetPhone == phone) score += 3;
+
+        // Stable one-person roles can safely reuse the only role match even
+        // when older metadata is incomplete.
+        final stableRole = role == 'FATHER' ||
+            role == 'MOTHER' ||
+            role == 'PERSONAL_ASSISTANT';
+
+        if (stableRole && score == 0) {
+          score = 1;
+        }
+
+        // Dynamic roles must match actual identity data.
+        final hasStrongIdentityMatch =
+            score >= 3 ||
+                (targetFirst.isNotEmpty &&
+                    targetLast.isNotEmpty &&
+                    targetFirst == first &&
+                    targetLast == last);
+
+        if ((stableRole || hasStrongIdentityMatch) && score > bestScore) {
+          bestScore = score;
+          bestMatch = candidateTei;
+        }
+      }
+
+      return bestMatch;
+    } catch (_) {
+      return '';
+    }
   }
 
   Future<String> _savePersonAsFamilyMember({
@@ -2923,9 +3955,34 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required String memberRole,
     required Map<String, String> attrs,
     required bool enrollInFamilyMembersProgram,
+    String? existingMemberTeiId,
   }) async {
-    final memberTeiId = _newDhis2Uid();
-    final memberEnrollmentId = _newDhis2Uid();
+    var existingMember = (existingMemberTeiId ?? '').trim();
+
+    // Older cached forms and previously synchronized cases may lose the
+    // in-memory member TEI reference. Before creating a new person, recover
+    // the already-linked household member by role + identity.
+    if (existingMember.isEmpty) {
+      existingMember = await _findExistingHouseholdMemberByIdentity(
+        db: db,
+        householdTeiId: householdTeiId,
+        memberRole: memberRole,
+        attrs: attrs,
+      );
+    }
+
+    final memberTeiId =
+    existingMember.isNotEmpty ? existingMember : _newDhis2Uid();
+
+    final existingEnrollmentId = existingMember.isNotEmpty
+        ? await _findEnrollmentId(
+      db,
+      teiId: memberTeiId,
+      programId: mgysdFamilyMembersProgramId,
+    )
+        : '';
+    final memberEnrollmentId =
+    existingEnrollmentId.isNotEmpty ? existingEnrollmentId : _newDhis2Uid();
 
     await _saveTeiOffline(
       db: db,
@@ -2954,6 +4011,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       );
     }
 
+    // Both operations are idempotent. Calling them for an existing person
+    // updates local helper state but never creates a second link.
     await _saveRelationshipOffline(
       db: db,
       relationshipTypeCode: relHouseholdHasMember,
@@ -2973,12 +4032,18 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   }
 
   bool _shouldEnrollForCaseManagement() {
-    final value = _riskLevel.trim().toUpperCase().replaceAll(RegExp(r'[^A-Z]'), '');
-    if (value.isEmpty) return false;
+    final value = _riskLevel
+        .trim()
+        .toUpperCase()
+        .replaceAll(RegExp(r'[^A-Z]'), '');
 
-    // Only a clear No Risk assessment remains in the assessed-only program.
-    // Low, Medium and High Risk cases continue into the enrolled household case program.
-    return value != 'NORISK';
+    // Production enrollment rule:
+    // - HIGH RISK: enroll immediately into MGYSD Enrolled Households
+    //   and MGYSD Family Members.
+    // - NO/LOW/MEDIUM RISK: remain in MGYSD Assessed Households only.
+    //   They can be enrolled later when Social Investigation determines
+    //   that the household is eligible.
+    return value == 'HIGH' || value == 'HIGHRISK';
   }
 
   Future<void> _saveCase() async {
@@ -3018,11 +4083,50 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     try {
       final db = await _db();
 
-      final householdTeiId = _newDhis2Uid();
-      final clientTeiId = _newDhis2Uid();
-      final assessedHouseholdEnrollmentId = _newDhis2Uid();
-      final enrolledHouseholdEnrollmentId = _newDhis2Uid();
-      final clientFamilyEnrollmentId = _newDhis2Uid();
+      final requestedHouseholdTei =
+      (widget.existingHouseholdTei ?? '').trim();
+      final householdTeiId = requestedHouseholdTei.isNotEmpty
+          ? requestedHouseholdTei
+          : _newDhis2Uid();
+
+      var clientTeiId = _existingClientTeiId.trim();
+      if (clientTeiId.isEmpty && requestedHouseholdTei.isNotEmpty) {
+        clientTeiId = await _loadPrimaryClientTei(db, householdTeiId);
+      }
+      if (clientTeiId.isEmpty) clientTeiId = _newDhis2Uid();
+
+      var assessedHouseholdEnrollmentId =
+      (widget.existingAssessedEnrollment ?? '').trim();
+      if (assessedHouseholdEnrollmentId.isEmpty &&
+          requestedHouseholdTei.isNotEmpty) {
+        assessedHouseholdEnrollmentId = await _findEnrollmentId(
+          db,
+          teiId: householdTeiId,
+          programId: mgysdAssessedHouseholdsProgramId,
+        );
+      }
+      if (assessedHouseholdEnrollmentId.isEmpty) {
+        assessedHouseholdEnrollmentId = _newDhis2Uid();
+      }
+
+      var enrolledHouseholdEnrollmentId = await _findEnrollmentId(
+        db,
+        teiId: householdTeiId,
+        programId: mgysdEnrolledHouseholdsProgramId,
+      );
+      if (enrolledHouseholdEnrollmentId.isEmpty) {
+        enrolledHouseholdEnrollmentId = _newDhis2Uid();
+      }
+
+      var clientFamilyEnrollmentId = await _findEnrollmentId(
+        db,
+        teiId: clientTeiId,
+        programId: mgysdFamilyMembersProgramId,
+      );
+      if (clientFamilyEnrollmentId.isEmpty) {
+        clientFamilyEnrollmentId = _newDhis2Uid();
+      }
+
       final shouldEnrollForCaseManagement = _shouldEnrollForCaseManagement();
       final orgUnit = _selectedCommunityCouncilId.trim();
 
@@ -3067,7 +4171,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       );
 
       final clientAttrs = <String, String>{
-        attClientCategory: _clientCategory,
+        attClientCategory: _dhis2ClientCategory(_clientCategory),
         attIsDisabled: _isDisabled,
         attIdentityNumber: _identityNumberController.text,
         attFirstName: _clientFirstNameController.text,
@@ -3134,10 +4238,17 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         searchableValue: householdSearchableValue,
       );
 
+      final existingRiskEventId = await _findInitialRiskEventId(
+        db,
+        householdTei: householdTeiId,
+        enrollmentId: assessedHouseholdEnrollmentId,
+      );
+
       await _saveInitialRiskAssessmentEventOffline(
         householdTeiId: householdTeiId,
         enrollmentId: assessedHouseholdEnrollmentId,
         orgUnit: orgUnit,
+        existingEventId: existingRiskEventId,
       );
 
       if (shouldEnrollForCaseManagement) {
@@ -3160,20 +4271,39 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         );
       }
 
-      await _saveRelationshipOffline(
-        db: db,
-        relationshipTypeCode: relHouseholdHasMember,
-        fromTei: householdTeiId,
-        toTei: clientTeiId,
+      final primaryLinkRows = await db.query(
+        'mgysd_household_member',
+        where: 'householdTei = ? AND memberTei = ?',
+        whereArgs: [householdTeiId, clientTeiId],
+        limit: 1,
       );
+      if (primaryLinkRows.isEmpty) {
+        await _saveRelationshipOffline(
+          db: db,
+          relationshipTypeCode: relHouseholdHasMember,
+          fromTei: householdTeiId,
+          toTei: clientTeiId,
+        );
 
-      await _saveHouseholdMemberOffline(
-        db: db,
-        householdTei: householdTeiId,
-        memberTei: clientTeiId,
-        memberRole: 'CLIENT',
-        isPrimaryClient: true,
-      );
+        await _saveHouseholdMemberOffline(
+          db: db,
+          householdTei: householdTeiId,
+          memberTei: clientTeiId,
+          memberRole: 'CLIENT',
+          isPrimaryClient: true,
+        );
+      } else {
+        await db.update(
+          'mgysd_household_member',
+          {
+            'memberRole': 'CLIENT',
+            'isPrimaryClient': 'true',
+            'syncStatus': 'not-synced',
+          },
+          where: 'householdTei = ? AND memberTei = ?',
+          whereArgs: [householdTeiId, clientTeiId],
+        );
+      }
 
       final reportEventId = (widget.reportedEventId ?? '').trim();
       if (reportEventId.isNotEmpty) {
@@ -3192,6 +4322,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           orgUnit: orgUnit,
           memberRole: 'FATHER',
           enrollInFamilyMembersProgram: shouldEnrollForCaseManagement,
+          existingMemberTeiId: _existingFatherTeiId,
           attrs: {
             attFirstName: _fatherFirstNameController.text,
             attLastName: _fatherSurnameController.text,
@@ -3214,6 +4345,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           orgUnit: orgUnit,
           memberRole: 'MOTHER',
           enrollInFamilyMembersProgram: shouldEnrollForCaseManagement,
+          existingMemberTeiId: _existingMotherTeiId,
           attrs: {
             attFirstName: _motherFirstNameController.text,
             attLastName: _motherSurnameController.text,
@@ -3236,6 +4368,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           orgUnit: orgUnit,
           memberRole: 'CAREGIVER',
           enrollInFamilyMembersProgram: shouldEnrollForCaseManagement,
+          existingMemberTeiId:
+          _existingFamilyMemberTeis.contains(caregiver.id)
+              ? caregiver.id
+              : null,
           attrs: {
             attFirstName: caregiver.nameController.text,
             attLastName: caregiver.surnameController.text,
@@ -3247,6 +4383,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 : '',
             attDob: caregiver.dobController.text,
             attOccupation: caregiver.occupationController.text,
+            // Family Members metadata supports the generic Phone Number
+            // attribute. Relationship/role is retained locally because the
+            // supplied Family Members program has no generic relationship TEA.
             attPhone: caregiver.phoneController.text,
           },
         );
@@ -3257,14 +4396,34 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           db: db,
           householdTeiId: householdTeiId,
           orgUnit: orgUnit,
-          memberRole: nextOfKin.relationship.isEmpty ? 'NEXT_OF_KIN' : nextOfKin.relationship,
+
+          // Keep the person's purpose stable. The actual PARENT/CAREGIVER/
+          // GUARDIAN/OTHER value belongs in the relationship attribute.
+          memberRole: 'NEXT_OF_KIN',
           enrollInFamilyMembersProgram: shouldEnrollForCaseManagement,
+          existingMemberTeiId:
+          _existingFamilyMemberTeis.contains(nextOfKin.id)
+              ? nextOfKin.id
+              : null,
           attrs: {
+            // Generic Family Member attributes keep this TEI useful in lists.
             attFirstName: nextOfKin.firstNameController.text,
             attLastName: nextOfKin.surnameController.text,
             attPhone: nextOfKin.phoneController.text,
             attRelationshipToClient: nextOfKin.relationship,
-            attRelationshipToClientOther: nextOfKin.relationshipOtherController.text,
+            attRelationshipToClientOther:
+            nextOfKin.relationshipOtherController.text,
+
+            // Dedicated Next-of-Kin metadata. Placeholder constants such as
+            // ATTR_NOK_PHONE are automatically ignored by _saveAttrOffline().
+            attNextOfKinFirstName: nextOfKin.firstNameController.text,
+            attNextOfKinSurname: nextOfKin.surnameController.text,
+            attNextOfKinPhone: nextOfKin.phoneController.text,
+            attNextOfKinPhysicalAddress:
+            nextOfKin.physicalAddressController.text,
+            attNextOfKinRelationship: nextOfKin.relationship,
+            attNextOfKinRelationshipOther:
+            nextOfKin.relationshipOtherController.text,
           },
         );
       }
@@ -3276,6 +4435,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
           orgUnit: orgUnit,
           memberRole: 'PERSONAL_ASSISTANT',
           enrollInFamilyMembersProgram: shouldEnrollForCaseManagement,
+          existingMemberTeiId: _existingPersonalAssistantTeiId,
           attrs: {
             attFirstName: _personalAssistantNameController.text,
             attLastName: _personalAssistantSurnameController.text,
@@ -3302,6 +4462,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               ? 'HOUSEHOLD_MEMBER'
               : member.relationshipToClient,
           enrollInFamilyMembersProgram: shouldEnrollForCaseManagement,
+          existingMemberTeiId:
+          _existingFamilyMemberTeis.contains(member.id)
+              ? member.id
+              : null,
           attrs: {
             attFirstName: member.firstNameController.text,
             attLastName: member.surnameController.text,
@@ -3318,10 +4482,18 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         );
       }
 
+      await _saveFormState(
+        status: 'COMPLETED',
+        householdTeiOverride: householdTeiId,
+        enrollmentOverride: assessedHouseholdEnrollmentId,
+      );
+
       AppUtil.showToastMessage(
-        message: shouldEnrollForCaseManagement
-            ? 'Household assessed and enrolled for case management.'
-            : 'Household assessed. Risk is No/Low, so it was not enrolled for case management.',
+        message: requestedHouseholdTei.isNotEmpty
+            ? 'Intake and Initial Risk Assessment updated successfully.'
+            : (shouldEnrollForCaseManagement
+            ? 'High-risk household assessed and enrolled for case management.'
+            : 'Household assessed. Only High Risk is enrolled at Initial Risk Assessment; this case remains assessed-only pending Social Investigation eligibility.'),
       );
 
       if (mounted) Navigator.pop(context);

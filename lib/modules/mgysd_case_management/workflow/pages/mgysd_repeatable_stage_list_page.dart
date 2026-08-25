@@ -345,16 +345,33 @@ class _MgysdRepeatableStageListPageState
 
   bool _legacyRowMatches(Map<String, Object?> row) {
     final stagePrefix = '${_caseRootId}__${widget.stageKey}';
+    final rowStageKey = (row['stageKey'] ?? '').toString().trim();
+    final rowHouseholdTei = (row['householdTei'] ?? '').toString().trim();
+    final rowParentCaseId = (row['parentCaseId'] ?? '').toString().trim();
+    final rowRootCaseId = (row['rootCaseId'] ?? '').toString().trim();
 
+    // Canonical match for records that use generated DHIS2-style UIDs.
+    // Reassessments created from Monitoring do not use the old
+    // <case>__<stage>__<timestamp> ID format, so household + stage must be
+    // considered first.
+    if ((widget.householdTei ?? '').trim().isNotEmpty &&
+        rowHouseholdTei == (widget.householdTei ?? '').trim() &&
+        (rowStageKey.isEmpty || rowStageKey == widget.stageKey)) {
+      return true;
+    }
+
+    // Parent/root case matching remains useful for older rows. If stageKey is
+    // present, require it to belong to the list currently being displayed.
+    if ((rowParentCaseId == _caseRootId || rowRootCaseId == _caseRootId) &&
+        (rowStageKey.isEmpty || rowStageKey == widget.stageKey)) {
+      return true;
+    }
+
+    // Backward compatibility with legacy timestamp-based record IDs.
     for (final entry in row.entries) {
       final key = entry.key;
       final value = (entry.value ?? '').toString().trim();
       if (value.isEmpty) continue;
-
-      if ((key == 'parentCaseId' || key == 'rootCaseId') &&
-          value == _caseRootId) {
-        return true;
-      }
 
       if ((key == 'id' || key == 'caseId' || key == 'event') &&
           value.startsWith(stagePrefix)) {
