@@ -1398,6 +1398,13 @@ class _MgysdSocialInvestigationPageState
   String _caseOrgUnit = '';
   String _householdTei = '';
 
+  // DHIS2 event context. Initial investigations belong to Assessed Households.
+  // Reassessments created from Monitoring are registered against Enrolled
+  // Households and are resolved from mgysd_stage_event_context.
+  String _eventProgram = MgysdDhis2Uids.assessedHouseholdsProgram;
+  String _eventProgramStage = MgysdDhis2Uids.socialInvestigationStage;
+  String _eventEnrollmentId = '';
+
   List<_OrgUnitOption> _allOrgUnits = [];
   List<_OrgUnitOption> _districtOrgUnits = [];
   List<_OrgUnitOption> _communityCouncilOrgUnits = [];
@@ -3663,10 +3670,214 @@ class _MgysdSocialInvestigationPageState
     } catch (_) {}
   }
 
-  Future<void> _saveProgramStageEventRow({required Database db, required String status, required String eventDate}) async {
+  String _siIncidentPatternForDhis2(String value) {
+    switch (value.trim()) {
+      case 'SPECIFIC_DAY':
+        return 'SPECIFIC DAY';
+      case 'LONG_TERM_ONGOING':
+        return 'LONG TERM CONCERN';
+      default:
+        return '';
+    }
+  }
+
+  String _siRatingForDhis2(String domainKey, dynamic rawValue) {
+    final value = _text(rawValue);
+    if (value.isEmpty) return '';
+
+    const physical = {
+      'GOOD_STABLE': 'IN GOOD HEALTH / STABLE',
+      'CONCERNS_RECEIVING_SUPPORT': 'CONCERNS BUT RECEIVING SUPPORT',
+      'FRAGILE_INCONSISTENT': 'FRAGILE / INCONSISTENT',
+      'SIGNIFICANT_ISSUES': 'SIGNIFICANT ISSUES',
+    };
+    const emotional = {
+      'GOOD_STABLE': 'IN GOOD HEALTH / STABLE',
+      'CONCERNS_RECEIVING_SUPPORT': 'CONCERNS BUT RECEIVING SUPPORT',
+      'FRAGILE_INCONSISTENT': 'FRAGILE / INCONSISTENT',
+      'SIGNIFICANT_ISSUES_POOR': 'SIGNIFICANT ISSUES / POOR',
+    };
+    const education = {
+      'STABLE_GOOD': 'STABLE / GOOD',
+      'REASONABLE_INCONSISTENT': 'REASONABLE BUT INCONSISTENT',
+      'LEARNING_DISABILITIES': 'LEARNING DISABILITIES',
+      'ONGOING_CONCERNS': 'ONGOING CONCERNS',
+      'SIGNIFICANT_ISSUES_DROPOUT': 'SIGNIFICANT ISSUES / DROPOUT',
+    };
+    const family = {
+      'STABLE': 'STABLE',
+      'RECENT_CHANGES': 'RECENT CHANGES',
+      'ONGOING_CHALLENGES': 'ONGOING CHALLANGES',
+      'UNPREDICTABLE_VIOLENT_CONTEXT': 'UNPREDICTABLE',
+    };
+    const relationship = {
+      'STABLE_GOOD': 'STABLE/GOOD',
+      'INCONSISTENT': 'INCONSISTENT',
+      'NON_EXISTENT_DYSFUNCTIONAL': 'NON-EXISTENT/POOR',
+      'NON_EXISTING_POOR': 'NON-EXISTENT/POOR',
+    };
+    const housing = {
+      'STABLE_GOOD': 'STABLE/GOOD',
+      'SAFE_SUFFICIENT': 'SAFE / SUFFICIENT',
+      'INCONSISTENT': 'INCONSISTENT',
+      // The app's "unstable/unsafe" choice is closest to the only severe
+      // option configured in the current DHIS2 Housing option set.
+      'UNSTABLE_UNSAFE': 'NOT HABITABLE',
+    };
+    const social = {
+      'ACTIVE_ENGAGED': 'SOCIALLY AND RELIGIOUSLY ENGAGED',
+      'INCONSISTENT_SOMEWHAT_INVOLVED': 'INCONSISTENT / SOMEWHAT INVOLVED',
+      'ISOLATED_POOR_CONNECTIONS': 'ISOLATED / POOR CONNECTIONS',
+    };
+
+    switch (domainKey) {
+      case 'physicalHealth':
+        return physical[value] ?? '';
+      case 'emotionalHealth':
+        return emotional[value] ?? '';
+      case 'education':
+        return education[value] ?? '';
+      case 'familyBackground':
+        return family[value] ?? '';
+      case 'extendedFamily':
+      case 'parentSiblingRelationship':
+        return relationship[value] ?? '';
+      case 'housing':
+        return housing[value] ?? '';
+      case 'socialInclusion':
+        return social[value] ?? '';
+      case 'caregiverWellbeing':
+      // mQayWci59n4 is TEXT (no option set) in the supplied metadata.
+        return _caregiverWellbeingLabels[value] ?? value;
+      default:
+        return value;
+    }
+  }
+
+  Future<void> _resolveSocialInvestigationDhis2Context(Database db) async {
+    final context = await MgysdProgramStageEventHelper.getContext(
+      db: db,
+      eventId: _eventId,
+    );
+
+    final contextStage = _text(context['programStage']);
+
+    // Production rule:
+    // - If the household is already enrolled in MGYSD Enrolled Households
+    //   (for example HIGH RISK from Initial Risk), Social Investigation
+    //   belongs to the Enrolled Households Social Investigation stage.
+    // - If the household is still assessed-only, the first Social
+    //   Investigation remains in MGYSD Assessed Households.
+    //
+    // Existing event context always wins so an already-created event is
+    // never moved to another program when edited later.
+    final existingEnrolledRows = await db.query(
+      'enrollment',
+      columns: ['enrollment', 'orgUnit'],
+      where: 'trackedEntityInstance = ? AND program = ?',
+      whereArgs: [_householdTei, MgysdDhis2Uids.enrolledHouseholdsProgram],
+      orderBy: 'enrollmentDate DESC',
+      limit: 1,
+    );
+
+    final contextIsEnrolled =
+        contextStage == MgysdDhis2Uids.enrolledsocialInvestigationStage;
+    final contextIsAssessed =
+        contextStage == MgysdDhis2Uids.socialInvestigationStage;
+
+    final useEnrolledStage = contextIsEnrolled ||
+        (!contextIsAssessed && existingEnrolledRows.isNotEmpty);
+
+    _eventProgramStage = useEnrolledStage
+        ? MgysdDhis2Uids.enrolledsocialInvestigationStage
+        : MgysdDhis2Uids.socialInvestigationStage;
+    _eventProgram = MgysdDhis2Uids.programForStage(_eventProgramStage);
+
+    final preferredEnrollment = _text(context['enrollment']);
+    if (preferredEnrollment.isNotEmpty) {
+      final rows = await db.query(
+        'enrollment',
+        columns: ['enrollment', 'orgUnit', 'trackedEntityInstance', 'program'],
+        where: 'enrollment = ? AND program = ?',
+        whereArgs: [preferredEnrollment, _eventProgram],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) {
+        _eventEnrollmentId = _text(rows.first['enrollment']);
+        if (_caseOrgUnit.isEmpty) _caseOrgUnit = _text(rows.first['orgUnit']);
+        return;
+      }
+    }
+
+    final tei = _eventOwnerTei;
+    if (tei.isNotEmpty) {
+      final rows = await db.query(
+        'enrollment',
+        columns: ['enrollment', 'orgUnit'],
+        where: 'trackedEntityInstance = ? AND program = ?',
+        whereArgs: [tei, _eventProgram],
+        orderBy: 'enrollmentDate DESC',
+        limit: 1,
+      );
+      if (rows.isNotEmpty) {
+        _eventEnrollmentId = _text(rows.first['enrollment']);
+        if (_caseOrgUnit.isEmpty) _caseOrgUnit = _text(rows.first['orgUnit']);
+        return;
+      }
+    }
+
+    // Initial investigations are normally opened from the assessed enrollment,
+    // whose UID is the root case id in the existing case flow.
+    if (!useEnrolledStage && _parentCaseId.trim().isNotEmpty) {
+      final rows = await db.query(
+        'enrollment',
+        columns: ['enrollment', 'orgUnit'],
+        where: 'enrollment = ? AND program = ?',
+        whereArgs: [
+          _parentCaseId.trim(),
+          MgysdDhis2Uids.assessedHouseholdsProgram,
+        ],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) {
+        _eventEnrollmentId = _text(rows.first['enrollment']);
+        if (_caseOrgUnit.isEmpty) _caseOrgUnit = _text(rows.first['orgUnit']);
+      }
+    }
+  }
+
+  Future<void> _saveProgramStageEventRow({
+    required Database db,
+    required String status,
+    required String eventDate,
+  }) async {
+    await _resolveSocialInvestigationDhis2Context(db);
+
+    if (_eventEnrollmentId.isEmpty) {
+      throw StateError(
+        'No ${_eventProgram == MgysdDhis2Uids.enrolledHouseholdsProgram ? "Enrolled" : "Assessed"} '
+            'Households enrollment was found for this Social Investigation.',
+      );
+    }
+
     final part3 = (_payload(status)['part3'] ?? {}) as Map<String, dynamic>;
     Map<String, dynamic> domain(String key) =>
         (part3[key] ?? const <String, dynamic>{}) as Map<String, dynamic>;
+
+    await MgysdProgramStageEventHelper.saveContext(
+      db: db,
+      eventId: _eventId,
+      parentCaseId: _parentCaseId,
+      stageKey: _stageKey,
+      tableName: _tableName,
+      programStage: _eventProgramStage,
+      trackedEntityInstance: _eventOwnerTei,
+      enrollment: _eventEnrollmentId,
+      householdTei: _householdTei,
+      clientName: (widget.clientName ?? widget.mgysdCase.fullName).trim(),
+      subjectName: (widget.clientName ?? widget.mgysdCase.fullName).trim(),
+      subjectRole: 'Primary client',
+    );
 
     await MgysdProgramStageEventHelper.saveProgramStageEvent(
       db: db,
@@ -3674,29 +3885,42 @@ class _MgysdSocialInvestigationPageState
       status: status,
       eventDate: eventDate,
       orgUnit: _caseOrgUnit,
-      program: MgysdDhis2Uids.assessedHouseholdsProgram,
-      programStage: MgysdDhis2Uids.socialInvestigationStage,
+      program: _eventProgram,
+      programStage: _eventProgramStage,
       trackedEntityInstance: _eventOwnerTei,
+      enrollment: _eventEnrollmentId,
       dataValues: {
         MgysdDhis2Uids.deSiFirstName: _socialWorkerFirstNameController.text,
         MgysdDhis2Uids.deSiLastName: _socialWorkerSurnameController.text,
         MgysdDhis2Uids.deSiPhone: _socialWorkerPhoneController.text,
-        MgysdDhis2Uids.deSiIncidentPattern: _incidentPattern,
+        MgysdDhis2Uids.deSiIncidentPattern:
+        _siIncidentPatternForDhis2(_incidentPattern),
         MgysdDhis2Uids.deSiDistrict: _incidentDistrictController.text,
-        MgysdDhis2Uids.deSiCommunityCouncil: _incidentCommunityCouncilController.text,
+        MgysdDhis2Uids.deSiCommunityCouncil:
+        _incidentCommunityCouncilController.text,
         MgysdDhis2Uids.deSiVillage: _incidentVillageController.text,
-        MgysdDhis2Uids.deSiAssessmentChanged: _changedSinceInitialAssessment,
-        MgysdDhis2Uids.deSiChangeReason: _changesSinceInitialReasonController.text,
-        MgysdDhis2Uids.deSiAdditionalObservations: _changesSinceInitialObservationsController.text,
-        't9MyIrxgRSz': domain('physicalHealth')['rating'],
+        MgysdDhis2Uids.deSiAssessmentChanged:
+        _changedSinceInitialAssessment == 'YES'
+            ? true
+            : _changedSinceInitialAssessment == 'NO'
+            ? false
+            : null,
+        MgysdDhis2Uids.deSiChangeReason:
+        _changesSinceInitialReasonController.text,
+        MgysdDhis2Uids.deSiAdditionalObservations:
+        _changesSinceInitialObservationsController.text,
+        't9MyIrxgRSz':
+        _siRatingForDhis2('physicalHealth', domain('physicalHealth')['rating']),
         'oaDTx4J5EyB': domain('physicalHealth')['observations'],
         'RCTqBWPBcI9': domain('physicalHealth')['strengths'],
         'PxvNJZWAcPD': domain('physicalHealth')['challenges'],
-        'fAuuUmTMvYg': domain('emotionalHealth')['rating'],
+        'fAuuUmTMvYg':
+        _siRatingForDhis2('emotionalHealth', domain('emotionalHealth')['rating']),
         'o78KTEXhQiy': domain('emotionalHealth')['observations'],
         'YpARuE6Y2Pl': domain('emotionalHealth')['strengths'],
         'bmdBWMDIXtQ': domain('emotionalHealth')['challenges'],
-        'nf1lUdwfGL7': domain('education')['rating'],
+        'nf1lUdwfGL7':
+        _siRatingForDhis2('education', domain('education')['rating']),
         'bIByy8RBVnQ': domain('education')['observations'],
         'b4wSLDq0vhM': domain('education')['strengths'],
         'nWsaaSe1klU': domain('education')['challenges'],
@@ -3706,19 +3930,26 @@ class _MgysdSocialInvestigationPageState
         'Z0z38RYjy77': domain('identity')['observations'],
         'PdrvYognd7y': domain('identity')['strengths'],
         'ZEAYs0Fnzvb': domain('identity')['challenges'],
-        'k0Ik2xJsHDl': domain('familyBackground')['rating'],
+        'k0Ik2xJsHDl':
+        _siRatingForDhis2('familyBackground', domain('familyBackground')['rating']),
         'XB7RLLQgU1F': domain('familyBackground')['observations'],
         'ysY9wKRU5fE': domain('familyBackground')['strengths'],
         'a02A4U9BQQ0': domain('familyBackground')['challenges'],
-        'mQayWci59n4': domain('caregiverWellbeing')['rating'],
+        'mQayWci59n4':
+        _siRatingForDhis2('caregiverWellbeing', domain('caregiverWellbeing')['rating']),
         'WqLgxEDZtfP': domain('caregiverWellbeing')['observations'],
-        'MZRMxOp0EoV': domain('caregiverWellbeing')['strengths'],
+        // MZRMxOp0EoV is configured with a rating option set in DHIS2 even
+        // though its name says "Strengths". Sending free text would be rejected,
+        // so caregiver strengths remain in payloadJson until metadata is fixed.
         'SgB7LzfM3kt': domain('caregiverWellbeing')['challenges'],
-        'IByvTnQBrZ5': domain('extendedFamily')['rating'],
+        'IByvTnQBrZ5':
+        _siRatingForDhis2('extendedFamily', domain('extendedFamily')['rating']),
         'Ad7FrGPyNJF': domain('extendedFamily')['observations'],
         'yxzYAjiktVi': domain('extendedFamily')['strengths'],
         'FE5I7XVQ2J3': domain('extendedFamily')['challenges'],
-        'KeiF3aK0QNI': domain('parentSiblingRelationship')['rating'],
+        'KeiF3aK0QNI': _siRatingForDhis2(
+            'parentSiblingRelationship',
+            domain('parentSiblingRelationship')['rating']),
         'z69fmJ4GRHc': domain('parentSiblingRelationship')['observations'],
         'CgoAckfgdUN': domain('parentSiblingRelationship')['strengths'],
         'ajrgDRw1rhN': domain('parentSiblingRelationship')['challenges'],
@@ -3728,11 +3959,13 @@ class _MgysdSocialInvestigationPageState
         'Ictu4p4iFND': domain('alternativeCare')['observations'],
         'uzblliQBYz6': domain('alternativeCare')['strengths'],
         'C5pbISpAWry': domain('alternativeCare')['challenges'],
-        'gBd1mT2jaaP': domain('housing')['rating'],
+        'gBd1mT2jaaP':
+        _siRatingForDhis2('housing', domain('housing')['rating']),
         'G9sfhJ6Ks1M': domain('housing')['observations'],
         'ezeEaqAi3CF': domain('housing')['strengths'],
         'qygp5C0xDR8': domain('housing')['challenges'],
-        'wkvOsAGK1iD': domain('socialInclusion')['rating'],
+        'wkvOsAGK1iD':
+        _siRatingForDhis2('socialInclusion', domain('socialInclusion')['rating']),
         'BzTphSnSjuK': domain('socialInclusion')['observations'],
         'GHT32pRIRSJ': domain('socialInclusion')['strengths'],
         'wj0g8OuClZK': domain('socialInclusion')['challenges'],
@@ -3809,35 +4042,68 @@ class _MgysdSocialInvestigationPageState
         'payloadJson': jsonEncode(payload),
         'createdAt': nowIso,
         'updatedAt': nowIso,
-        'syncStatus': 'not-synced',
+        // This is only a local workflow shell. A real Care Plan event is
+        // created when the Care Plan is actually saved.
+        'syncStatus': 'local-draft',
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
-  Future<void> _enrollApprovedEligibleHousehold(Database db) async {
-    if (!_eligibleForEnrollment) {
-      return;
-    }
-
-    final householdTei = _householdTei.trim();
-    final orgUnit = _caseOrgUnit.trim();
-    if (householdTei.isEmpty || orgUnit.isEmpty) {
-      throw StateError(
-        'Household TEI or organisation unit is missing for enrollment.',
+  Future<String> _familyMemberSearchableValue(
+      Database db,
+      String memberTei,
+      String memberRole,
+      ) async {
+    try {
+      final rows = await db.query(
+        'tracked_entity_instance_attribute',
+        columns: ['attribute', 'value'],
+        where: 'trackedEntityInstance = ?',
+        whereArgs: [memberTei],
       );
+
+      final attrs = <String, String>{};
+      for (final row in rows) {
+        final attribute = _text(row['attribute']);
+        if (attribute.isEmpty) continue;
+        attrs[attribute] = _text(row['value']);
+      }
+
+      return [
+        attrs[MgysdDhis2Uids.attFirstName] ?? '',
+        attrs[MgysdDhis2Uids.attLastName] ?? '',
+        attrs[MgysdDhis2Uids.attPhone] ?? '',
+        memberRole,
+      ].where((value) => value.trim().isNotEmpty).join(' | ');
+    } catch (_) {
+      return memberRole.trim();
+    }
+  }
+
+  Future<void> _ensureProgramEnrollment({
+    required Database db,
+    required String teiId,
+    required String programId,
+    required String orgUnit,
+    required String searchableValue,
+  }) async {
+    if (teiId.trim().isEmpty ||
+        programId.trim().isEmpty ||
+        orgUnit.trim().isEmpty) {
+      return;
     }
 
     final existing = await db.query(
       'enrollment',
       columns: ['enrollment'],
       where: 'trackedEntityInstance = ? AND program = ?',
-      whereArgs: [
-        householdTei,
-        MgysdDhis2Uids.enrolledHouseholdsProgram,
-      ],
+      whereArgs: [teiId, programId],
       limit: 1,
     );
+
+    // High-risk households and their members may already have been enrolled
+    // during Initial Risk Assessment. Never create a second enrollment.
     if (existing.isNotEmpty) return;
 
     final now = DateTime.now();
@@ -3845,30 +4111,127 @@ class _MgysdSocialInvestigationPageState
         '${now.year.toString().padLeft(4, '0')}-'
         '${now.month.toString().padLeft(2, '0')}-'
         '${now.day.toString().padLeft(2, '0')}';
-    final searchableValue = [
-      _householdFileNumberController.text.trim(),
-      _householdDistrictController.text.trim(),
-      _householdCommunityCouncilController.text.trim(),
-      _householdVillageController.text.trim(),
-      _isHighRisk ? 'High risk eligible' : 'Approved eligible',
-    ].where((value) => value.isNotEmpty).join(' | ');
+
+    final enrollmentUid = AppUtil.getUid();
 
     await db.insert(
       'enrollment',
       {
         'id': AppUtil.getUid(),
-        'enrollment': AppUtil.getUid(),
+        'enrollment': enrollmentUid,
         'enrollmentDate': date,
         'incidentDate': date,
-        'program': MgysdDhis2Uids.enrolledHouseholdsProgram,
+        'program': programId,
         'orgUnit': orgUnit,
-        'trackedEntityInstance': householdTei,
+        'trackedEntityInstance': teiId,
         'status': 'ACTIVE',
         'searchableValue': searchableValue,
         'syncStatus': 'not-synced',
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  Future<void> _enrollHouseholdFamilyMembersAfterEligibility(
+      Database db,
+      ) async {
+    final householdTei = _householdTei.trim();
+    final orgUnit = _caseOrgUnit.trim();
+
+    if (householdTei.isEmpty || orgUnit.isEmpty) {
+      throw StateError(
+        'Household TEI or organisation unit is missing for enrollment.',
+      );
+    }
+
+    // 1. Household -> MGYSD Enrolled Households.
+    final householdSearchableValue = [
+      _householdFileNumberController.text.trim(),
+      _householdDistrictController.text.trim(),
+      _householdCommunityCouncilController.text.trim(),
+      _householdVillageController.text.trim(),
+      'Social Investigation eligible',
+    ].where((value) => value.isNotEmpty).join(' | ');
+
+    await _ensureProgramEnrollment(
+      db: db,
+      teiId: householdTei,
+      programId: MgysdDhis2Uids.enrolledHouseholdsProgram,
+      orgUnit: orgUnit,
+      searchableValue: householdSearchableValue,
+    );
+
+    // 2. Every linked person -> MGYSD Family Members.
+    //
+    // This includes the primary client, caregivers, father, mother,
+    // personal assistant and all other household/family members that were
+    // captured during Intake. We enroll existing TEIs; we do not create
+    // new people here.
+    final householdMembers = await db.query(
+      'mgysd_household_member',
+      columns: ['memberTei', 'memberRole', 'isPrimaryClient'],
+      where: 'householdTei = ?',
+      whereArgs: [householdTei],
+    );
+
+    final seen = <String>{};
+
+    for (final row in householdMembers) {
+      final memberTei = _text(row['memberTei']).trim();
+      if (memberTei.isEmpty || !seen.add(memberTei)) continue;
+
+      var memberRole = _text(row['memberRole']).trim();
+      if (memberRole.isEmpty) {
+        final isPrimary =
+            _text(row['isPrimaryClient']).trim().toLowerCase() == 'true' ||
+                _text(row['isPrimaryClient']).trim() == '1';
+        memberRole = isPrimary ? 'CLIENT' : 'HOUSEHOLD_MEMBER';
+      }
+
+      final searchableValue = await _familyMemberSearchableValue(
+        db,
+        memberTei,
+        memberRole,
+      );
+
+      await _ensureProgramEnrollment(
+        db: db,
+        teiId: memberTei,
+        programId: MgysdDhis2Uids.familyMemberTrackerProgram,
+        orgUnit: orgUnit,
+        searchableValue: searchableValue,
+      );
+    }
+
+    // Defensive fallback: if an older local case has a primary client TEI
+    // but no mgysd_household_member link, still enroll that existing TEI.
+    final clientTei = _clientTei.trim();
+    if (clientTei.isNotEmpty && seen.add(clientTei)) {
+      final searchableValue = await _familyMemberSearchableValue(
+        db,
+        clientTei,
+        'CLIENT',
+      );
+      await _ensureProgramEnrollment(
+        db: db,
+        teiId: clientTei,
+        programId: MgysdDhis2Uids.familyMemberTrackerProgram,
+        orgUnit: orgUnit,
+        searchableValue: searchableValue,
+      );
+    }
+  }
+
+  Future<void> _enrollApprovedEligibleHousehold(Database db) async {
+    if (!_eligibleForEnrollment) return;
+
+    // Social Investigation is the enrollment gateway for cases that were
+    // not High Risk at Initial Risk Assessment.
+    //
+    // High-risk cases are already enrolled during Initial Risk Assessment;
+    // _ensureProgramEnrollment() above makes this operation idempotent, so
+    // completing their Social Investigation never creates duplicates.
+    await _enrollHouseholdFamilyMembersAfterEligibility(db);
   }
 
   Future<void> _save(String status) async {
@@ -3950,8 +4313,8 @@ class _MgysdSocialInvestigationPageState
         status == 'COMPLETED'
             ? (enrolled
             ? (_isHighRisk
-            ? 'High-risk investigation completed. Household enrolled successfully.'
-            : 'Investigation approved. Household enrolled successfully.')
+            ? 'High-risk Social Investigation completed. Existing case-management enrollments retained without duplication.'
+            : 'Social Investigation eligible and approved. Household and family members enrolled successfully.')
             : 'Social Investigation submitted successfully.')
             : 'Social Investigation saved as draft.',
       );
@@ -6526,7 +6889,7 @@ class _MgysdSocialInvestigationPageState
                 ),
               ),
               child: const Text(
-                'Submitting will enroll this household into MGYSD Enrolled Households.',
+                'Submitting will enroll this household into MGYSD Enrolled Households and all linked people into MGYSD Family Members.',
                 style: TextStyle(
                   color: Colors.green,
                   fontWeight: FontWeight.w800,

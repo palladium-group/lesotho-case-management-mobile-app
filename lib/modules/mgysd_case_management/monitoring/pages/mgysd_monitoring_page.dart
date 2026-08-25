@@ -5,6 +5,7 @@ import 'package:lncmis_mobile_app/core/offline_db/offline_db_provider.dart';
 import 'package:lncmis_mobile_app/core/utils/app_util.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/models/mgysd_case.dart';
+import 'package:lncmis_mobile_app/modules/mgysd_case_management/workflow/helpers/mgysd_program_stage_event_helper.dart';
 import 'package:sqflite/sqflite.dart';
 
 class MgysdMonitoringPage extends StatefulWidget {
@@ -139,6 +140,7 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
   String _parentCaseId = '';
   String _householdTei = '';
   String _caseOrgUnit = '';
+  String _enrolledHouseholdEnrollmentId = '';
   String _activeCarePlanId = '';
   String _activeCarePlanStatus = '';
   String _activeSocialInvestigationId = '';
@@ -361,18 +363,43 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
   Future<void> _resolveCaseContext(Database db) async {
     _householdTei = (widget.householdTei ?? '').trim();
 
-    final enrollmentRows = await db.query(
+    // Resolve the root-case enrollment first because it remains useful for
+    // older local records and for discovering the household TEI/org unit.
+    final rootEnrollmentRows = await db.query(
       'enrollment',
       where: 'enrollment = ?',
       whereArgs: [_parentCaseId],
       limit: 1,
     );
 
-    if (enrollmentRows.isNotEmpty) {
-      final row = enrollmentRows.first;
+    if (rootEnrollmentRows.isNotEmpty) {
+      final row = rootEnrollmentRows.first;
       _caseOrgUnit = _text(row['orgUnit']);
       if (_householdTei.isEmpty) {
         _householdTei = _text(row['trackedEntityInstance']);
+      }
+    }
+
+    // Monitoring belongs to MGYSD Enrolled Households. Never use caseId as the
+    // enrollment UID unless it is actually an enrollment for that program.
+    if (_householdTei.isNotEmpty) {
+      final enrolledRows = await db.query(
+        'enrollment',
+        columns: ['enrollment', 'orgUnit', 'trackedEntityInstance'],
+        where: 'trackedEntityInstance = ? AND program = ?',
+        whereArgs: [
+          _householdTei,
+          MgysdDhis2Uids.enrolledHouseholdsProgram,
+        ],
+        orderBy: 'enrollmentDate DESC',
+        limit: 1,
+      );
+      if (enrolledRows.isNotEmpty) {
+        final row = enrolledRows.first;
+        _enrolledHouseholdEnrollmentId = _text(row['enrollment']);
+        if (_caseOrgUnit.isEmpty) {
+          _caseOrgUnit = _text(row['orgUnit']);
+        }
       }
     }
   }
@@ -695,6 +722,104 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
     };
   }
 
+  String _monitoringProgressText() {
+    final lines = <String>[];
+    for (final goal in _goals) {
+      final review = _goalReviews[goal.id];
+      if (review == null) continue;
+      final notes = review.progressNotes.text.trim();
+      final label = goal.goal.trim().isEmpty ? goal.id : goal.goal.trim();
+      final parts = <String>[
+        _progressLabels[review.progressStatus] ?? review.progressStatus,
+        if (notes.isNotEmpty) notes,
+      ];
+      lines.add('$label: ${parts.join(' - ')}');
+    }
+    return lines.join('\n');
+  }
+
+  String _monitoringGoalChallengesText() {
+    final lines = <String>[];
+    for (final goal in _goals) {
+      final review = _goalReviews[goal.id];
+      final value = review?.challenges.text.trim() ?? '';
+      if (value.isEmpty) continue;
+      final label = goal.goal.trim().isEmpty ? goal.id : goal.goal.trim();
+      lines.add('$label: $value');
+    }
+    return lines.join('\n');
+  }
+
+  String _monitoringGoalRecommendationsText() {
+    final lines = <String>[];
+    for (final goal in _goals) {
+      final review = _goalReviews[goal.id];
+      final value = review?.recommendation.text.trim() ?? '';
+      if (value.isEmpty) continue;
+      final label = goal.goal.trim().isEmpty ? goal.id : goal.goal.trim();
+      lines.add('$label: $value');
+    }
+    return lines.join('\n');
+  }
+
+  String _earliestGoalFollowupDate() {
+    final dates = <String>[];
+    for (final review in _goalReviews.values) {
+      final value = review.nextFollowupDate.text.trim();
+      if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) {
+        dates.add(value);
+      }
+    }
+    dates.sort();
+    return dates.isEmpty ? '' : dates.first;
+  }
+
+  Map<String, dynamic> _monitoringDhis2DataValues(String monitoringDate) {
+    // The supplied metadata supports only one interview name/purpose per
+    // Monitoring event. The complete repeatable interview list remains in
+    // personsInterviewedJson/payloadJson locally. We intentionally do not post
+    // kfoX3fIWj2s because DHIS2 currently assigns it the "Client relationship"
+    // option set, whose values do not match Parent/Teacher/Nurse/etc.
+    final firstInterview =
+    _personsInterviewed.isNotEmpty ? _personsInterviewed.first : null;
+
+    return {
+      MgysdDhis2Uids.deMonitoringDate: monitoringDate,
+      MgysdDhis2Uids.deMonitoringOverallProgressSummary:
+      _summaryController.text.trim(),
+      MgysdDhis2Uids.deMonitoringOverallChallenges:
+      _overallChallengesController.text.trim(),
+      MgysdDhis2Uids.deMonitoringNextActions:
+      _nextActionsController.text.trim(),
+      MgysdDhis2Uids.deMonitoringNextVisitDate:
+      _nextVisitDateController.text.trim(),
+      MgysdDhis2Uids.deMonitoringReassessmentReason:
+      _monitoringReason == 'REASSESSMENT'
+          ? _reassessmentReasonController.text.trim()
+          : '',
+      MgysdDhis2Uids.deMonitoringReassessmentFindings:
+      _monitoringReason == 'REASSESSMENT'
+          ? _reassessmentFindingsController.text.trim()
+          : '',
+      MgysdDhis2Uids.deMonitoringImmediateActions:
+      _monitoringReason == 'REASSESSMENT'
+          ? _reassessmentImmediateActionsController.text.trim()
+          : '',
+      MgysdDhis2Uids.deMonitoringProgressObserved:
+      _monitoringProgressText(),
+      MgysdDhis2Uids.deMonitoringChallengesStillPresent:
+      _monitoringGoalChallengesText(),
+      MgysdDhis2Uids.deMonitoringGoalRecommendation:
+      _monitoringGoalRecommendationsText(),
+      MgysdDhis2Uids.deMonitoringGoalFollowupDate:
+      _earliestGoalFollowupDate(),
+      MgysdDhis2Uids.deMonitoringInterviewFirstName:
+      firstInterview?.nameController.text.trim() ?? '',
+      MgysdDhis2Uids.deMonitoringInterviewPurpose:
+      firstInterview?.purposeController.text.trim() ?? '',
+    };
+  }
+
   Future<void> _save(String status) async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -725,20 +850,48 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
           ? _today()
           : _monitoringDateController.text.trim();
 
-      await db.insert(
-        'events',
-        {
-          'id': _monitoringId,
-          'event': _monitoringId,
-          'eventDate': monitoringDate,
-          'program': MgysdDhis2Uids.enrolledHouseholdsProgram,
-          'programStage': MgysdDhis2Uids.monitoringStage,
-          'trackedEntityInstance': _householdTei,
-          'status': status,
-          'orgUnit': _caseOrgUnit,
-          'syncStatus': 'not-synced',
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      // Re-resolve in case an Enrolled Households enrollment was created after
+      // this page was opened.
+      await _resolveCaseContext(db);
+      if (_enrolledHouseholdEnrollmentId.isEmpty) {
+        throw StateError(
+          'No MGYSD Enrolled Households enrollment was found for this household. '
+              'Monitoring cannot be synchronized until enrollment is created.',
+        );
+      }
+      if (_caseOrgUnit.isEmpty) {
+        throw StateError(
+          'The household organisation unit is missing. Monitoring cannot be synchronized.',
+        );
+      }
+
+      await MgysdProgramStageEventHelper.saveContext(
+        db: db,
+        eventId: _monitoringId,
+        parentCaseId: _parentCaseId,
+        stageKey: 'monitoring',
+        tableName: 'mgysd_monitoring',
+        programStage: MgysdDhis2Uids.monitoringStage,
+        trackedEntityInstance: _householdTei,
+        enrollment: _enrolledHouseholdEnrollmentId,
+        householdTei: _householdTei,
+        householdName: widget.householdName,
+        clientName: widget.clientName,
+        subjectName: widget.clientName,
+        subjectRole: 'Primary client',
+      );
+
+      await MgysdProgramStageEventHelper.saveProgramStageEvent(
+        db: db,
+        eventId: _monitoringId,
+        status: status,
+        eventDate: monitoringDate,
+        orgUnit: _caseOrgUnit,
+        program: MgysdDhis2Uids.enrolledHouseholdsProgram,
+        programStage: MgysdDhis2Uids.monitoringStage,
+        trackedEntityInstance: _householdTei,
+        enrollment: _enrolledHouseholdEnrollmentId,
+        dataValues: _monitoringDhis2DataValues(monitoringDate),
       );
 
       await db.insert(
@@ -874,6 +1027,37 @@ class _MgysdMonitoringPageState extends State<MgysdMonitoringPage> {
         'updatedAt': now,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+
+    // Register the reassessment exactly like a normal Social Investigation.
+    // This makes Monitoring-created investigations visible to the shared
+    // repeatable-stage list and gives them the context needed for later sync.
+    await MgysdProgramStageEventHelper.saveContext(
+      db: db,
+      eventId: newSocialInvestigationId,
+      parentCaseId: _parentCaseId,
+      stageKey: 'social_investigation',
+      tableName: 'mgysd_social_investigation',
+      programStage: MgysdDhis2Uids.enrolledsocialInvestigationStage,
+      trackedEntityInstance: _householdTei,
+      enrollment: _enrolledHouseholdEnrollmentId,
+      householdTei: _householdTei,
+      householdName: widget.householdName,
+      clientName: widget.clientName,
+      subjectName: widget.clientName,
+      subjectRole: 'Primary client',
+    );
+
+    await MgysdProgramStageEventHelper.saveProgramStageEvent(
+      db: db,
+      eventId: newSocialInvestigationId,
+      status: 'DRAFT',
+      eventDate: today,
+      orgUnit: _caseOrgUnit,
+      program: MgysdDhis2Uids.enrolledHouseholdsProgram,
+      programStage: MgysdDhis2Uids.enrolledsocialInvestigationStage,
+      trackedEntityInstance: _householdTei,
+      enrollment: _enrolledHouseholdEnrollmentId,
     );
 
     await db.insert(

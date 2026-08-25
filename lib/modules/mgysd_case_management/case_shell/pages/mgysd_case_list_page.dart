@@ -281,8 +281,8 @@ class _MgysdCaseListPageState extends State<MgysdCaseListPage> {
     switch (value.toUpperCase()) {
       case 'CHILD':
         return 'Child';
-      case 'ADULT_ELDERLY_PERSON':
-        return 'Adult / Elderly';
+      case 'Adult':
+        return 'Adult';
       case 'ADULT':
         return 'Adult';
       default:

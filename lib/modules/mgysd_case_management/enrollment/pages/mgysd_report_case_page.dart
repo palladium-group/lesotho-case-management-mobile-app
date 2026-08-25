@@ -348,6 +348,9 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
   static const String deReporterRelationship = MgysdDhis2Uids.deReporterRelationship;
   static const String deReporterRelationshipOther = MgysdDhis2Uids.deReporterRelationshipOther;
   static const String deReporterAnonymous = MgysdDhis2Uids.deReporterAnonymous;
+  static const String deReporterCommunityCouncil = MgysdDhis2Uids.deReporterCommunityCouncil;
+  static const String deReportingDate = MgysdDhis2Uids.deReportingDate;
+  static const String deFirstClientAge = MgysdDhis2Uids.deFirstClientAge;
 
   static const String deReporterPhysicalAddress =
       MgysdDhis2Uids.deReporterPhysicalAddress;
@@ -3013,12 +3016,27 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
           'eventDate': eventDate,
           'program': mgysdReportProgram,
           'programStage': mgysdReportProgramStage,
+          // Reported Cases is a DHIS2 WITHOUT_REGISTRATION event program.
+          // It must not carry a trackedEntityInstance or enrollment.
           'trackedEntityInstance': '',
           'status': 'COMPLETED',
           'orgUnit': reportOrgUnit,
           'syncStatus': 'not-synced',
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      await _saveEventDataValue(
+        db: db,
+        eventId: eventId,
+        dataElement: deReporterCommunityCouncil,
+        value: reportOrgUnit,
+      );
+      await _saveEventDataValue(
+        db: db,
+        eventId: eventId,
+        dataElement: deReportingDate,
+        value: _today(),
       );
 
       // Reporter fields
@@ -3078,6 +3096,12 @@ class _MgysdRecordCasePageState extends State<MgysdRecordCasePage> {
           eventId: eventId,
           dataElement: MgysdDhis2Uids.deFirstClientLastName,
           value: (firstClient['lastName'] ?? '').toString(),
+        );
+        await _saveEventDataValue(
+          db: db,
+          eventId: eventId,
+          dataElement: deFirstClientAge,
+          value: (firstClient['age'] ?? '').toString(),
         );
         await _saveEventDataValue(
           db: db,

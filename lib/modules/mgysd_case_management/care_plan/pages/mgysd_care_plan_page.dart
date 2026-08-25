@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:lncmis_mobile_app/core/offline_db/offline_db_provider.dart';
+import 'package:lncmis_mobile_app/core/utils/app_util.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/workflow/helpers/mgysd_program_stage_event_helper.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/models/mgysd_case.dart';
@@ -312,6 +313,10 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
 
   String get _carePlanId => 'CP_$_socialInvestigationId';
 
+  // Local Care Plan IDs are workflow-friendly (CP_<social investigation>),
+  // but DHIS2 event IDs must be valid 11-character UIDs.
+  String _carePlanEventId = '';
+
   String _newId() => DateTime.now().microsecondsSinceEpoch.toString();
 
   String _nowIso() => DateTime.now().toIso8601String();
@@ -409,6 +414,12 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
       tableCarePlan,
       'carePlanId',
       "ALTER TABLE $tableCarePlan ADD COLUMN carePlanId TEXT DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      tableCarePlan,
+      'eventId',
+      "ALTER TABLE $tableCarePlan ADD COLUMN eventId TEXT DEFAULT ''",
     );
     await _addColumnIfMissing(
       db,
@@ -621,6 +632,146 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     return subjects;
   }
 
+
+  bool _isValidDhis2Uid(String value) {
+    return RegExp(r'^[A-Za-z][A-Za-z0-9]{10}$').hasMatch(value.trim());
+  }
+
+  Future<String> _resolveCarePlanEventId(Database db) async {
+    if (_isValidDhis2Uid(_carePlanEventId)) return _carePlanEventId;
+
+    try {
+      final rows = await db.query(
+        tableCarePlan,
+        columns: ['eventId'],
+        where: 'id = ? OR carePlanId = ? OR socialInvestigationId = ?',
+        whereArgs: [_carePlanId, _carePlanId, _socialInvestigationId],
+        limit: 1,
+      );
+
+      if (rows.isNotEmpty) {
+        final existing = (rows.first['eventId'] ?? '').toString().trim();
+        if (_isValidDhis2Uid(existing)) {
+          _carePlanEventId = existing;
+          return existing;
+        }
+      }
+    } catch (_) {}
+
+    _carePlanEventId = AppUtil.getUid();
+
+    try {
+      await db.update(
+        tableCarePlan,
+        {'eventId': _carePlanEventId},
+        where: 'id = ? OR carePlanId = ? OR socialInvestigationId = ?',
+        whereArgs: [_carePlanId, _carePlanId, _socialInvestigationId],
+      );
+    } catch (_) {}
+
+    return _carePlanEventId;
+  }
+
+  Future<String> _memberSearchableValue(
+      Database db,
+      String memberTei,
+      String memberRole,
+      ) async {
+    try {
+      final attrs = await _attrs(db, memberTei);
+      return [
+        attrs[MgysdDhis2Uids.attFirstName] ?? '',
+        attrs[MgysdDhis2Uids.attLastName] ?? '',
+        attrs[MgysdDhis2Uids.attPhone] ?? '',
+        memberRole,
+      ].where((value) => value.trim().isNotEmpty).join(' | ');
+    } catch (_) {
+      return memberRole;
+    }
+  }
+
+  Future<void> _ensureFamilyMemberEnrollment({
+    required Database db,
+    required String memberTei,
+    required String orgUnit,
+    required String memberRole,
+  }) async {
+    final tei = memberTei.trim();
+    if (tei.isEmpty || orgUnit.trim().isEmpty) return;
+
+    final existing = await db.query(
+      'enrollment',
+      columns: ['enrollment'],
+      where: 'trackedEntityInstance = ? AND program = ?',
+      whereArgs: [tei, MgysdDhis2Uids.familyMemberTrackerProgram],
+      limit: 1,
+    );
+
+    if (existing.isNotEmpty) return;
+
+    final date = DateTime.now().toIso8601String().substring(0, 10);
+    final enrollmentId = AppUtil.getUid();
+
+    await db.insert(
+      'enrollment',
+      {
+        'id': AppUtil.getUid(),
+        'enrollment': enrollmentId,
+        'enrollmentDate': date,
+        'incidentDate': date,
+        'program': MgysdDhis2Uids.familyMemberTrackerProgram,
+        'orgUnit': orgUnit.trim(),
+        'trackedEntityInstance': tei,
+        'status': 'ACTIVE',
+        'searchableValue':
+        await _memberSearchableValue(db, tei, memberRole),
+        'syncStatus': 'not-synced',
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> _ensureAllLinkedMembersAreEnrolled({
+    required Database db,
+    required String householdTei,
+    required String orgUnit,
+  }) async {
+    final household = householdTei.trim();
+    if (household.isEmpty) {
+      throw StateError('Household TEI is missing.');
+    }
+
+    final rows = await db.query(
+      'mgysd_household_member',
+      columns: ['memberTei', 'memberRole', 'isPrimaryClient'],
+      where: 'householdTei = ?',
+      whereArgs: [household],
+    );
+
+    final seen = <String>{};
+
+    for (final row in rows) {
+      final memberTei = (row['memberTei'] ?? '').toString().trim();
+      if (memberTei.isEmpty || !seen.add(memberTei)) continue;
+
+      var role = (row['memberRole'] ?? '').toString().trim();
+      if (role.isEmpty) {
+        final primary =
+        (row['isPrimaryClient'] ?? '').toString().trim().toLowerCase();
+        role = primary == 'true' || primary == '1'
+            ? 'CLIENT'
+            : 'HOUSEHOLD_MEMBER';
+      }
+
+      await _ensureFamilyMemberEnrollment(
+        db: db,
+        memberTei: memberTei,
+        orgUnit: orgUnit,
+        memberRole: role,
+      );
+    }
+  }
+
   Future<void> _loadCarePlan(Database db) async {
     final rows = await db.query(
       tableCarePlan,
@@ -631,6 +782,11 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
 
     if (rows.isNotEmpty) {
       _status = (rows.first['status'] ?? 'DRAFT').toString();
+
+      final savedEventId = (rows.first['eventId'] ?? '').toString().trim();
+      if (_isValidDhis2Uid(savedEventId)) {
+        _carePlanEventId = savedEventId;
+      }
 
       final agreedPlanAction =
       (rows.first['agreedPlanAction'] ?? '').toString().trim();
@@ -979,10 +1135,47 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
     );
     final enrollmentId = enrollmentRows.isEmpty
         ? ''
-        : (enrollmentRows.first['enrollment'] ?? '').toString();
+        : (enrollmentRows.first['enrollment'] ?? '').toString().trim();
     final orgUnit = enrollmentRows.isEmpty
         ? ''
-        : (enrollmentRows.first['orgUnit'] ?? '').toString();
+        : (enrollmentRows.first['orgUnit'] ?? '').toString().trim();
+
+    if (enrollmentId.isEmpty) {
+      throw StateError(
+        'Care Plan cannot be saved because this household is not enrolled '
+            'in MGYSD Enrolled Households. Complete the High-Risk or eligible '
+            'Social Investigation enrollment first.',
+      );
+    }
+
+    if (orgUnit.isEmpty) {
+      throw StateError(
+        'Care Plan cannot be saved because the Enrolled Households '
+            'organisation unit is missing.',
+      );
+    }
+
+    // Firm production rule: once the household is enrolled, every linked
+    // person must also be enrolled in MGYSD Family Members.
+    await _ensureAllLinkedMembersAreEnrolled(
+      db: db,
+      householdTei: householdTei,
+      orgUnit: orgUnit,
+    );
+
+    final eventId = await _resolveCarePlanEventId(db);
+
+    // Persist the actual DHIS2 event UID separately from the local Care Plan ID.
+    await db.update(
+      tableCarePlan,
+      {
+        'eventId': eventId,
+        'syncStatus': 'not-synced',
+      },
+      where: 'id = ? OR carePlanId = ? OR socialInvestigationId = ?',
+      whereArgs: [_carePlanId, _carePlanId, _socialInvestigationId],
+    );
+
     final clientGoals = _payloadForGoalGroup(goalGroupClient);
     final workerGoals = _payloadForGoalGroup(goalGroupSocialWorker);
     final caregiverGoals = _payloadForGoalGroup(goalGroupCaregiver);
@@ -1010,9 +1203,25 @@ class _MgysdCarePlanPageState extends State<MgysdCarePlanPage> {
           .where((v) => v.trim().isNotEmpty)
           .join(' | ');
     }
+    await MgysdProgramStageEventHelper.saveContext(
+      db: db,
+      eventId: eventId,
+      parentCaseId: _caseRootId,
+      stageKey: 'care_plan',
+      tableName: tableCarePlan,
+      programStage: MgysdDhis2Uids.carePlanStage,
+      trackedEntityInstance: householdTei,
+      enrollment: enrollmentId,
+      householdTei: householdTei,
+      householdName: widget.householdName ?? '',
+      clientName: widget.clientName ?? '',
+      subjectName: widget.clientName ?? '',
+      subjectRole: 'Primary client',
+    );
+
     await MgysdProgramStageEventHelper.saveProgramStageEvent(
       db: db,
-      eventId: _carePlanId,
+      eventId: eventId,
       status: status,
       eventDate: nowIso.substring(0, 10),
       orgUnit: orgUnit,

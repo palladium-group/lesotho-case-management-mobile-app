@@ -645,8 +645,10 @@ class SynchronizationState with ChangeNotifier {
         lastDataUploadDatePreferenceKey, lastDataUploadDate);
 
     if (context != null) {
-      Provider.of<SynchronizationStatusState>(context!, listen: false)
-          .resetSyncStatusReferences();
+      await Provider.of<SynchronizationStatusState>(
+        context!,
+        listen: false,
+      ).resetSyncStatusReferences();
     }
   }
 

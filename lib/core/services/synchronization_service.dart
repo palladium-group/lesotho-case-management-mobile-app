@@ -11,6 +11,7 @@ import 'package:lncmis_mobile_app/core/offline_db/app_logs_offline/app_logs_offl
 import 'package:lncmis_mobile_app/core/offline_db/enrollment_offline/enrollment_offline_provider.dart';
 import 'package:lncmis_mobile_app/core/offline_db/event_offline/event_offline_data_value_provider.dart';
 import 'package:lncmis_mobile_app/core/offline_db/event_offline/event_offline_provider.dart';
+import 'package:lncmis_mobile_app/core/offline_db/offline_db_provider.dart';
 import 'package:lncmis_mobile_app/core/offline_db/tei_relationship_offline/tei_relationship_offline_provider.dart';
 import 'package:lncmis_mobile_app/core/offline_db/tracked_entity_instance_offline/tracked_entity_instance_offline_attribute_provider.dart';
 import 'package:lncmis_mobile_app/core/offline_db/tracked_entity_instance_offline/tracked_entity_instance_offline_provider.dart';
@@ -25,6 +26,8 @@ import 'package:lncmis_mobile_app/models/events.dart';
 import 'package:lncmis_mobile_app/models/tei_relationship.dart';
 import 'package:lncmis_mobile_app/models/tracked_entity_instance.dart';
 
+import '../../modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
+
 class SynchronizationService {
   late HttpService httpClient;
 
@@ -33,6 +36,8 @@ class SynchronizationService {
 
   final String offlineSyncStatus = 'not-synced';
   final String onlineSyncStatus = 'synced';
+
+  String _lastEventSyncError = '';
 
   SynchronizationService(
       String? username,
@@ -604,10 +609,12 @@ class SynchronizationService {
           var teiEventChunk = await getTeiEventsFromOfflineDb(page: page);
           var conflicts = await uploadTeiEventsToTheServer(teiEventChunk);
           if (conflicts) {
+            final detail = _lastEventSyncError.trim();
             LocalNotificationService.show(
-              message:
-              "Failed to upload some Beneficiaries service data. Check app logs for more information",
-              title: "Automatic sync in progress",
+              message: detail.isNotEmpty
+                  ? 'Event sync failed: $detail'
+                  : 'Failed to upload some service/event data. Check app logs for more information.',
+              title: 'Synchronization issue',
             );
             hasDataToUpload = hasDataToUpload && conflicts;
           }
@@ -637,6 +644,8 @@ class SynchronizationService {
         -1)
         .toList();
 
+    enrollments = _deduplicateEnrollments(enrollments);
+
     if (enrollments.isEmpty) {
       return false;
     }
@@ -648,6 +657,7 @@ class SynchronizationService {
     try {
       var queryParameters = {
         "strategy": "CREATE_AND_UPDATE",
+        "mergeMode": "MERGE",
       };
       var response = await httpClient.httpPost(
         url,
@@ -673,10 +683,10 @@ class SynchronizationService {
       rethrow;
     }
     if (syncedIds!.isNotEmpty) {
-      for (Enrollment teiEnrollment in teiEnrollments) {
-        if (syncedIds.contains(teiEnrollment.enrollment)) {
-          teiEnrollment.syncStatus = onlineSyncStatus;
-          await FormUtil.savingEnrollment(teiEnrollment);
+      for (final enrollment in enrollments) {
+        final enrollmentId = (enrollment.enrollment ?? '').trim();
+        if (enrollmentId.isNotEmpty && syncedIds.contains(enrollmentId)) {
+          await _markEnrollmentSynced(enrollmentId);
         }
       }
     }
@@ -785,14 +795,117 @@ class SynchronizationService {
         .toList();
   }
 
+
+  Future<void> _markTrackedEntitySynced(String teiId) async {
+    final cleanId = teiId.trim();
+    if (cleanId.isEmpty) return;
+
+    final db = await OfflineDbProvider().db;
+    if (db == null) return;
+
+    await db.update(
+      'tracked_entity_instance',
+      {'syncStatus': onlineSyncStatus},
+      where: 'trackedEntityInstance = ?',
+      whereArgs: [cleanId],
+    );
+
+    try {
+      await db.rawDelete(
+        'DELETE FROM tracked_entity_instance '
+            'WHERE trackedEntityInstance = ? '
+            'AND rowid NOT IN ('
+            'SELECT MIN(rowid) FROM tracked_entity_instance '
+            'WHERE trackedEntityInstance = ?'
+            ')',
+        [cleanId, cleanId],
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _markEnrollmentSynced(String enrollmentId) async {
+    final cleanId = enrollmentId.trim();
+    if (cleanId.isEmpty) return;
+
+    final db = await OfflineDbProvider().db;
+    if (db == null) return;
+
+    await db.update(
+      'enrollment',
+      {'syncStatus': onlineSyncStatus},
+      where: 'enrollment = ?',
+      whereArgs: [cleanId],
+    );
+
+    try {
+      await db.rawDelete(
+        'DELETE FROM enrollment '
+            'WHERE enrollment = ? '
+            'AND rowid NOT IN ('
+            'SELECT MIN(rowid) FROM enrollment '
+            'WHERE enrollment = ?'
+            ')',
+        [cleanId, cleanId],
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _markEventSyncedDirectly(String eventId) async {
+    final cleanId = eventId.trim();
+    if (cleanId.isEmpty) return;
+
+    final db = await OfflineDbProvider().db;
+    if (db == null) return;
+
+    await db.update(
+      'events',
+      {'syncStatus': onlineSyncStatus},
+      where: 'event = ?',
+      whereArgs: [cleanId],
+    );
+  }
+
+  List<TrackedEntityInstance> _deduplicateTeis(
+      List<TrackedEntityInstance> teis,
+      ) {
+    final byId = <String, TrackedEntityInstance>{};
+    for (final tei in teis) {
+      final id = (tei.trackedEntityInstance ?? '').trim();
+      if (id.isEmpty) continue;
+      byId[id] = tei;
+    }
+    return byId.values.toList();
+  }
+
+  List<Enrollment> _deduplicateEnrollments(List<Enrollment> enrollments) {
+    final byId = <String, Enrollment>{};
+    for (final enrollment in enrollments) {
+      final id = (enrollment.enrollment ?? '').trim();
+      if (id.isEmpty) continue;
+      byId[id] = enrollment;
+    }
+    return byId.values.toList();
+  }
+
+  List<Events> _deduplicateEvents(List<Events> events) {
+    final byId = <String, Events>{};
+    for (final event in events) {
+      final id = (event.event ?? '').trim();
+      if (id.isEmpty) continue;
+      byId[id] = event;
+    }
+    return byId.values.toList();
+  }
+
   Future<bool> uploadTeisToTheServer(
       List<TrackedEntityInstance> teis,
       ) async {
+    final uniqueTeis = _deduplicateTeis(teis);
     List<String?>? syncedIds = [];
     String url = 'api/trackedEntityInstances';
     bool conflictOnImport = false;
     Map body = {};
-    body['trackedEntityInstances'] = teis.map((tei) {
+    body['trackedEntityInstances'] = uniqueTeis.map((tei) {
       var data = tei.toOffline(tei);
       data['attributes'] = _cleanTrackedEntityAttributes(
         data['attributes'],
@@ -804,6 +917,7 @@ class SynchronizationService {
     try {
       var queryParameters = {
         "strategy": "CREATE_AND_UPDATE",
+        "mergeMode": "MERGE",
       };
       var response = await httpClient.httpPost(
         url,
@@ -831,10 +945,10 @@ class SynchronizationService {
       rethrow;
     }
     if (syncedIds!.isNotEmpty) {
-      for (TrackedEntityInstance tei in teis) {
-        if (syncedIds.contains(tei.trackedEntityInstance)) {
-          tei.syncStatus = onlineSyncStatus;
-          await FormUtil.savingTrackedEntityInstance(tei);
+      for (final tei in uniqueTeis) {
+        final teiId = (tei.trackedEntityInstance ?? '').trim();
+        if (teiId.isNotEmpty && syncedIds.contains(teiId)) {
+          await _markTrackedEntitySynced(teiId);
         }
       }
     }
@@ -895,75 +1009,688 @@ class SynchronizationService {
   }
 
 
+  bool _isInvalidDhis2Uid(String value) {
+    final v = value.trim();
+    return v.isEmpty ||
+        v.startsWith('DE_') ||
+        v.startsWith('ATTR_') ||
+        v.startsWith('MGYSD_') ||
+        v.contains('_UID') ||
+        v.length != 11;
+  }
+
+  Future<void> _addSyncLog(String message) async {
+    await AppLogsOfflineProvider().addLogs(
+      AppLogs(
+        type: AppLogsConstants.errorLogType,
+        message: message,
+      ),
+    );
+  }
+
+  Future<void> _markMgysdSourceRecordSynced(String eventId) async {
+    try {
+      final db = await OfflineDbProvider().db;
+      if (db == null) return;
+
+      final contextTable = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        ['mgysd_stage_event_context'],
+      );
+      if (contextTable.isEmpty) return;
+
+      final rows = await db.query(
+        'mgysd_stage_event_context',
+        columns: ['tableName'],
+        where: 'eventId = ?',
+        whereArgs: [eventId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+
+      final tableName = (rows.first['tableName'] ?? '').toString().trim();
+      const allowedTables = <String>{
+        'mgysd_initial_risk_assessment',
+        'mgysd_social_investigation',
+        'mgysd_care_plan',
+        'mgysd_referral',
+        'mgysd_monitoring',
+        'mgysd_case_closure',
+        'mgysd_service_provision',
+      };
+
+      if (!allowedTables.contains(tableName)) return;
+
+      final tableExists = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        [tableName],
+      );
+      if (tableExists.isEmpty) return;
+
+      final columns = await db.rawQuery('PRAGMA table_info($tableName)');
+      final names = columns
+          .map((column) => (column['name'] ?? '').toString())
+          .toSet();
+      if (!names.contains('syncStatus')) return;
+
+      // Workflow tables such as Care Plan have their own local IDs
+      // (for example CP_<social-investigation>) and a separate DHIS2 eventId.
+      // Prefer eventId when it exists; fall back to id for older tables.
+      var updated = 0;
+
+      if (names.contains('eventId')) {
+        updated = await db.update(
+          tableName,
+          {'syncStatus': onlineSyncStatus},
+          where: 'eventId = ?',
+          whereArgs: [eventId],
+        );
+      }
+
+      if (updated == 0 && names.contains('id')) {
+        await db.update(
+          tableName,
+          {'syncStatus': onlineSyncStatus},
+          where: 'id = ?',
+          whereArgs: [eventId],
+        );
+      }
+    } catch (error) {
+      await _addSyncLog(
+        'MGYSD SOURCE SYNC STATUS UPDATE FAILED for $eventId: $error',
+      );
+    }
+  }
+
+  static const String _mgysdReportedCasesProgram = 'TbR7dOCu5XK';
+  static const String _mgysdReportedCasesStage = 'TybrOV3Isgz';
+
+  static const Set<String> _mgysdReportedCaseDataElements = {
+    'Zjah90FdrwV', // Reporter Area Chief First Name
+    'vmVxUbkVmXN', // Reporter Area Chief Last Name
+    'arawTWdOCOZ', // Reporter Community Council
+    'UJIrqEgPMn1', // Reporter Concern Reason
+    'UlxSVhptSPi', // Reporter Concern Reason - other
+    'hKEJvGcXWND', // Reporter Contact Number
+    'pgklc5q0r9A', // Reporter Contact Number - other
+    'RWEFHH4pm27', // Reporter First Name
+    'dwSkq33g4Uu', // Reporter Last Name
+    'vXKcqU7V0xQ', // Reporter Relationship with Client
+    'wIAHzLOccWk', // Reporter Relationship with Client - other
+    'NCb5dNKnqOG', // Reporter Village
+    'NwCn5RVitx1', // Client Age
+    'hxxH8RmZrV2', // Client Category
+    'wOIx1Tism5p', // Client First Name
+    'mclj3oLRpiv', // Client Last Name
+    'UImPhy5oOOq', // Incident date
+    'rOo1QAaJ23F', // Incident description
+    'mEUV26PcDKZ', // Incident location
+    'UwebjUHdn33', // Incident location - Village
+    'LsdeO9mllih', // Remarks
+    'EG9wNvu6kGY', // Reporting date
+    'kwL1QEdrChg', // Reporter Sex
+    'fBB08qRfTCp', // Client Contact Number
+    'cq6CCF80ToK', // Witness First Name
+    'QxbYDX4Bnr2', // Witness Last Name
+    'g2kqM2Db2WU', // Other
+    'gG7pCI0Ma5v', // Reporter Anonymous
+  };
+
+  bool _eventRequiresTrackedEntity(String program) {
+    // MGYSD Reported Cases is a DHIS2 WITHOUT_REGISTRATION event program.
+    return program.trim() != _mgysdReportedCasesProgram;
+  }
+
+  bool _isAllowedDataElementForEvent({
+    required String program,
+    required String programStage,
+    required String dataElement,
+  }) {
+    if (program == _mgysdReportedCasesProgram &&
+        programStage == _mgysdReportedCasesStage) {
+      return _mgysdReportedCaseDataElements.contains(dataElement);
+    }
+    return true;
+  }
+
+
+  String _eventImportErrorSummary(Map<String, dynamic> body) {
+    final messages = <String>[];
+    try {
+      final response = body['response'];
+      if (response is! Map) return '';
+
+      final summaries = response['importSummaries'];
+      if (summaries is! List) return '';
+
+      for (final summary in summaries) {
+        if (summary is! Map) continue;
+        final status = (summary['status'] ?? '').toString().trim();
+        if (status.toUpperCase() == 'SUCCESS') continue;
+
+        final reference = (summary['reference'] ?? '').toString().trim();
+        final description =
+        (summary['description'] ?? '').toString().trim();
+
+        final conflicts = summary['conflicts'];
+        if (conflicts is List && conflicts.isNotEmpty) {
+          for (final conflict in conflicts) {
+            if (conflict is! Map) continue;
+            final object = (conflict['object'] ?? '').toString().trim();
+            final value = (conflict['value'] ?? '').toString().trim();
+            final detail = [
+              if (object.isNotEmpty) object,
+              if (value.isNotEmpty) value,
+            ].join(': ');
+            if (detail.isNotEmpty) {
+              messages.add(
+                reference.isEmpty ? detail : '$reference - $detail',
+              );
+            }
+          }
+        } else if (description.isNotEmpty) {
+          messages.add(
+            reference.isEmpty ? description : '$reference - $description',
+          );
+        }
+      }
+    } catch (_) {}
+
+    return messages.toSet().join(' | ');
+  }
+
+
+  bool _isInitialRiskAssessmentEvent(Events event) {
+    return (event.program ?? '').trim() ==
+        MgysdDhis2Uids.assessedHouseholdsProgram &&
+        (event.programStage ?? '').trim() ==
+            MgysdDhis2Uids.initialRiskAssessmentStage;
+  }
+
+
+  Future<String> _resolveInitialRiskServerEventId(Events event) async {
+    final enrollment = (event.enrollment ?? '').trim();
+    final tei = (event.trackedEntityInstance ?? '').trim();
+    final program = (event.program ?? '').trim();
+    final stage = (event.programStage ?? '').trim();
+    final orgUnit = (event.orgUnit ?? '').trim();
+
+    Future<String> query(Map<String, dynamic> params) async {
+      try {
+        final response = await httpClient.httpGet(
+          'api/events.json',
+          queryParameters: {
+            'fields':
+            'event,enrollment,program,programStage,trackedEntityInstance,orgUnit,status,eventDate',
+            'pageSize': '50',
+            ...params,
+          },
+        );
+
+        await _addSyncLog(
+          'INITIAL RISK EVENT LOOKUP ${response.statusCode}: ${response.body}',
+        );
+
+        if (response.statusCode != 200) return '';
+
+        final decoded = json.decode(response.body);
+        if (decoded is! Map) return '';
+
+        final events = decoded['events'];
+        if (events is! List || events.isEmpty) return '';
+
+        for (final item in events) {
+          if (item is! Map) continue;
+
+          final itemStage = (item['programStage'] ?? '').toString().trim();
+          final itemProgram = (item['program'] ?? '').toString().trim();
+          final itemEnrollment =
+          (item['enrollment'] ?? '').toString().trim();
+          final itemTei =
+          (item['trackedEntityInstance'] ?? '').toString().trim();
+
+          if (itemStage != stage || itemProgram != program) continue;
+          if (enrollment.isNotEmpty &&
+              itemEnrollment.isNotEmpty &&
+              itemEnrollment != enrollment) {
+            continue;
+          }
+          if (tei.isNotEmpty && itemTei.isNotEmpty && itemTei != tei) {
+            continue;
+          }
+
+          final id = (item['event'] ?? '').toString().trim();
+          if (id.isNotEmpty) return id;
+        }
+      } catch (error) {
+        await _addSyncLog(
+          'INITIAL RISK EVENT LOOKUP ERROR: $error',
+        );
+      }
+      return '';
+    }
+
+    // Best lookup: the non-repeatable event belongs to one enrollment.
+    if (enrollment.isNotEmpty) {
+      final found = await query({
+        'program': program,
+        'programStage': stage,
+        'enrollment': enrollment,
+      });
+      if (found.isNotEmpty) return found;
+    }
+
+    // Compatibility fallback for DHIS2 versions that do not filter event
+    // queries by enrollment.
+    if (tei.isNotEmpty) {
+      final found = await query({
+        'program': program,
+        'programStage': stage,
+        'trackedEntityInstance': tei,
+        if (orgUnit.isNotEmpty) 'orgUnit': orgUnit,
+      });
+      if (found.isNotEmpty) return found;
+    }
+
+    return '';
+  }
+
+  Future<void> _reconcileLocalEventUid({
+    required String localEventId,
+    required String serverEventId,
+  }) async {
+    final localId = localEventId.trim();
+    final serverId = serverEventId.trim();
+
+    if (localId.isEmpty || serverId.isEmpty || localId == serverId) return;
+
+    final db = await OfflineDbProvider().db;
+    if (db == null) return;
+
+    await db.transaction((txn) async {
+      // If the same server event was already downloaded, remove that stale
+      // local copy first. We are keeping the edited local values.
+      final existingServerRows = await txn.query(
+        'events',
+        where: 'event = ?',
+        whereArgs: [serverId],
+        limit: 1,
+      );
+
+      if (existingServerRows.isNotEmpty) {
+        await txn.delete(
+          'event_data_value',
+          where: 'event = ?',
+          whereArgs: [serverId],
+        );
+        await txn.delete(
+          'events',
+          where: 'event = ?',
+          whereArgs: [serverId],
+        );
+      }
+
+      await txn.update(
+        'event_data_value',
+        {'event': serverId},
+        where: 'event = ?',
+        whereArgs: [localId],
+      );
+
+      await txn.update(
+        'events',
+        {
+          'id': serverId,
+          'event': serverId,
+        },
+        where: 'event = ?',
+        whereArgs: [localId],
+      );
+
+      try {
+        await txn.update(
+          'mgysd_stage_event_context',
+          {'eventId': serverId},
+          where: 'eventId = ?',
+          whereArgs: [localId],
+        );
+      } catch (_) {}
+    });
+  }
+
+  Future<Map<String, List<String>>> _getServerRelationshipIdsForFromTei(
+      String fromTei,
+      ) async {
+    final result = <String, List<String>>{};
+    final from = fromTei.trim();
+    if (from.isEmpty) return result;
+
+    try {
+      final response = await httpClient.httpGet(
+        'api/trackedEntityInstances/$from.json',
+        queryParameters: {
+          'fields':
+          'relationships[relationship,relationshipType,from[trackedEntityInstance[trackedEntityInstance]],to[trackedEntityInstance[trackedEntityInstance]]]',
+        },
+      );
+
+      if (response.statusCode != 200) return result;
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map) return result;
+
+      final relationships = decoded['relationships'];
+      if (relationships is! List) return result;
+
+      for (final item in relationships) {
+        if (item is! Map) continue;
+
+        final type = (item['relationshipType'] ?? '').toString().trim();
+        final relationshipId =
+        (item['relationship'] ?? '').toString().trim();
+
+        final fromBlock = item['from'];
+        final toBlock = item['to'];
+
+        String serverFrom = '';
+        String serverTo = '';
+
+        if (fromBlock is Map) {
+          final teiBlock = fromBlock['trackedEntityInstance'];
+          if (teiBlock is Map) {
+            serverFrom =
+                (teiBlock['trackedEntityInstance'] ?? '').toString().trim();
+          }
+        }
+
+        if (toBlock is Map) {
+          final teiBlock = toBlock['trackedEntityInstance'];
+          if (teiBlock is Map) {
+            serverTo =
+                (teiBlock['trackedEntityInstance'] ?? '').toString().trim();
+          }
+        }
+
+        if (type.isEmpty ||
+            serverFrom.isEmpty ||
+            serverTo.isEmpty ||
+            relationshipId.isEmpty) {
+          continue;
+        }
+
+        final key = '$type|$serverFrom|$serverTo';
+        result.putIfAbsent(key, () => <String>[]).add(relationshipId);
+      }
+    } catch (error) {
+      await _addSyncLog(
+        'RELATIONSHIP LOOKUP ERROR [$from]: $error',
+      );
+    }
+
+    return result;
+  }
+
+  Future<bool> _putExistingInitialRiskEvent({
+    required Events event,
+    required String serverEventId,
+    required Map<String, dynamic> payload,
+  }) async {
+    final localEventId = (event.event ?? '').trim();
+    final eventId = serverEventId.trim();
+    if (localEventId.isEmpty || eventId.isEmpty) return false;
+
+    final updatePayload = Map<String, dynamic>.from(payload);
+    updatePayload['event'] = eventId;
+
+    try {
+      print('======================================');
+      print('INITIAL RISK EVENT UPDATE START');
+      print('LOCAL EVENT: $localEventId');
+      print('SERVER EVENT: $eventId');
+      print(const JsonEncoder.withIndent('  ').convert(updatePayload));
+      print('======================================');
+
+      final response = await httpClient.httpPut(
+        'api/events/$eventId',
+        json.encode(updatePayload),
+        queryParameters: {
+          'mergeMode': 'MERGE',
+        },
+      );
+
+      print('======================================');
+      print(
+        'DHIS2 INITIAL RISK UPDATE STATUS: ${response.statusCode}',
+      );
+      print('DHIS2 INITIAL RISK UPDATE BODY:');
+      print(response.body);
+      print('======================================');
+
+      await _addSyncLog(
+        'INITIAL RISK UPDATE RESPONSE ${response.statusCode}: '
+            '${response.body}',
+      );
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        await _reconcileLocalEventUid(
+          localEventId: localEventId,
+          serverEventId: eventId,
+        );
+        await _markEventSyncedDirectly(eventId);
+        await _markMgysdSourceRecordSynced(eventId);
+        return true;
+      }
+
+      try {
+        final decoded = json.decode(response.body);
+        if (decoded is Map<String, dynamic>) {
+          final summary = _eventImportErrorSummary(decoded);
+          _lastEventSyncError =
+          summary.isNotEmpty ? summary : response.body;
+        } else {
+          _lastEventSyncError = response.body;
+        }
+      } catch (_) {
+        _lastEventSyncError = response.body;
+      }
+
+      print(
+        'DHIS2 INITIAL RISK UPDATE ERROR: $_lastEventSyncError',
+      );
+      await _addSyncLog(
+        'DHIS2 INITIAL RISK UPDATE ERROR [$eventId]: '
+            '$_lastEventSyncError',
+      );
+      return false;
+    } catch (error, stackTrace) {
+      _lastEventSyncError = error.toString();
+      print('INITIAL RISK UPDATE EXCEPTION: $error');
+      print(stackTrace);
+      await _addSyncLog(
+        'INITIAL RISK UPDATE EXCEPTION [$eventId]: $error',
+      );
+      return false;
+    }
+  }
+
   Future<bool> uploadTeiEventsToTheServer(
       List<Events> teiEvents, {
         bool checkEnrollments = true,
       }) async {
     List<String?> syncedIds = [];
-    String url = 'api/events';
+    const String url = 'api/events';
     bool conflictOnImport = false;
+    _lastEventSyncError = '';
 
-    bool isPlaceholder(String value) {
-      final v = value.trim();
-      return v.isEmpty ||
-          v.startsWith('DE_') ||
-          v.startsWith('MGYSD_') ||
-          v.contains('_UID');
-    }
+    if (teiEvents.isEmpty) return false;
 
-    if (checkEnrollments && teiEvents.isNotEmpty) {
+    if (checkEnrollments) {
       await _uploadBeneficiariesAndEnrollmentsForEventBatch(teiEvents);
     }
 
-    Map body = {};
+    final List<Events> validEvents = [];
+    final List<Map<String, dynamic>> payloadEvents = [];
+    var initialRiskUpdateFailed = false;
 
-    body['events'] = teiEvents.map((Events event) {
-      var data = event.toOffline(event);
+    for (final event in teiEvents) {
+      final eventId = (event.event ?? '').trim();
+      final program = (event.program ?? '').trim();
+      final programStage = (event.programStage ?? '').trim();
+      final trackedEntityInstance =
+      (event.trackedEntityInstance ?? '').trim();
+      final orgUnit = (event.orgUnit ?? '').trim();
 
+      final validationErrors = <String>[];
+
+      if (_isInvalidDhis2Uid(eventId)) {
+        validationErrors.add('event UID is missing/invalid: "$eventId"');
+      }
+      if (_isInvalidDhis2Uid(program)) {
+        validationErrors.add('program UID is missing/invalid: "$program"');
+      }
+      if (_isInvalidDhis2Uid(programStage)) {
+        validationErrors
+            .add('programStage UID is missing/invalid: "$programStage"');
+      }
+      final requiresTrackedEntity = _eventRequiresTrackedEntity(program);
+      if (requiresTrackedEntity && _isInvalidDhis2Uid(trackedEntityInstance)) {
+        validationErrors.add(
+          'trackedEntityInstance UID is missing/invalid: '
+              '"$trackedEntityInstance"',
+        );
+      }
+      if (_isInvalidDhis2Uid(orgUnit)) {
+        validationErrors.add('orgUnit UID is missing/invalid: "$orgUnit"');
+      }
+
+      if (validationErrors.isNotEmpty) {
+        await _addSyncLog(
+          'EVENT NOT SYNCHRONIZED [$eventId]: ${validationErrors.join('; ')}',
+        );
+        continue;
+      }
+
+      final Map<String, dynamic> data =
+      Map<String, dynamic>.from(event.toOffline(event));
       data.remove('syncStatus');
 
-      if (isPlaceholder((data['programStage'] ?? '').toString())) {
-        data.remove('programStage');
-      }
-
-      if (data['trackedEntityInstance'] == null ||
-          data['trackedEntityInstance'].toString().trim().isEmpty) {
+      if (!requiresTrackedEntity) {
         data.remove('trackedEntityInstance');
-      }
-
-      if (data['enrollment'] == null ||
-          data['enrollment'].toString().trim().isEmpty) {
         data.remove('enrollment');
       }
 
-      if (data['dataValues'] != null) {
-        data['dataValues'].removeWhere((item) {
-          final dataElement = (item['dataElement'] ?? '').toString();
-          final value = (item['value'] ?? '').toString();
-
-          return dataElement == 'eventDate' ||
-              isPlaceholder(dataElement) ||
-              value.trim().isEmpty ||
-              value.trim() == 'null';
-        });
+      final enrollment = (data['enrollment'] ?? '').toString().trim();
+      if (enrollment.isEmpty) {
+        data.remove('enrollment');
+      } else if (_isInvalidDhis2Uid(enrollment)) {
+        await _addSyncLog(
+          'EVENT [$eventId]: enrollment UID "$enrollment" is invalid; '
+              'the enrollment reference was omitted from the event payload.',
+        );
+        data.remove('enrollment');
       }
 
-      return data;
-    }).toList();
+      final rawDataValues = data['dataValues'];
+      final List<Map<String, dynamic>> cleanDataValues = [];
+
+      if (rawDataValues is List) {
+        for (final item in rawDataValues) {
+          if (item is! Map) continue;
+
+          final dataElement =
+          (item['dataElement'] ?? '').toString().trim();
+          final value = (item['value'] ?? '').toString().trim();
+
+          if (dataElement == 'eventDate') continue;
+          if (value.isEmpty || value == 'null') continue;
+
+          if (_isInvalidDhis2Uid(dataElement)) {
+            await _addSyncLog(
+              'EVENT [$eventId]: skipped invalid dataElement '
+                  '"$dataElement" with value "$value".',
+            );
+            continue;
+          }
+
+          if (!_isAllowedDataElementForEvent(
+            program: program,
+            programStage: programStage,
+            dataElement: dataElement,
+          )) {
+            await _addSyncLog(
+              'EVENT [$eventId]: skipped dataElement "$dataElement" because '
+                  'it is not assigned to program stage "$programStage".',
+            );
+            continue;
+          }
+
+          cleanDataValues.add({
+            'dataElement': dataElement,
+            'value': value,
+          });
+        }
+      }
+
+      data['dataValues'] = cleanDataValues;
+
+      if (_isInitialRiskAssessmentEvent(event)) {
+        final serverEventId =
+        await _resolveInitialRiskServerEventId(event);
+
+        if (serverEventId.isNotEmpty) {
+          final updated = await _putExistingInitialRiskEvent(
+            event: event,
+            serverEventId: serverEventId,
+            payload: data,
+          );
+          if (!updated) {
+            initialRiskUpdateFailed = true;
+          }
+          continue;
+        }
+
+        // No server event exists yet: this is the first synchronization of
+        // the non-repeatable stage, so create it once through normal import.
+        validEvents.add(event);
+        payloadEvents.add(data);
+        continue;
+      }
+
+      validEvents.add(event);
+      payloadEvents.add(data);
+    }
+
+    // If this batch only contained Initial Risk updates, we are done.
+    if (payloadEvents.isEmpty) {
+      if (initialRiskUpdateFailed) {
+        return true;
+      }
+
+      await _addSyncLog(
+        'EVENT SYNC COMPLETE: all pending non-repeatable Initial Risk events '
+            'were updated successfully.',
+      );
+      return false;
+    }
+
+    final Map<String, dynamic> body = {
+      'events': payloadEvents,
+    };
 
     try {
       print('======================================');
       print('EVENT SYNC START');
-      print('EVENT COUNT: ${teiEvents.length}');
+      print('EVENT COUNT: ${payloadEvents.length}');
       print('REQUEST BODY:');
       print(const JsonEncoder.withIndent('  ').convert(body));
       print('======================================');
 
-      var response = await httpClient.httpPost(
+      final response = await httpClient.httpPost(
         url,
         json.encode(body),
         queryParameters: {
-          "strategy": "CREATE_AND_UPDATE",
+          'strategy': 'CREATE_AND_UPDATE',
+          'mergeMode': 'MERGE',
         },
       );
 
@@ -973,11 +1700,8 @@ class SynchronizationService {
       print(response.body);
       print('======================================');
 
-      await AppLogsOfflineProvider().addLogs(
-        AppLogs(
-          type: AppLogsConstants.errorLogType,
-          message: 'EVENT SYNC RESPONSE ${response.statusCode}: ${response.body}',
-        ),
+      await _addSyncLog(
+        'EVENT SYNC RESPONSE ${response.statusCode}: ${response.body}',
       );
 
       if (response.statusCode >= 400 && response.statusCode != 409) {
@@ -985,6 +1709,15 @@ class SynchronizationService {
       }
 
       final Map<String, dynamic> responseJson = json.decode(response.body);
+
+      _lastEventSyncError = _eventImportErrorSummary(responseJson);
+      if (_lastEventSyncError.isNotEmpty) {
+        print('DHIS2 EVENT IMPORT ERROR: $_lastEventSyncError');
+        await _addSyncLog(
+          'DHIS2 EVENT IMPORT ERROR: $_lastEventSyncError',
+        );
+      }
+
       final Map<String, dynamic> referenceIds =
       await _getReferenceIds(responseJson);
 
@@ -994,29 +1727,29 @@ class SynchronizationService {
       await reUploadBeneficiariesWithUnsyncedServices(
         referenceIds,
         checkEnrollments,
-        teiEvents,
+        validEvents,
       );
 
       if (syncedIds.isNotEmpty) {
-        for (Events event in teiEvents) {
+        for (final event in validEvents) {
+          final eventId = (event.event ?? '').trim();
           if (syncedIds.contains(event.event)) {
-            event.syncStatus = onlineSyncStatus;
-            await FormUtil.savingEvent(event);
+            if (eventId.isNotEmpty) {
+              await _markEventSyncedDirectly(eventId);
+              await _markMgysdSourceRecordSynced(eventId);
+            }
           }
         }
       }
 
-      return conflictOnImport;
+      return conflictOnImport || initialRiskUpdateFailed;
     } catch (error, stackTrace) {
       print('EVENT SYNC EXCEPTION');
       print(error);
       print(stackTrace);
 
-      await AppLogsOfflineProvider().addLogs(
-        AppLogs(
-          type: AppLogsConstants.errorLogType,
-          message: 'uploadTeiEventsToTheServer EXCEPTION: $error',
-        ),
+      await _addSyncLog(
+        'uploadTeiEventsToTheServer EXCEPTION: $error',
       );
 
       rethrow;
@@ -1079,40 +1812,180 @@ class SynchronizationService {
     }
   }
 
+
+  Future<List<TeiRelationship>> _deduplicateRelationshipsForUpload(
+      List<TeiRelationship> relationships,
+      ) async {
+    final db = await OfflineDbProvider().db;
+    final byNaturalKey = <String, TeiRelationship>{};
+
+    for (final relationship in relationships) {
+      final type = (relationship.relationshipType ?? '').trim();
+      final from = (relationship.fromTei ?? '').trim();
+      final to = (relationship.toTei ?? '').trim();
+      if (type.isEmpty || from.isEmpty || to.isEmpty) continue;
+
+      final key = '$type|$from|$to';
+      byNaturalKey.putIfAbsent(key, () => relationship);
+    }
+
+    if (db != null) {
+      // Clean historical duplicates locally so the same household/member
+      // relationship cannot be posted again with another relationship UID.
+      for (final relationship in byNaturalKey.values) {
+        final type = (relationship.relationshipType ?? '').trim();
+        final from = (relationship.fromTei ?? '').trim();
+        final to = (relationship.toTei ?? '').trim();
+        final keepId = (relationship.id ?? '').trim();
+        if (keepId.isEmpty) continue;
+
+        try {
+          await db.delete(
+            'tei_relationships',
+            where:
+            'relationshipType = ? AND fromTei = ? AND toTei = ? AND id <> ?',
+            whereArgs: [type, from, to, keepId],
+          );
+        } catch (_) {}
+      }
+    }
+
+    return byNaturalKey.values.toList();
+  }
+
+  Future<void> _markRelationshipSyncedByNaturalKey(
+      TeiRelationship relationship,
+      ) async {
+    final db = await OfflineDbProvider().db;
+    if (db == null) return;
+
+    final type = (relationship.relationshipType ?? '').trim();
+    final from = (relationship.fromTei ?? '').trim();
+    final to = (relationship.toTei ?? '').trim();
+    if (type.isEmpty || from.isEmpty || to.isEmpty) return;
+
+    await db.update(
+      'tei_relationships',
+      {'syncStatus': onlineSyncStatus},
+      where: 'relationshipType = ? AND fromTei = ? AND toTei = ?',
+      whereArgs: [type, from, to],
+    );
+  }
+
   Future<bool> uploadTeiRelationToTheServer(
       List<TeiRelationship> teiRelationShips,
       ) async {
-    Map body = <String, dynamic>{};
-    List<String?>? syncedIds = [];
-    String url = 'api/relationships';
-    bool conflictOnImport = false;
-    body['relationships'] = teiRelationShips
-        .map((relationship) => relationship.toOnline())
-        .toList();
-    try {
-      var queryParameters = {
-        "strategy": "CREATE_AND_UPDATE",
-      };
-      var response = await httpClient.httpPost(
-        url,
-        json.encode(body),
-        queryParameters: queryParameters,
-      );
-      var referenceIds = await _getReferenceIds(
-        json.decode(response.body),
-        skipErrorLogs: true,
-      );
-      syncedIds = referenceIds['syncedIds'];
-      conflictOnImport = conflictOnImport || referenceIds['conflictOnImport'];
-    } catch (error) {
-      //
+    final relationships =
+    await _deduplicateRelationshipsForUpload(teiRelationShips);
+
+    if (relationships.isEmpty) return false;
+
+    final toUpload = <TeiRelationship>[];
+    final relationshipsByFrom = <String, List<TeiRelationship>>{};
+
+    for (final relationship in relationships) {
+      final from = (relationship.fromTei ?? '').trim();
+      if (from.isEmpty) continue;
+      relationshipsByFrom.putIfAbsent(from, () => <TeiRelationship>[])
+          .add(relationship);
     }
-    if (syncedIds!.isNotEmpty) {
-      for (TeiRelationship teiRelationship in teiRelationShips) {
-        if (syncedIds.contains(teiRelationship.id)) {
-          teiRelationship.syncStatus = onlineSyncStatus;
-          await FormUtil.savingTeiRelationship(teiRelationship);
+
+    // Before POSTing, ask DHIS2 whether the exact natural relationship
+    // already exists. This is critical for old local databases where the
+    // same Household->Member link may have been given a different local UID.
+    for (final entry in relationshipsByFrom.entries) {
+      final serverRelationships =
+      await _getServerRelationshipIdsForFromTei(entry.key);
+
+      for (final relationship in entry.value) {
+        final type = (relationship.relationshipType ?? '').trim();
+        final from = (relationship.fromTei ?? '').trim();
+        final to = (relationship.toTei ?? '').trim();
+        final key = '$type|$from|$to';
+
+        final serverIds = serverRelationships[key] ?? const <String>[];
+
+        if (serverIds.isNotEmpty) {
+          // The link already exists on DHIS2. Do not POST another one.
+          await _markRelationshipSyncedByNaturalKey(relationship);
+
+          // Same pair/type can only represent one logical relationship.
+          // Clean exact duplicate relationship records created by older builds.
+          if (serverIds.length > 1) {
+            for (final duplicateId in serverIds.skip(1)) {
+              try {
+                final deleteResponse = await httpClient.httpDelete(
+                  'api/relationships/$duplicateId',
+                );
+                await _addSyncLog(
+                  'DUPLICATE RELATIONSHIP CLEANUP [$duplicateId] '
+                      'STATUS ${deleteResponse.statusCode}: ${deleteResponse.body}',
+                );
+              } catch (error) {
+                await _addSyncLog(
+                  'DUPLICATE RELATIONSHIP CLEANUP ERROR '
+                      '[$duplicateId]: $error',
+                );
+              }
+            }
+          }
+
+          continue;
         }
+
+        toUpload.add(relationship);
+      }
+    }
+
+    if (toUpload.isEmpty) return false;
+
+    final Map<String, dynamic> body = {
+      'relationships':
+      toUpload.map((relationship) => relationship.toOnline()).toList(),
+    };
+
+    List<String?> syncedIds = [];
+    bool conflictOnImport = false;
+    var responseSucceeded = false;
+
+    try {
+      final response = await httpClient.httpPost(
+        'api/relationships',
+        json.encode(body),
+        queryParameters: {
+          'strategy': 'CREATE_AND_UPDATE',
+          'mergeMode': 'MERGE',
+        },
+      );
+
+      responseSucceeded =
+          response.statusCode >= 200 && response.statusCode < 300;
+
+      await _addSyncLog(
+        'RELATIONSHIP SYNC RESPONSE ${response.statusCode}: ${response.body}',
+      );
+
+      final decoded = json.decode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        final referenceIds = await _getReferenceIds(
+          decoded,
+          skipErrorLogs: true,
+        );
+        syncedIds = (referenceIds['syncedIds'] ?? []).cast<String?>();
+        conflictOnImport = referenceIds['conflictOnImport'] == true;
+      }
+    } catch (error) {
+      conflictOnImport = true;
+      await _addSyncLog('RELATIONSHIP SYNC ERROR: $error');
+    }
+
+    for (final relationship in toUpload) {
+      final relationshipId = (relationship.id ?? '').trim();
+
+      if ((relationshipId.isNotEmpty &&
+          syncedIds.contains(relationshipId)) ||
+          (responseSucceeded && !conflictOnImport)) {
+        await _markRelationshipSyncedByNaturalKey(relationship);
       }
     }
 
