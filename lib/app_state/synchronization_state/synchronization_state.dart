@@ -407,51 +407,21 @@ class SynchronizationState with ChangeNotifier {
   }
 
   Future startDataDownloadActivity() async {
+    // MGYSD household data is intentionally NOT bulk-downloaded during
+    // synchronization. Users select the exact household they need from
+    // "Search & Download Household" on the Synchronization screen.
+    updateDataDownloadStatus(false);
     profileDataDownloadProgress = 0.0;
     eventsDataDownloadProgress = 0.0;
     overallDownloadProgress = 0.0;
+    notifyListeners();
 
-    _dataDownloadStopped = false;
-    updateDataDownloadStatus(true);
-
-    int count = 0;
-    int totalCount = 0;
-
-    try {
-      String? lastSyncDate = await PreferenceProvider.getPreferenceValue(
-          lastDataDownloadDatePreferenceKey);
-      lastSyncDate =
-          lastSyncDate ?? AppUtil.formattedDateTimeIntoString(DateTime(2020));
-
-      CurrentUser? currentUser = await (UserService().getCurrentUser());
-      if (currentUser == null) {
-        updateDataDownloadStatus(false);
-        AppUtil.showToastMessage(message: 'No active user session');
-        return;
-      }
-
-      _synchronizationService = SynchronizationService(
-        currentUser.username,
-        currentUser.password,
-        currentUser.programs,
-        currentUser.userOrgUnitIds,
-      );
-      refreshBeneficiaryCounts();
-
-      AppUtil.showToastMessage(
-          message: 'Data has been successfully downloaded');
-      setStatusMessageForAvailableDataFromServer('');
-
-      lastSyncDate = AppUtil.formattedDateTimeIntoString(DateTime.now());
-      await PreferenceProvider.setPreferenceValue(
-          lastDataDownloadDatePreferenceKey, lastSyncDate);
-    } catch (e) {
-      _dataDownloadProcess = [];
-      await _logError('startDataDownloadActivity', e);
-      updateDataDownloadStatus(false);
-      AppUtil.showToastMessage(message: 'Error downloading data');
-    }
+    AppUtil.showToastMessage(
+      message:
+      'Household download is on-demand. Use Search & Download Household.',
+    );
   }
+
 
   Future<bool> uploadProfileData({
     required CurrentUser currentUser,

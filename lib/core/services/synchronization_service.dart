@@ -25,8 +25,8 @@ import 'package:lncmis_mobile_app/models/enrollment.dart';
 import 'package:lncmis_mobile_app/models/events.dart';
 import 'package:lncmis_mobile_app/models/tei_relationship.dart';
 import 'package:lncmis_mobile_app/models/tracked_entity_instance.dart';
-
-import '../../modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
+import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
+import 'package:sqflite/sqflite.dart';
 
 class SynchronizationService {
   late HttpService httpClient;
@@ -109,7 +109,7 @@ class SynchronizationService {
       for (var pageFilter in pageFilters) {
         Map<String, String?> dataQueryParameters = {
           "fields":
-          "event,program,programStage,trackedEntityInstance,status,orgUnit,dataValues[dataElement,value,displayName],eventDate",
+          "event,program,programStage,trackedEntityInstance,enrollment,status,orgUnit,dataValues[dataElement,value,displayName],eventDate",
         };
         dataQueryParameters.addAll(queryParameters);
         dataQueryParameters.addAll(pageFilter);
@@ -139,6 +139,800 @@ class SynchronizationService {
       await AppLogsOfflineProvider().addLogs(log);
       rethrow;
     }
+  }
+
+
+  Future<Map<String, String>> _downloadedAttributes(
+      Database db,
+      String tei,
+      ) async {
+    final values = <String, String>{};
+    if (tei.trim().isEmpty) return values;
+    try {
+      final rows = await db.query(
+        'tracked_entity_instance_attribute',
+        columns: ['attribute', 'value'],
+        where: 'trackedEntityInstance = ?',
+        whereArgs: [tei.trim()],
+      );
+      for (final row in rows) {
+        final attribute = (row['attribute'] ?? '').toString().trim();
+        if (attribute.isEmpty) continue;
+        values[attribute] = (row['value'] ?? '').toString();
+      }
+    } catch (_) {}
+    return values;
+  }
+
+  Future<bool> _localTeiExists(Database db, String tei) async {
+    if (tei.trim().isEmpty) return false;
+    final rows = await db.query(
+      'tracked_entity_instance',
+      columns: ['trackedEntityInstance'],
+      where: 'trackedEntityInstance = ?',
+      whereArgs: [tei.trim()],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
+  Future<void> _downloadSingleTrackedEntity(String tei) async {
+    final cleanTei = tei.trim();
+    if (cleanTei.isEmpty) return;
+    try {
+      final response = await httpClient.httpGet(
+        'api/trackedEntityInstances/$cleanTei.json',
+        queryParameters: {
+          'fields':
+          'trackedEntityInstance,trackedEntityType,orgUnit,'
+              'attributes[attribute,value,displayName],'
+              'enrollments[enrollment,enrollmentDate,incidentDate,orgUnit,program,trackedEntityInstance,status],'
+              'relationships[relationshipType,relationship,from[trackedEntityInstance[trackedEntityInstance]],to[trackedEntityInstance[trackedEntityInstance]]]',
+        },
+      );
+      if (response.statusCode != 200) {
+        await _addSyncLog(
+          'MGYSD MEMBER DOWNLOAD [$cleanTei] ${response.statusCode}: ${response.body}',
+        );
+        return;
+      }
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) return;
+      await saveTeis({'trackedEntityInstances': [decoded]});
+    } catch (error) {
+      await _addSyncLog('MGYSD MEMBER DOWNLOAD ERROR [$cleanTei]: $error');
+    }
+  }
+
+  Future<void> _downloadMissingLinkedMembers() async {
+    final db = await OfflineDbProvider().db;
+    if (db == null) return;
+    final relationships = await db.query(
+      'tei_relationships',
+      columns: ['fromTei', 'toTei'],
+      where: 'relationshipType = ?',
+      whereArgs: [MgysdDhis2Uids.householdHasMemberRelationshipType],
+    );
+    final memberIds = <String>{};
+    for (final row in relationships) {
+      final member = (row['toTei'] ?? '').toString().trim();
+      if (member.isNotEmpty) memberIds.add(member);
+    }
+    for (final memberTei in memberIds) {
+      if (!await _localTeiExists(db, memberTei)) {
+        await _downloadSingleTrackedEntity(memberTei);
+      }
+    }
+  }
+
+  Future<String> _downloadedMemberRole(Database db, String memberTei) async {
+    final attrs = await _downloadedAttributes(db, memberTei);
+    final hasNextOfKinMetadata =
+        (attrs[MgysdDhis2Uids.attNextOfKinFirstName] ?? '').trim().isNotEmpty ||
+            (attrs[MgysdDhis2Uids.attNextOfKinSurname] ?? '').trim().isNotEmpty ||
+            (attrs[MgysdDhis2Uids.attNextOfKinPhysicalAddress] ?? '').trim().isNotEmpty ||
+            (attrs[MgysdDhis2Uids.attNextOfKinRelationship] ?? '').trim().isNotEmpty;
+    if (hasNextOfKinMetadata) return 'NEXT_OF_KIN';
+    if ((attrs[MgysdDhis2Uids.attClientCategory] ?? '').trim().isNotEmpty) {
+      return 'CLIENT';
+    }
+    return 'HOUSEHOLD_MEMBER';
+  }
+
+  Future<void> _rebuildMgysdHouseholdMemberLinks() async {
+    final db = await OfflineDbProvider().db;
+    if (db == null) return;
+    await db.execute(
+      'CREATE TABLE IF NOT EXISTS mgysd_household_member ('
+          'id TEXT PRIMARY KEY, householdTei TEXT, memberTei TEXT, '
+          'memberRole TEXT, isPrimaryClient TEXT, syncStatus TEXT)',
+    );
+    final relationships = await db.query(
+      'tei_relationships',
+      columns: ['id', 'fromTei', 'toTei'],
+      where: 'relationshipType = ?',
+      whereArgs: [MgysdDhis2Uids.householdHasMemberRelationshipType],
+    );
+    for (final row in relationships) {
+      final household = (row['fromTei'] ?? '').toString().trim();
+      final member = (row['toTei'] ?? '').toString().trim();
+      if (household.isEmpty || member.isEmpty) continue;
+      final householdEnrollments = await db.query(
+        'enrollment',
+        columns: ['enrollment'],
+        where: 'trackedEntityInstance = ? AND (program = ? OR program = ?)',
+        whereArgs: [
+          household,
+          MgysdDhis2Uids.assessedHouseholdsProgram,
+          MgysdDhis2Uids.enrolledHouseholdsProgram,
+        ],
+        limit: 1,
+      );
+      if (householdEnrollments.isEmpty) continue;
+      final existing = await db.query(
+        'mgysd_household_member',
+        columns: ['id', 'memberRole', 'isPrimaryClient'],
+        where: 'householdTei = ? AND memberTei = ?',
+        whereArgs: [household, member],
+        limit: 1,
+      );
+      var role = existing.isNotEmpty
+          ? (existing.first['memberRole'] ?? '').toString().trim()
+          : '';
+      if (role.isEmpty || role == 'HOUSEHOLD_MEMBER') {
+        role = await _downloadedMemberRole(db, member);
+      }
+      final values = <String, dynamic>{
+        'householdTei': household,
+        'memberTei': member,
+        'memberRole': role,
+        'isPrimaryClient': role == 'CLIENT' ? 'true' : 'false',
+        'syncStatus': 'synced',
+      };
+      if (existing.isNotEmpty) {
+        await db.update(
+          'mgysd_household_member',
+          values,
+          where: 'householdTei = ? AND memberTei = ?',
+          whereArgs: [household, member],
+        );
+      } else {
+        final relationshipId = (row['id'] ?? '').toString().trim();
+        await db.insert(
+          'mgysd_household_member',
+          {
+            'id': relationshipId.isNotEmpty
+                ? 'HHM_$relationshipId'
+                : 'HHM_${household}_$member',
+            ...values,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    }
+  }
+
+  Future<Map<String, String>> _eventValues(Database db, String eventId) async {
+    final values = <String, String>{};
+    final rows = await db.query(
+      'event_data_value',
+      columns: ['dataElement', 'value'],
+      where: 'event = ?',
+      whereArgs: [eventId],
+    );
+    for (final row in rows) {
+      final de = (row['dataElement'] ?? '').toString().trim();
+      if (de.isEmpty) continue;
+      values[de] = (row['value'] ?? '').toString();
+    }
+    return values;
+  }
+
+  Map<String, dynamic> _downloadedSocialInvestigationPayload({
+    required Map<String, dynamic> event,
+    required Map<String, String> values,
+  }) {
+    String v(String id) => values[id] ?? '';
+    Map<String, dynamic> domain({
+      String rating = '',
+      String observations = '',
+      String strengths = '',
+      String challenges = '',
+    }) => {
+      'rating': rating,
+      'ratingOther': '',
+      'observations': observations,
+      'strengths': strengths,
+      'challenges': challenges,
+    };
+
+    return {
+      'eventId': event['event'] ?? '',
+      'parentCaseId': event['enrollment'] ?? '',
+      'eventDate': event['eventDate'] ?? '',
+      'status': event['status'] ?? '',
+      'clientTei': '',
+      'householdTei': event['trackedEntityInstance'] ?? '',
+      'part1': {
+        'socialWorkerFirstName': v(MgysdDhis2Uids.deSiFirstName),
+        'socialWorkerSurname': v(MgysdDhis2Uids.deSiLastName),
+        'socialWorkerPhone': v(MgysdDhis2Uids.deSiPhone),
+        'supervisorFirstName': '',
+        'supervisorSurname': '',
+        'supervisorPhone': '',
+        'householdSummary': <String, dynamic>{},
+        'clientAndFamilySummary': <dynamic>[],
+      },
+      'supervisorReview': <String, dynamic>{},
+      'part2': {
+        'incidentPattern': v(MgysdDhis2Uids.deSiIncidentPattern),
+        'specificIncidentDate': '',
+        'ongoingStartDate': '',
+        'incidentDistrict': v(MgysdDhis2Uids.deSiDistrict),
+        'incidentCommunityCouncil': v(MgysdDhis2Uids.deSiCommunityCouncil),
+        'village': v(MgysdDhis2Uids.deSiVillage),
+        'notes': '',
+      },
+      'part3': {
+        'changedSinceInitialAssessment': v(MgysdDhis2Uids.deSiAssessmentChanged),
+        'changeReason': v(MgysdDhis2Uids.deSiChangeReason),
+        'additionalObservations': v(MgysdDhis2Uids.deSiAdditionalObservations),
+        'physicalHealth': domain(rating: v('t9MyIrxgRSz'), observations: v('oaDTx4J5EyB'), strengths: v('RCTqBWPBcI9'), challenges: v('PxvNJZWAcPD')),
+        'emotionalHealth': domain(rating: v('fAuuUmTMvYg'), observations: v('o78KTEXhQiy'), strengths: v('YpARuE6Y2Pl'), challenges: v('bmdBWMDIXtQ')),
+        'education': domain(rating: v('nf1lUdwfGL7'), observations: v('bIByy8RBVnQ'), strengths: v('b4wSLDq0vhM'), challenges: v('nWsaaSe1klU')),
+        'behaviouralDevelopment': domain(observations: v('bKTTC1xxL3t'), strengths: v('dU3jIu08ryu'), challenges: v('IZ5DnHuu3pN')),
+        'identity': domain(observations: v('Z0z38RYjy77'), strengths: v('PdrvYognd7y'), challenges: v('ZEAYs0Fnzvb')),
+        'familyBackground': domain(rating: v('k0Ik2xJsHDl'), observations: v('XB7RLLQgU1F'), strengths: v('ysY9wKRU5fE'), challenges: v('a02A4U9BQQ0')),
+        'caregiverWellbeing': domain(rating: v('mQayWci59n4'), observations: v('WqLgxEDZtfP'), challenges: v('SgB7LzfM3kt')),
+        'extendedFamily': domain(rating: v('IByvTnQBrZ5'), observations: v('Ad7FrGPyNJF'), strengths: v('yxzYAjiktVi'), challenges: v('FE5I7XVQ2J3')),
+        'parentSiblingRelationship': domain(rating: v('KeiF3aK0QNI'), observations: v('z69fmJ4GRHc'), strengths: v('CgoAckfgdUN'), challenges: v('ajrgDRw1rhN')),
+        'peerRelationship': domain(observations: v('nS5KHNR8E91'), strengths: v('lrFCxTYisBG'), challenges: v('kqgvL8SfunA')),
+        'alternativeCare': domain(observations: v('Ictu4p4iFND'), strengths: v('uzblliQBYz6'), challenges: v('C5pbISpAWry')),
+        'housing': domain(rating: v('gBd1mT2jaaP'), observations: v('G9sfhJ6Ks1M'), strengths: v('ezeEaqAi3CF'), challenges: v('qygp5C0xDR8')),
+        'socialInclusion': domain(rating: v('wkvOsAGK1iD'), observations: v('BzTphSnSjuK'), strengths: v('GHT32pRIRSJ'), challenges: v('wj0g8OuClZK')),
+      },
+      'part4': {
+        'externalInformants': <dynamic>[],
+        'caseConferences': <dynamic>[],
+        'courtReports': <dynamic>[],
+      },
+    };
+  }
+
+  Future<void> _rebuildMgysdWorkflowRowsFromDownloadedEvents() async {
+    final db = await OfflineDbProvider().db;
+    if (db == null) return;
+    await db.execute(
+      "CREATE TABLE IF NOT EXISTS mgysd_initial_risk_assessment ("
+          "id TEXT PRIMARY KEY, caseId TEXT, householdTei TEXT, assessmentDate TEXT, "
+          "riskLevel TEXT, status TEXT, payloadJson TEXT, updatedAt TEXT, "
+          "syncStatus TEXT DEFAULT 'not-synced')",
+    );
+    await db.execute(
+      "CREATE TABLE IF NOT EXISTS mgysd_social_investigation ("
+          "id TEXT PRIMARY KEY, caseId TEXT, householdTei TEXT, investigationDate TEXT, "
+          "status TEXT, payloadJson TEXT, updatedAt TEXT, parentCaseId TEXT DEFAULT '', "
+          "rootCaseId TEXT DEFAULT '', stageKey TEXT DEFAULT 'social_investigation', "
+          "syncStatus TEXT DEFAULT 'not-synced')",
+    );
+    await db.execute(
+      "CREATE TABLE IF NOT EXISTS mgysd_stage_event_context ("
+          "eventId TEXT PRIMARY KEY, parentCaseId TEXT, stageKey TEXT, tableName TEXT, "
+          "programStage TEXT, trackedEntityInstance TEXT, enrollment TEXT, householdTei TEXT, "
+          "householdName TEXT, clientName TEXT, subjectName TEXT, subjectRole TEXT, "
+          "createdAt TEXT, updatedAt TEXT)",
+    );
+
+    final eventRows = await db.query(
+      'events',
+      where: 'programStage IN (?, ?, ?)',
+      whereArgs: [
+        MgysdDhis2Uids.initialRiskAssessmentStage,
+        MgysdDhis2Uids.socialInvestigationStage,
+        MgysdDhis2Uids.enrolledsocialInvestigationStage,
+      ],
+    );
+    final now = DateTime.now().toIso8601String();
+    for (final raw in eventRows) {
+      final event = Map<String, dynamic>.from(raw);
+      final eventId = (event['event'] ?? '').toString().trim();
+      final stage = (event['programStage'] ?? '').toString().trim();
+      final household = (event['trackedEntityInstance'] ?? '').toString().trim();
+      final enrollment = (event['enrollment'] ?? '').toString().trim();
+      final eventDate = (event['eventDate'] ?? '').toString().trim();
+      final status = (event['status'] ?? 'ACTIVE').toString().trim();
+      if (eventId.isEmpty || household.isEmpty) continue;
+      final values = await _eventValues(db, eventId);
+
+      if (stage == MgysdDhis2Uids.initialRiskAssessmentStage) {
+        final riskLevel = values[MgysdDhis2Uids.deRiskLevel] ?? '';
+        await db.insert(
+          'mgysd_initial_risk_assessment',
+          {
+            'id': eventId,
+            'caseId': enrollment.isNotEmpty ? enrollment : household,
+            'householdTei': household,
+            'assessmentDate': eventDate,
+            'riskLevel': riskLevel,
+            'status': status,
+            'payloadJson': json.encode({
+              'eventId': eventId,
+              'enrollment': enrollment,
+              'householdTei': household,
+              'eventDate': eventDate,
+              'riskLevel': riskLevel,
+              'dataValues': values,
+            }),
+            'updatedAt': now,
+            'syncStatus': 'synced',
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        continue;
+      }
+
+      if (stage != MgysdDhis2Uids.socialInvestigationStage &&
+          stage != MgysdDhis2Uids.enrolledsocialInvestigationStage) {
+        continue;
+      }
+      final payload = _downloadedSocialInvestigationPayload(event: event, values: values);
+      await db.insert(
+        'mgysd_social_investigation',
+        {
+          'id': eventId,
+          'caseId': eventId,
+          'parentCaseId': enrollment.isNotEmpty ? enrollment : household,
+          'rootCaseId': enrollment.isNotEmpty ? enrollment : household,
+          'householdTei': household,
+          'investigationDate': eventDate,
+          'stageKey': 'social_investigation',
+          'status': status,
+          'payloadJson': json.encode(payload),
+          'syncStatus': 'synced',
+          'updatedAt': now,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      await db.insert(
+        'mgysd_stage_event_context',
+        {
+          'eventId': eventId,
+          'parentCaseId': enrollment.isNotEmpty ? enrollment : household,
+          'stageKey': 'social_investigation',
+          'tableName': 'mgysd_social_investigation',
+          'programStage': stage,
+          'trackedEntityInstance': household,
+          'enrollment': enrollment,
+          'householdTei': household,
+          'householdName': '',
+          'clientName': '',
+          'subjectName': '',
+          'subjectRole': 'Primary client',
+          'createdAt': now,
+          'updatedAt': now,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+  }
+
+
+  Map<String, String> _serverTeiAttributes(Map<String, dynamic> tei) {
+    final result = <String, String>{};
+    final attributes = tei['attributes'];
+    if (attributes is! List) return result;
+
+    for (final item in attributes) {
+      if (item is! Map) continue;
+      final attribute = (item['attribute'] ?? '').toString().trim();
+      if (attribute.isEmpty) continue;
+      result[attribute] = (item['value'] ?? '').toString();
+    }
+    return result;
+  }
+
+  Future<List<Map<String, dynamic>>> searchMgysdHouseholds(
+      CurrentUser currentUser,
+      String searchText,
+      ) async {
+    final query = searchText.trim();
+    if (query.isEmpty) return [];
+
+    final programs = <String>[
+      MgysdDhis2Uids.assessedHouseholdsProgram,
+      MgysdDhis2Uids.enrolledHouseholdsProgram,
+    ];
+
+    final results = <String, Map<String, dynamic>>{};
+
+    void addResult(
+        Map<String, dynamic> tei, {
+          String? program,
+        }) {
+      final teiId =
+      (tei['trackedEntityInstance'] ?? '').toString().trim();
+      if (teiId.isEmpty) return;
+
+      final attrs = _serverTeiAttributes(tei);
+      final existing = results[teiId];
+
+      final programSet = <String>{
+        ...((existing?['programs'] as List?) ?? const <dynamic>[])
+            .map((value) => value.toString()),
+        if (program != null && program.trim().isNotEmpty) program.trim(),
+      };
+
+      final enrollments = tei['enrollments'];
+      if (enrollments is List) {
+        for (final item in enrollments) {
+          if (item is! Map) continue;
+          final enrolledProgram =
+          (item['program'] ?? '').toString().trim();
+          if (programs.contains(enrolledProgram)) {
+            programSet.add(enrolledProgram);
+          }
+        }
+      }
+
+      results[teiId] = {
+        'trackedEntityInstance': teiId,
+        'orgUnit': (tei['orgUnit'] ?? '').toString(),
+        'fileNumber':
+        attrs[MgysdDhis2Uids.attHouseholdFileNumber] ?? '',
+        'district':
+        attrs[MgysdDhis2Uids.attHouseholdDistrict] ?? '',
+        'communityCouncil':
+        attrs[MgysdDhis2Uids.attHouseholdCommunityCouncil] ?? '',
+        'village':
+        attrs[MgysdDhis2Uids.attHouseholdVillage] ?? '',
+        'address':
+        attrs[MgysdDhis2Uids.attHouseholdAddress] ?? '',
+        'programs': programSet.toList(),
+      };
+    }
+
+    Future<void> searchEndpoint({
+      required String program,
+      String? textQuery,
+      String? filter,
+    }) async {
+      try {
+        final params = <String, dynamic>{
+          'program': program,
+          // ACCESSIBLE gives a true online/global search within the logged-in
+          // user's DHIS2 data-capture scope. It does not require one local OU.
+          'ouMode': 'ACCESSIBLE',
+          'pageSize': '50',
+          'fields':
+          'trackedEntityInstance,trackedEntityType,orgUnit,'
+              'attributes[attribute,value,displayName],'
+              'enrollments[enrollment,program,status,orgUnit,enrollmentDate]',
+        };
+
+        if (textQuery != null && textQuery.trim().isNotEmpty) {
+          params['query'] = textQuery.trim();
+        }
+        if (filter != null && filter.trim().isNotEmpty) {
+          params['filter'] = filter.trim();
+        }
+
+        final response = await httpClient.httpGet(
+          'api/trackedEntityInstances.json',
+          queryParameters: params,
+        );
+
+        await _addSyncLog(
+          'MGYSD INVESTIGATION ONLINE SEARCH '
+              '[$program] ${response.statusCode}: ${response.body}',
+        );
+
+        if (response.statusCode != 200) return;
+
+        final decoded = json.decode(response.body);
+        if (decoded is! Map) return;
+
+        final teis = decoded['trackedEntityInstances'];
+        if (teis is! List) return;
+
+        for (final raw in teis) {
+          if (raw is! Map) continue;
+          addResult(
+            Map<String, dynamic>.from(raw),
+            program: program,
+          );
+        }
+      } catch (error) {
+        await _addSyncLog(
+          'MGYSD INVESTIGATION ONLINE SEARCH ERROR [$program]: $error',
+        );
+      }
+    }
+
+    // 1. Exact TEI UID.
+    if (RegExp(r'^[A-Za-z][A-Za-z0-9]{10}$').hasMatch(query)) {
+      try {
+        final response = await httpClient.httpGet(
+          'api/trackedEntityInstances/$query.json',
+          queryParameters: {
+            'fields':
+            'trackedEntityInstance,trackedEntityType,orgUnit,'
+                'attributes[attribute,value,displayName],'
+                'enrollments[enrollment,program,status,orgUnit,enrollmentDate]',
+          },
+        );
+
+        await _addSyncLog(
+          'MGYSD INVESTIGATION UID SEARCH [$query] '
+              '${response.statusCode}: ${response.body}',
+        );
+
+        if (response.statusCode == 200) {
+          final decoded = json.decode(response.body);
+          if (decoded is Map<String, dynamic>) {
+            final enrollments = decoded['enrollments'];
+            var householdProgram = '';
+            if (enrollments is List) {
+              for (final item in enrollments) {
+                if (item is! Map) continue;
+                final program =
+                (item['program'] ?? '').toString().trim();
+                if (programs.contains(program)) {
+                  householdProgram = program;
+                  break;
+                }
+              }
+            }
+            if (householdProgram.isNotEmpty) {
+              addResult(decoded, program: householdProgram);
+            }
+          }
+        }
+      } catch (error) {
+        await _addSyncLog(
+          'MGYSD INVESTIGATION UID SEARCH ERROR [$query]: $error',
+        );
+      }
+    }
+
+    // 2. DHIS2's tracker text query. This searches searchable attributes.
+    for (final program in programs) {
+      await searchEndpoint(
+        program: program,
+        textQuery: query,
+      );
+    }
+
+    // 3. Explicit attribute filters are the reliable fallback for household
+    // file/location searches when the DHIS2 "query" endpoint has not indexed
+    // those attributes as searchable.
+    final searchableAttributes = <String>[
+      MgysdDhis2Uids.attHouseholdFileNumber,
+      MgysdDhis2Uids.attHouseholdDistrict,
+      MgysdDhis2Uids.attHouseholdCommunityCouncil,
+      MgysdDhis2Uids.attHouseholdVillage,
+      MgysdDhis2Uids.attHouseholdAddress,
+    ].where((uid) =>
+        RegExp(r'^[A-Za-z][A-Za-z0-9]{10}$').hasMatch(uid.trim()))
+        .toSet()
+        .toList();
+
+    for (final program in programs) {
+      for (final attribute in searchableAttributes) {
+        await searchEndpoint(
+          program: program,
+          filter: '$attribute:LIKE:$query',
+        );
+      }
+    }
+
+    final values = results.values.toList();
+
+    String sortKey(Map<String, dynamic> item) {
+      final file = (item['fileNumber'] ?? '').toString().trim();
+      if (file.isNotEmpty) return file.toLowerCase();
+      return (item['trackedEntityInstance'] ?? '')
+          .toString()
+          .toLowerCase();
+    }
+
+    values.sort((a, b) => sortKey(a).compareTo(sortKey(b)));
+    return values;
+  }
+
+  Future<int> _downloadEventsForSingleHousehold({
+    required String program,
+    required String householdTei,
+  }) async {
+    final response = await httpClient.httpGet(
+      'api/events.json',
+      queryParameters: {
+        'program': program,
+        'trackedEntityInstance': householdTei,
+        'pageSize': '500',
+        'fields':
+        'event,program,programStage,trackedEntityInstance,enrollment,'
+            'status,orgUnit,dataValues[dataElement,value,displayName],eventDate',
+      },
+    );
+
+    await _addSyncLog(
+      'MGYSD SINGLE HH EVENT DOWNLOAD '
+          '[$householdTei][$program] ${response.statusCode}: ${response.body}',
+    );
+
+    if (response.statusCode != 200) {
+      return 0;
+    }
+
+    final decoded = json.decode(response.body);
+    if (decoded is! Map) return 0;
+
+    final rawEvents = decoded['events'];
+    if (rawEvents is! List) return 0;
+
+    final events = rawEvents
+        .whereType<Map>()
+        .map<Events>(
+          (event) => Events().fromJson(
+        Map<String, dynamic>.from(event),
+      ),
+    )
+        .toList();
+
+    if (events.isNotEmpty) {
+      await saveEventsToOffline(events);
+    }
+    return events.length;
+  }
+
+  Future<Map<String, int>> downloadMgysdHouseholdBundle(
+      String householdTei,
+      ) async {
+    final household = householdTei.trim();
+    if (household.isEmpty) {
+      throw ArgumentError('Household TEI is required.');
+    }
+
+    // 1. Download exactly the selected household.
+    await _downloadSingleTrackedEntity(household);
+
+    final db = await OfflineDbProvider().db;
+    if (db == null) {
+      throw StateError('Offline database is not available.');
+    }
+
+    // 2. Read only this household's relationships and download only its members.
+    final relationships = await db.query(
+      'tei_relationships',
+      columns: ['toTei'],
+      where: 'relationshipType = ? AND fromTei = ?',
+      whereArgs: [
+        MgysdDhis2Uids.householdHasMemberRelationshipType,
+        household,
+      ],
+    );
+
+    final memberIds = <String>{};
+    for (final row in relationships) {
+      final memberTei = (row['toTei'] ?? '').toString().trim();
+      if (memberTei.isNotEmpty) memberIds.add(memberTei);
+    }
+
+    for (final memberTei in memberIds) {
+      // Always refresh the selected household's linked member because this
+      // action is an explicit user-requested download, not background sync.
+      await _downloadSingleTrackedEntity(memberTei);
+    }
+
+    // 3. Download only this household's events from the two relevant programs.
+    await _downloadEventsForSingleHousehold(
+      program: MgysdDhis2Uids.assessedHouseholdsProgram,
+      householdTei: household,
+    );
+    await _downloadEventsForSingleHousehold(
+      program: MgysdDhis2Uids.enrolledHouseholdsProgram,
+      householdTei: household,
+    );
+
+    // 4. Rebuild local helper structures used by the MGYSD screens.
+    await _rebuildMgysdHouseholdMemberLinks();
+    await _rebuildMgysdWorkflowRowsFromDownloadedEvents();
+
+    // 5. Return counts scoped ONLY to this household.
+    final linkedMembers = await db.rawQuery(
+      'SELECT COUNT(DISTINCT memberTei) AS total '
+          'FROM mgysd_household_member WHERE householdTei = ?',
+      [household],
+    );
+
+    final initialRisk = await db.rawQuery(
+      'SELECT COUNT(*) AS total FROM events '
+          'WHERE trackedEntityInstance = ? AND programStage = ?',
+      [household, MgysdDhis2Uids.initialRiskAssessmentStage],
+    );
+
+    final investigations = await db.rawQuery(
+      'SELECT COUNT(*) AS total FROM events '
+          'WHERE trackedEntityInstance = ? AND programStage IN (?, ?)',
+      [
+        household,
+        MgysdDhis2Uids.socialInvestigationStage,
+        MgysdDhis2Uids.enrolledsocialInvestigationStage,
+      ],
+    );
+
+    final memberCount =
+        (linkedMembers.first['total'] as int?) ?? 0;
+    final initialRiskCount =
+        (initialRisk.first['total'] as int?) ?? 0;
+    final socialInvestigationCount =
+        (investigations.first['total'] as int?) ?? 0;
+
+    await _addSyncLog(
+      'MGYSD SINGLE HOUSEHOLD DOWNLOAD COMPLETE: '
+          'household=$household, members=$memberCount, '
+          'initialRisk=$initialRiskCount, '
+          'socialInvestigations=$socialInvestigationCount',
+    );
+
+    return {
+      'households': 1,
+      'members': memberCount,
+      'initialRisk': initialRiskCount,
+      'socialInvestigations': socialInvestigationCount,
+    };
+  }
+
+  Future<Map<String, int>> downloadMgysdCaseManagementData(
+      CurrentUser currentUser,
+      String lastSyncDate,
+      ) async {
+    final orgUnits = (currentUser.userOrgUnitIds ?? [])
+        .whereType<String>()
+        .where((id) => id.trim().isNotEmpty)
+        .toSet()
+        .toList();
+    for (final orgUnit in orgUnits) {
+      await getAndSaveTrackedInstanceFromServer(MgysdDhis2Uids.assessedHouseholdsProgram, orgUnit, lastSyncDate);
+      await getAndSaveTrackedInstanceFromServer(MgysdDhis2Uids.enrolledHouseholdsProgram, orgUnit, lastSyncDate);
+      await getAndSaveTrackedInstanceFromServer(MgysdDhis2Uids.familyMemberTrackerProgram, orgUnit, lastSyncDate);
+      await getAndSaveEventsFromServer(MgysdDhis2Uids.assessedHouseholdsProgram, orgUnit, lastSyncDate);
+      await getAndSaveEventsFromServer(MgysdDhis2Uids.enrolledHouseholdsProgram, orgUnit, lastSyncDate);
+    }
+    await _downloadMissingLinkedMembers();
+    await _rebuildMgysdHouseholdMemberLinks();
+    await _rebuildMgysdWorkflowRowsFromDownloadedEvents();
+
+    var householdCount = 0;
+    var memberCount = 0;
+    var initialRiskCount = 0;
+    var socialInvestigationCount = 0;
+    final db = await OfflineDbProvider().db;
+    if (db != null) {
+      final households = await db.rawQuery(
+        'SELECT COUNT(DISTINCT trackedEntityInstance) AS total FROM enrollment WHERE program IN (?, ?)',
+        [MgysdDhis2Uids.assessedHouseholdsProgram, MgysdDhis2Uids.enrolledHouseholdsProgram],
+      );
+      householdCount = (households.first['total'] as int?) ?? 0;
+      final members = await db.rawQuery('SELECT COUNT(DISTINCT memberTei) AS total FROM mgysd_household_member');
+      memberCount = (members.first['total'] as int?) ?? 0;
+      final risk = await db.rawQuery('SELECT COUNT(*) AS total FROM events WHERE programStage = ?', [MgysdDhis2Uids.initialRiskAssessmentStage]);
+      initialRiskCount = (risk.first['total'] as int?) ?? 0;
+      final investigations = await db.rawQuery(
+        'SELECT COUNT(*) AS total FROM events WHERE programStage IN (?, ?)',
+        [MgysdDhis2Uids.socialInvestigationStage, MgysdDhis2Uids.enrolledsocialInvestigationStage],
+      );
+      socialInvestigationCount = (investigations.first['total'] as int?) ?? 0;
+    }
+    await _addSyncLog(
+      'MGYSD DOWNLOAD COMPLETE: households=$householdCount, members=$memberCount, initialRisk=$initialRiskCount, socialInvestigations=$socialInvestigationCount',
+    );
+    return {
+      'households': householdCount,
+      'members': memberCount,
+      'initialRisk': initialRiskCount,
+      'socialInvestigations': socialInvestigationCount,
+    };
   }
 
   Future<List<TeiRelationship>?> getTeiRelationshipsfromServer(

@@ -27,6 +27,7 @@ class _SynchronizationState extends State<Synchronization> {
   final String label = 'Data Synchronization';
   String selectedSyncAction = SynchronizationActionsConstants.upload;
 
+
   void onViewConflicts(BuildContext context) {
     Navigator.push(
       context,

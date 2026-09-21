@@ -1,5 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lncmis_mobile_app/core/offline_db/offline_db_provider.dart';
+import 'package:lncmis_mobile_app/core/services/synchronization_service.dart';
+import 'package:lncmis_mobile_app/core/services/user_service.dart';
+import 'package:lncmis_mobile_app/core/utils/app_util.dart';
+import 'package:lncmis_mobile_app/models/current_user.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/enrollment/pages/mgysd_new_case_page.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/models/mgysd_case.dart';
@@ -70,13 +76,13 @@ class _AssessmentHousehold {
   bool get isChild => clientCategory.trim().toUpperCase() == 'CHILD';
   String get status => enrolled ? 'ENROLLED' : 'ASSESSED';
   String get searchableText => [
-        fileNumber,
-        clientName,
-        location,
-        status,
-        clientCategory,
-        ...members.map((e) => '${e.name} ${e.role} ${e.sex}'),
-      ].join(' ').toLowerCase();
+    fileNumber,
+    clientName,
+    location,
+    status,
+    clientCategory,
+    ...members.map((e) => '${e.name} ${e.role} ${e.sex}'),
+  ].join(' ').toLowerCase();
 }
 
 class _MgysdAssessmentWorkspaceState
@@ -88,10 +94,21 @@ class _MgysdAssessmentWorkspaceState
   bool _loading = true;
   String _filter = 'ALL';
 
+  bool _onlineMode = false;
+  bool _onlineSearching = false;
+  String _onlineError = '';
+  List<Map<String, dynamic>> _onlineResults = [];
+  String _downloadingHouseholdTei = '';
+  Timer? _onlineSearchDebounce;
+
+  CurrentUser? _currentUser;
+  SynchronizationService? _syncService;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _initializeOnlineSearch();
   }
 
   @override
@@ -104,8 +121,280 @@ class _MgysdAssessmentWorkspaceState
 
   @override
   void dispose() {
+    _onlineSearchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+
+  Future<void> _initializeOnlineSearch() async {
+    try {
+      final user = await UserService().getCurrentUser();
+      if (user == null) return;
+
+      _currentUser = user;
+      _syncService = SynchronizationService(
+        user.username,
+        user.password,
+        user.programs,
+        user.userOrgUnitIds,
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _toggleSearchMode() async {
+    FocusScope.of(context).unfocus();
+
+    setState(() {
+      _onlineMode = !_onlineMode;
+      _onlineError = '';
+      _onlineResults = [];
+      _onlineSearching = false;
+      _searchController.clear();
+    });
+
+    _onlineSearchDebounce?.cancel();
+
+    if (!_onlineMode) {
+      _applyFilters();
+    } else if (_syncService == null || _currentUser == null) {
+      await _initializeOnlineSearch();
+      if (!mounted) return;
+      if (_syncService == null || _currentUser == null) {
+        setState(() {
+          _onlineError =
+          'Online search is unavailable because the current DHIS2 user '
+              'session could not be loaded.';
+        });
+      }
+    }
+  }
+
+  void _onSearchChanged(String value) {
+    if (!_onlineMode) {
+      _applyFilters();
+      return;
+    }
+
+    _onlineSearchDebounce?.cancel();
+
+    final query = value.trim();
+    if (query.length < 2) {
+      setState(() {
+        _onlineResults = [];
+        _onlineError = '';
+        _onlineSearching = false;
+      });
+      return;
+    }
+
+    _onlineSearchDebounce = Timer(
+      const Duration(milliseconds: 550),
+          () => _searchOnline(query),
+    );
+  }
+
+  Future<void> _searchOnline(String query) async {
+    final service = _syncService;
+    final user = _currentUser;
+
+    if (!_onlineMode || service == null || user == null) return;
+
+    setState(() {
+      _onlineSearching = true;
+      _onlineError = '';
+    });
+
+    try {
+      final results = await service.searchMgysdHouseholds(
+        user,
+        query,
+      );
+
+      if (!mounted || !_onlineMode) return;
+      if (_searchController.text.trim() != query.trim()) return;
+
+      setState(() {
+        _onlineResults = results;
+        _onlineSearching = false;
+        if (results.isEmpty) {
+          _onlineError =
+          'No household was found in DHIS2 for "$query".';
+        }
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _onlineSearching = false;
+        _onlineError = 'Online search failed: $error';
+      });
+    }
+  }
+
+  Future<void> _downloadOnlineHousehold(
+      Map<String, dynamic> household,
+      ) async {
+    final service = _syncService;
+    if (service == null) return;
+
+    final tei =
+    (household['trackedEntityInstance'] ?? '').toString().trim();
+    if (tei.isEmpty) return;
+
+    setState(() {
+      _downloadingHouseholdTei = tei;
+      _onlineError = '';
+    });
+
+    try {
+      final result = await service.downloadMgysdHouseholdBundle(tei);
+
+      // Reload the offline Investigation workspace first.
+      await _load();
+
+      if (!mounted) return;
+
+      setState(() {
+        _downloadingHouseholdTei = '';
+        _onlineMode = false;
+        _onlineResults = [];
+        _onlineError = '';
+        _searchController.text = tei;
+      });
+
+      // Filter by the downloaded TEI immediately so the user sees the exact
+      // household they chose instead of "download finished" with no result.
+      _applyFilters();
+
+      AppUtil.showToastMessage(
+        message:
+        'Household downloaded: ${result['members']} member(s), '
+            '${result['initialRisk']} Initial Risk assessment(s), '
+            '${result['socialInvestigations']} Social Investigation(s).',
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _downloadingHouseholdTei = '';
+        _onlineError = 'Download failed: $error';
+      });
+    }
+  }
+
+  String _onlineValue(dynamic value) {
+    final text = (value ?? '').toString().trim();
+    return text.isEmpty ? '-' : text;
+  }
+
+  Widget _onlineHouseholdCard(Map<String, dynamic> item) {
+    final tei =
+    (item['trackedEntityInstance'] ?? '').toString().trim();
+    final fileNumber = _onlineValue(item['fileNumber']);
+    final district = _onlineValue(item['district']);
+    final council = _onlineValue(item['communityCouncil']);
+    final village = _onlineValue(item['village']);
+    final downloading = _downloadingHouseholdTei == tei;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: widget.color.withOpacity(0.12),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.035),
+            blurRadius: 12,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: widget.color.withOpacity(0.10),
+                child: Icon(
+                  Icons.cloud_outlined,
+                  color: widget.color,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      fileNumber == '-' ? 'Household $tei' : fileNumber,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      tei,
+                      style: const TextStyle(
+                        color: Colors.blueGrey,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _pill('ONLINE', widget.color),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            [
+              if (district != '-') district,
+              if (council != '-') council,
+              if (village != '-') village,
+            ].join(' • ').isEmpty
+                ? 'Location not available'
+                : [
+              if (district != '-') district,
+              if (council != '-') council,
+              if (village != '-') village,
+            ].join(' • '),
+            style: const TextStyle(
+              color: Colors.blueGrey,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _downloadingHouseholdTei.isNotEmpty
+                  ? null
+                  : () => _downloadOnlineHousehold(item),
+              icon: downloading
+                  ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                ),
+              )
+                  : const Icon(Icons.download_for_offline_outlined),
+              label: Text(
+                downloading
+                    ? 'Downloading household...'
+                    : 'Download for offline investigation',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<Database> _db() async {
@@ -123,9 +412,9 @@ class _MgysdAssessmentWorkspaceState
   }
 
   Future<Map<String, String>> _attributes(
-    Database db,
-    String tei,
-  ) async {
+      Database db,
+      String tei,
+      ) async {
     final map = <String, String>{};
     if (!await _tableExists(db, 'tracked_entity_instance_attribute')) {
       return map;
@@ -171,9 +460,9 @@ class _MgysdAssessmentWorkspaceState
   }
 
   Future<String?> _primaryClientTei(
-    Database db,
-    String householdTei,
-  ) async {
+      Database db,
+      String householdTei,
+      ) async {
     if (!await _tableExists(db, 'mgysd_household_member')) return null;
 
     try {
@@ -201,9 +490,9 @@ class _MgysdAssessmentWorkspaceState
   }
 
   Future<List<_HouseholdMember>> _members(
-    Database db,
-    String householdTei,
-  ) async {
+      Database db,
+      String householdTei,
+      ) async {
     if (!await _tableExists(db, 'mgysd_household_member')) {
       return const [];
     }
@@ -240,8 +529,8 @@ class _MgysdAssessmentWorkspaceState
               'disability',
             ]),
             isPrimary:
-                (row['isPrimaryClient'] ?? '').toString().toLowerCase() ==
-                    'true',
+            (row['isPrimaryClient'] ?? '').toString().toLowerCase() ==
+                'true',
           ),
         );
       }
@@ -258,9 +547,9 @@ class _MgysdAssessmentWorkspaceState
   }
 
   Future<int> _investigationCount(
-    Database db,
-    String householdTei,
-  ) async {
+      Database db,
+      String householdTei,
+      ) async {
     if (!await _tableExists(db, 'mgysd_social_investigation')) return 0;
     try {
       final rows = await db.rawQuery(
@@ -302,7 +591,7 @@ class _MgysdAssessmentWorkspaceState
 
       for (final row in rows) {
         final householdTei =
-            (row['trackedEntityInstance'] ?? '').toString().trim();
+        (row['trackedEntityInstance'] ?? '').toString().trim();
         if (householdTei.isEmpty) continue;
         byHousehold.putIfAbsent(householdTei, () => row);
       }
@@ -315,7 +604,7 @@ class _MgysdAssessmentWorkspaceState
         final householdAttrs = await _attributes(db, householdTei);
         final primaryTei = await _primaryClientTei(db, householdTei);
         final primaryAttrs =
-            primaryTei == null ? <String, String>{} : await _attributes(db, primaryTei);
+        primaryTei == null ? <String, String>{} : await _attributes(db, primaryTei);
         final members = await _members(db, householdTei);
         const enrolled = false;
 
@@ -349,7 +638,7 @@ class _MgysdAssessmentWorkspaceState
             enrollmentDate: (row['enrollmentDate'] ?? '').toString(),
             enrolled: enrolled,
             investigationCount:
-                await _investigationCount(db, householdTei),
+            await _investigationCount(db, householdTei),
             clientCategory: _first(primaryAttrs, [
               MgysdDhis2Uids.attClientCategory,
               'clientType',
@@ -530,8 +819,8 @@ class _MgysdAssessmentWorkspaceState
   }
 
   Future<void> _openInvestigationList(
-    _AssessmentHousehold item,
-  ) async {
+      _AssessmentHousehold item,
+      ) async {
     if (item.isChild) {
       _showPrimeroMessage();
       return;
@@ -701,7 +990,7 @@ class _MgysdAssessmentWorkspaceState
                     : () => _openInvestigationList(item),
                 style: TextButton.styleFrom(
                   foregroundColor:
-                      item.isChild ? Colors.amber.shade900 : widget.color,
+                  item.isChild ? Colors.amber.shade900 : widget.color,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 6,
                     vertical: 4,
@@ -932,42 +1221,73 @@ class _MgysdAssessmentWorkspaceState
                       Expanded(
                         child: TextField(
                           controller: _searchController,
-                          onChanged: (_) {
+                          textInputAction: TextInputAction.search,
+                          onChanged: (value) {
                             setState(() {});
-                            _applyFilters();
+                            _onSearchChanged(value);
+                          },
+                          onSubmitted: (value) {
+                            if (_onlineMode && value.trim().length >= 2) {
+                              _onlineSearchDebounce?.cancel();
+                              _searchOnline(value.trim());
+                            }
                           },
                           decoration: InputDecoration(
-                            hintText: 'Search this device',
+                            hintText: _onlineMode
+                                ? 'Search DHIS2 globally'
+                                : 'Search this device',
                             prefixIcon: Tooltip(
-                              message:
-                                  'Offline search: searches households and members stored on this device',
+                              message: _onlineMode
+                                  ? 'Online mode: searching DHIS2'
+                                  : 'Offline mode: searching this device',
                               child: Padding(
                                 padding: const EdgeInsets.all(15),
                                 child: Icon(
-                                  Icons.circle,
-                                  size: 12,
+                                  _onlineMode
+                                      ? Icons.cloud_done_outlined
+                                      : Icons.phone_android_outlined,
+                                  size: 18,
                                   color: widget.color,
                                 ),
                               ),
                             ),
-                            suffixIcon: _searchController.text.isEmpty
-                                ? const Tooltip(
-                                    message:
-                                        'Online search will use the globe icon in a later update',
-                                    child: Icon(
-                                      Icons.public_outlined,
-                                      color: Colors.blueGrey,
-                                      size: 20,
-                                    ),
-                                  )
-                                : IconButton(
+                            suffixIcon: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (_searchController.text.isNotEmpty)
+                                  IconButton(
                                     onPressed: () {
+                                      _onlineSearchDebounce?.cancel();
                                       _searchController.clear();
-                                      setState(() {});
-                                      _applyFilters();
+                                      setState(() {
+                                        _onlineResults = [];
+                                        _onlineError = '';
+                                        _onlineSearching = false;
+                                      });
+                                      if (!_onlineMode) {
+                                        _applyFilters();
+                                      }
                                     },
                                     icon: const Icon(Icons.close),
                                   ),
+                                Tooltip(
+                                  message: _onlineMode
+                                      ? 'Switch to offline/device search'
+                                      : 'Switch to global/online DHIS2 search',
+                                  child: IconButton(
+                                    onPressed: _toggleSearchMode,
+                                    icon: Icon(
+                                      _onlineMode
+                                          ? Icons.public
+                                          : Icons.public_outlined,
+                                      color: _onlineMode
+                                          ? widget.color
+                                          : Colors.blueGrey,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                             filled: true,
                             fillColor: Colors.white,
                             border: OutlineInputBorder(
@@ -986,7 +1306,7 @@ class _MgysdAssessmentWorkspaceState
                             borderRadius: BorderRadius.circular(16),
                             child: InkWell(
                               borderRadius: BorderRadius.circular(16),
-                              onTap: _openFilterSheet,
+                              onTap: _onlineMode ? null : _openFilterSheet,
                               child: Container(
                                 width: 52,
                                 height: 52,
@@ -1029,7 +1349,7 @@ class _MgysdAssessmentWorkspaceState
                       ),
                     ],
                   ),
-                  if (_filter != 'ALL') ...[
+                  if (!_onlineMode && _filter != 'ALL') ...[
                     const SizedBox(height: 8),
                     Align(
                       alignment: Alignment.centerLeft,
@@ -1057,22 +1377,100 @@ class _MgysdAssessmentWorkspaceState
               ),
             ),
           ),
-          if (_loading)
+          if (_onlineMode) ...[
+            if (_onlineSearching)
+              const SliverFillRemaining(
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_onlineError.isNotEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(28),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.cloud_off_outlined,
+                          size: 42,
+                          color: Colors.blueGrey.shade300,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          _onlineError,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.blueGrey,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+            else if (_onlineResults.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(28),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.public_outlined,
+                            size: 46,
+                            color: widget.color.withOpacity(0.55),
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Online search is active',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          const Text(
+                            'Search by household/file number, location, '
+                                'or DHIS2 household UID.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.blueGrey,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+              else
+                SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                        (context, index) =>
+                        _onlineHouseholdCard(_onlineResults[index]),
+                    childCount: _onlineResults.length,
+                  ),
+                ),
+          ] else if (_loading)
             const SliverFillRemaining(
               child: Center(child: CircularProgressIndicator()),
             )
           else if (_filtered.isEmpty)
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: _empty(),
-            )
-          else
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) => _householdCard(_filtered[index]),
-                childCount: _filtered.length,
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _empty(),
+              )
+            else
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                      (context, index) => _householdCard(_filtered[index]),
+                  childCount: _filtered.length,
+                ),
               ),
-            ),
           const SliverToBoxAdapter(child: SizedBox(height: 20)),
         ],
       ),
