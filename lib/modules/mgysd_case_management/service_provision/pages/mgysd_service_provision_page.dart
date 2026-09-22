@@ -123,6 +123,16 @@ class _GoalWithServices {
   });
 }
 
+/// A service category from the MGYSD "Services Provided" catalogue.
+/// [subServices] is empty for categories that have no further breakdown
+/// (e.g. "Counselling"), in which case the category itself is the service.
+class _ServiceCategory {
+  final String name;
+  final List<String> subServices;
+
+  const _ServiceCategory(this.name, [this.subServices = const []]);
+}
+
 class _MgysdServiceProvisionPageState extends State<MgysdServiceProvisionPage> {
   bool _loading = true;
   bool _saving = false;
@@ -134,9 +144,187 @@ class _MgysdServiceProvisionPageState extends State<MgysdServiceProvisionPage> {
 
   static const List<Map<String, String>> _goalStatusOptions = [
     {'value': 'open', 'label': 'Open'},
-    {'value': 'in_progress', 'label': 'In Progress'},
+    //{'value': 'in_progress', 'label': 'In Progress'},
     {'value': 'achieved', 'label': 'Achieved'},
   ];
+
+  /// Services Provided by the MGYSD (per the official services catalogue).
+  static const List<_ServiceCategory> _availableServiceCategories = [
+    _ServiceCategory(
+      'Empowerment - Economic',
+      ['Skills', 'Political', 'Social', 'Community'],
+    ),
+    _ServiceCategory('Counselling'),
+    _ServiceCategory('Placement into the care facilities'),
+    _ServiceCategory(
+      'Social Assistance',
+      ['Public Assistance (Cash/Kind)', 'Disability Grants', 'Old Age Pension'],
+    ),
+    _ServiceCategory(
+      'Information Dissemination',
+      [
+        'Dementia Care and Support',
+        'Retirement program',
+        'Community Based Rehabilitation',
+        'Response and prevention of GBV',
+      ],
+    ),
+    _ServiceCategory('Advocacy', ['Disability Mainstreaming', 'GBV']),
+    _ServiceCategory(
+      'Community Development',
+      [
+        'Livelihoods opportunities',
+        'Income Generating Projects',
+        'Savings and Internal Lending Communities',
+        'Formation of social clubs/groups',
+      ],
+    ),
+    _ServiceCategory(
+      'Ka Lapeng Centre',
+      ['Accommodation for Survivors of GBV', 'Counselling', 'Health Care'],
+    ),
+    _ServiceCategory('IVRC Vocational training'),
+    _ServiceCategory('Other (specify)'),
+  ];
+
+  /// An explicit, always-visible checklist of every MGYSD service and its
+  /// sub-services (per the catalogue), plus a dedicated "specify" box for
+  /// "Other". Ticking an item keeps [otherSpecifyController]'s owning
+  /// "Service Provided" field in sync via [onToggleService]/[onToggleOther].
+  Widget _availableServicesChecklist({
+    required Set<String> selectedLabels,
+    required bool otherSelected,
+    required TextEditingController otherSpecifyController,
+    required void Function(String label, bool checked) onToggleService,
+    required void Function(bool checked) onToggleOther,
+    required VoidCallback onOtherSpecifyChanged,
+  }) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.blueGrey.withOpacity(0.18)),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
+              child: Row(
+                children: [
+                  Icon(Icons.checklist_rtl_outlined, size: 18, color: widget.color),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Available Services',
+                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(14, 0, 14, 6),
+              child: Text(
+                'Tick every service provided — this fills in "Service Provided" below automatically.',
+                style: TextStyle(color: Colors.blueGrey, fontSize: 11.5, height: 1.3),
+              ),
+            ),
+            const Divider(height: 1),
+            for (final category in _availableServiceCategories)
+              if (category.subServices.isNotEmpty)
+                ExpansionTile(
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 14),
+                  childrenPadding: EdgeInsets.zero,
+                  title: Text(
+                    category.name,
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+                  ),
+                  children: [
+                    for (final sub in category.subServices)
+                      CheckboxListTile(
+                        dense: true,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        activeColor: widget.color,
+                        contentPadding: const EdgeInsets.only(left: 30, right: 14),
+                        title: Text(sub, style: const TextStyle(fontSize: 13)),
+                        value: selectedLabels.contains('${category.name}: $sub'),
+                        onChanged: (checked) => onToggleService(
+                          '${category.name}: $sub',
+                          checked ?? false,
+                        ),
+                      ),
+                  ],
+                ),
+            const Divider(height: 1, indent: 14, endIndent: 14),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(14, 8, 14, 2),
+              child: Text(
+                'OTHER SERVICES (NO SUB-CATEGORIES)',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 10.5,
+                  letterSpacing: 0.4,
+                  color: Colors.blueGrey,
+                ),
+              ),
+            ),
+            for (final category in _availableServiceCategories)
+              if (category.subServices.isEmpty && category.name != 'Other (specify)')
+                CheckboxListTile(
+                  dense: true,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  activeColor: widget.color,
+                  title: Text(
+                    category.name,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                  ),
+                  value: selectedLabels.contains(category.name),
+                  onChanged: (checked) => onToggleService(category.name, checked ?? false),
+                ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CheckboxListTile(
+                  dense: true,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  activeColor: widget.color,
+                  title: const Text(
+                    'Other (specify)',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                  ),
+                  value: otherSelected,
+                  onChanged: (checked) => onToggleOther(checked ?? false),
+                ),
+                if (otherSelected)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(40, 0, 14, 12),
+                    child: TextFormField(
+                      controller: otherSpecifyController,
+                      onChanged: (_) => onOtherSpecifyChanged(),
+                      decoration: const InputDecoration(
+                        labelText: 'Please specify',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) {
+                        if (!otherSelected) return null;
+                        return (value ?? '').trim().isEmpty
+                            ? 'Please specify the service'
+                            : null;
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -213,7 +401,7 @@ class _MgysdServiceProvisionPageState extends State<MgysdServiceProvisionPage> {
   String _normaliseGoalStatus(String value) {
     final v = value.trim().toLowerCase();
     if (v == 'achieved') return 'achieved';
-    if (v == 'in_progress' || v == 'in progress') return 'in_progress';
+    //if (v == 'in_progress' || v == 'in progress') return 'in_progress';
     return 'open';
   }
 
@@ -221,8 +409,8 @@ class _MgysdServiceProvisionPageState extends State<MgysdServiceProvisionPage> {
     switch (_normaliseGoalStatus(value)) {
       case 'achieved':
         return 'Achieved';
-      case 'in_progress':
-        return 'In Progress';
+      //case 'in_progress':
+        //return 'In Progress';
       default:
         return 'Open';
     }
@@ -752,12 +940,16 @@ class _MgysdServiceProvisionPageState extends State<MgysdServiceProvisionPage> {
     final provider = TextEditingController();
     final outcome = TextEditingController();
     final notes = TextEditingController();
+    final otherSpecify = TextEditingController();
     String goalStatus = goal == null ? 'in_progress' : _normaliseGoalStatus(goal.status);
+    final Set<String> selectedServiceLabels = <String>{};
+    bool otherServiceSelected = false;
     final formKey = GlobalKey<FormState>();
 
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true, // NEW: lets the framework account for the sheet's own safe-area handling
       backgroundColor: Colors.transparent,
       builder: (context) {
         return StatefulBuilder(
@@ -775,157 +967,237 @@ class _MgysdServiceProvisionPageState extends State<MgysdServiceProvisionPage> {
               }
             }
 
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 12,
-                right: 12,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 12,
-              ),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            // Closes the sheet safely — guarded so it never throws if the
+            // route is already being popped (e.g. double-tap, or after Save
+            // already closed it).
+            void closeSheet() {
+              if (Navigator.canPop(context)) {
+                Navigator.of(context).pop();
+              }
+            }
+
+            // Rebuilds "Service Provided" from every ticked catalogue item,
+            // grouped the same way as the checklist UI: categories with
+            // sub-components first, then the standalone services, then the
+            // free-text "Other" entry last.
+            void syncServiceProvidedFromSelection() {
+              final ordered = <String>[];
+              for (final category in _availableServiceCategories) {
+                if (category.subServices.isEmpty) continue;
+                for (final sub in category.subServices) {
+                  final label = '${category.name}: $sub';
+                  if (selectedServiceLabels.contains(label)) ordered.add(label);
+                }
+              }
+              for (final category in _availableServiceCategories) {
+                if (category.subServices.isNotEmpty) continue;
+                if (category.name == 'Other (specify)') continue;
+                if (selectedServiceLabels.contains(category.name)) {
+                  ordered.add(category.name);
+                }
+              }
+              if (otherServiceSelected) {
+                final specify = otherSpecify.text.trim();
+                ordered.add(specify.isEmpty ? 'Other (specify)' : 'Other: $specify');
+              }
+              serviceProvided.text = ordered.join('; ');
+            }
+
+            void toggleServiceLabel(String label, bool checked) {
+              setSheetState(() {
+                if (checked) {
+                  selectedServiceLabels.add(label);
+                } else {
+                  selectedServiceLabels.remove(label);
+                }
+                syncServiceProvidedFromSelection();
+              });
+            }
+
+            return SafeArea(
+              // Keeps the header (title + close button) clear of the status
+              // bar, camera cutout, and foldable hinge area. Without this the
+              // "X" can sit under the OS chrome and stop receiving taps.
+              top: true,
+              bottom: false,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 12,
+                  right: 12,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 12,
                 ),
-                child: Form(
-                  key: formKey,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            CircleAvatar(
-                              backgroundColor: widget.color.withOpacity(0.12),
-                              child: Icon(Icons.volunteer_activism_outlined, color: widget.color),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Provide Service',
-                                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
-                                  ),
-                                  Text(
-                                    goal == null ? 'General service for $_targetName' : goal.description,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(color: Colors.blueGrey, fontSize: 12.5),
-                                  ),
-                                ],
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                  ),
+                  child: Form(
+                    key: formKey,
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                backgroundColor: widget.color.withOpacity(0.12),
+                                child: Icon(Icons.volunteer_activism_outlined, color: widget.color),
                               ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Provide Service',
+                                      style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
+                                    ),
+                                    Text(
+                                      goal == null ? 'General service for $_targetName' : goal.description,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(color: Colors.blueGrey, fontSize: 12.5),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // Wrapped in its own Material so it always has a
+                              // proper hit-testing / ink layer, even though the
+                              // sheet's own backgroundColor is transparent.
+                              Material(
+                                type: MaterialType.circle,
+                                color: Colors.transparent,
+                                clipBehavior: Clip.antiAlias,
+                                child: IconButton(
+                                  tooltip: 'Close',
+                                  splashRadius: 22,
+                                  onPressed: closeSheet,
+                                  icon: const Icon(Icons.close),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          TextFormField(
+                            controller: serviceDate,
+                            readOnly: true,
+                            onTap: pickDate,
+                            decoration: const InputDecoration(
+                              labelText: 'Service Date',
+                              border: OutlineInputBorder(),
+                              suffixIcon: Icon(Icons.calendar_today_outlined),
                             ),
-                            IconButton(
-                              onPressed: () => Navigator.pop(context),
-                              icon: const Icon(Icons.close),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        TextFormField(
-                          controller: serviceDate,
-                          readOnly: true,
-                          onTap: pickDate,
-                          decoration: const InputDecoration(
-                            labelText: 'Service Date',
-                            border: OutlineInputBorder(),
-                            suffixIcon: Icon(Icons.calendar_today_outlined),
                           ),
-                        ),
-                        const SizedBox(height: 10),
-                        TextFormField(
-                          controller: serviceProvided,
-                          maxLines: 3,
-                          validator: (value) =>
-                          (value ?? '').trim().isEmpty ? 'Required' : null,
-                          decoration: const InputDecoration(
-                            labelText: 'Service Provided',
-                            hintText: 'Describe the service/support provided',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        TextFormField(
-                          controller: provider,
-                          decoration: const InputDecoration(
-                            labelText: 'Provider',
-                            hintText: 'Who provided the service?',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        TextFormField(
-                          controller: outcome,
-                          maxLines: 3,
-                          decoration: const InputDecoration(
-                            labelText: 'Outcome',
-                            hintText: 'What changed after this service?',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        DropdownButtonFormField<String>(
-                          value: goalStatus,
-                          isExpanded: true,
-                          items: _goalStatusOptions.map((item) {
-                            return DropdownMenuItem<String>(
-                              value: item['value'],
-                              child: Text(item['label']!),
-                            );
-                          }).toList(),
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setSheetState(() => goalStatus = value);
-                          },
-                          decoration: const InputDecoration(
-                            labelText: 'Goal status after service',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        TextFormField(
-                          controller: notes,
-                          maxLines: 3,
-                          decoration: const InputDecoration(
-                            labelText: 'Notes',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: widget.color,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 13),
-                            ),
-                            onPressed: _saving
-                                ? null
-                                : () async {
-                              if (!formKey.currentState!.validate()) return;
-                              await _saveService(
-                                carePlan: selectedPlan,
-                                goal: goal,
-                                serviceDate: serviceDate.text.trim(),
-                                serviceProvided: serviceProvided.text.trim(),
-                                provider: provider.text.trim(),
-                                outcome: outcome.text.trim(),
-                                notes: notes.text.trim(),
-                                goalStatus: goalStatus,
-                              );
-                              if (mounted && Navigator.canPop(context)) {
-                                Navigator.pop(context);
-                              }
+                          const SizedBox(height: 10),
+                          _availableServicesChecklist(
+                            selectedLabels: selectedServiceLabels,
+                            otherSelected: otherServiceSelected,
+                            otherSpecifyController: otherSpecify,
+                            onToggleService: toggleServiceLabel,
+                            onToggleOther: (checked) {
+                              setSheetState(() {
+                                otherServiceSelected = checked;
+                                if (!checked) otherSpecify.clear();
+                                syncServiceProvidedFromSelection();
+                              });
                             },
-                            icon: const Icon(Icons.check_circle_outline),
-                            label: const Text('Save Service'),
+                            onOtherSpecifyChanged: () =>
+                                setSheetState(syncServiceProvidedFromSelection),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 10),
+                          TextFormField(
+                            controller: serviceProvided,
+                            maxLines: 3,
+                            validator: (value) =>
+                            (value ?? '').trim().isEmpty ? 'Required' : null,
+                            decoration: const InputDecoration(
+                              labelText: 'Service Provided',
+                              hintText: 'Auto-filled from the checklist above — edit or add detail as needed',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          TextFormField(
+                            controller: provider,
+                            decoration: const InputDecoration(
+                              labelText: 'Provider',
+                              hintText: 'Who provided the service?',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          TextFormField(
+                            controller: outcome,
+                            maxLines: 3,
+                            decoration: const InputDecoration(
+                              labelText: 'Outcome',
+                              hintText: 'What changed after this service?',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          DropdownButtonFormField<String>(
+                            value: goalStatus,
+                            isExpanded: true,
+                            items: _goalStatusOptions.map((item) {
+                              return DropdownMenuItem<String>(
+                                value: item['value'],
+                                child: Text(item['label']!),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              if (value == null) return;
+                              setSheetState(() => goalStatus = value);
+                            },
+                            decoration: const InputDecoration(
+                              labelText: 'Goal status after service',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          TextFormField(
+                            controller: notes,
+                            maxLines: 3,
+                            decoration: const InputDecoration(
+                              labelText: 'Notes',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: widget.color,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 13),
+                              ),
+                              onPressed: _saving
+                                  ? null
+                                  : () async {
+                                if (!formKey.currentState!.validate()) return;
+                                await _saveService(
+                                  carePlan: selectedPlan,
+                                  goal: goal,
+                                  serviceDate: serviceDate.text.trim(),
+                                  serviceProvided: serviceProvided.text.trim(),
+                                  provider: provider.text.trim(),
+                                  outcome: outcome.text.trim(),
+                                  notes: notes.text.trim(),
+                                  goalStatus: goalStatus,
+                                );
+                                if (mounted && Navigator.canPop(context)) {
+                                  Navigator.pop(context);
+                                }
+                              },
+                              icon: const Icon(Icons.check_circle_outline),
+                              label: const Text('Save Service'),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -941,6 +1213,7 @@ class _MgysdServiceProvisionPageState extends State<MgysdServiceProvisionPage> {
     provider.dispose();
     outcome.dispose();
     notes.dispose();
+    otherSpecify.dispose();
   }
 
   Future<void> _saveService({
