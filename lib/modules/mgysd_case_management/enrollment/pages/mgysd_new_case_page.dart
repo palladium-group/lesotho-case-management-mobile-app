@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lncmis_mobile_app/app_state/intervention_card_state/intervention_card_state.dart';
 import 'package:lncmis_mobile_app/core/components/entry_form_save_button.dart';
 import 'package:lncmis_mobile_app/core/components/material_card.dart';
@@ -44,6 +45,10 @@ class MgysdNewCasePage extends StatefulWidget {
   final String? prefillCaseType;
   final String? prefillIncidentDate;
 
+  bool get isEditing =>
+      (existingHouseholdTei ?? '').trim().isNotEmpty &&
+          (existingAssessedEnrollment ?? '').trim().isNotEmpty;
+
   @override
   State<MgysdNewCasePage> createState() => _MgysdNewCasePageState();
 }
@@ -53,6 +58,89 @@ class _Opt {
   final String label;
 
   const _Opt(this.code, this.label);
+}
+
+class _MgysdCountryCodeOption {
+  final String code;
+  final String label;
+  final String dialCode;
+  final int minNationalDigits;
+  final int maxNationalDigits;
+  final List<String> allowedNationalPrefixes;
+  final List<String> disallowedNationalPrefixes;
+  final String prefixHint;
+  final bool useNanpRules;
+
+  const _MgysdCountryCodeOption({
+    required this.code,
+    required this.label,
+    required this.dialCode,
+    this.minNationalDigits = 7,
+    this.maxNationalDigits = 12,
+    this.allowedNationalPrefixes = const [],
+    this.disallowedNationalPrefixes = const [],
+    this.prefixHint = '',
+    this.useNanpRules = false,
+  });
+}
+
+class _MgysdPhoneNumberInputFormatter extends TextInputFormatter {
+  final _MgysdCountryCodeOption country;
+
+  const _MgysdPhoneNumberInputFormatter(this.country);
+
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue,
+      TextEditingValue newValue,
+      ) {
+    final formatted = country.code == 'INTL'
+        ? _formatInternationalNumber(newValue.text)
+        : _formatNationalNumber(newValue.text);
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+      composing: TextRange.empty,
+    );
+  }
+
+  String _formatInternationalNumber(String value) {
+    final trimmed = value.trim();
+    final hasLeadingPlus = trimmed.startsWith('+');
+    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+    final limitedDigits = digits.length > country.maxNationalDigits
+        ? digits.substring(0, country.maxNationalDigits)
+        : digits;
+
+    if (limitedDigits.isEmpty) {
+      return hasLeadingPlus ? '+' : '';
+    }
+
+    return hasLeadingPlus ? '+$limitedDigits' : limitedDigits;
+  }
+
+  String _formatNationalNumber(String value) {
+    final dialDigits = country.dialCode.replaceAll('+', '');
+    var digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+
+    if (digits.startsWith(dialDigits) && digits.length > dialDigits.length) {
+      digits = digits.substring(dialDigits.length);
+    }
+
+    if (digits.startsWith('0')) {
+      final withoutLeadingZeros = digits.replaceFirst(RegExp(r'^0+'), '');
+      if (withoutLeadingZeros.isNotEmpty) {
+        digits = withoutLeadingZeros;
+      }
+    }
+
+    if (digits.length > country.maxNationalDigits) {
+      digits = digits.substring(0, country.maxNationalDigits);
+    }
+
+    return digits;
+  }
 }
 
 class _ReasonGroup {
@@ -237,6 +325,8 @@ class _NextOfKinEntry {
 
 class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   final _formKey = GlobalKey<FormState>();
+  final GlobalKey _reasonForEnrolmentSectionKey = GlobalKey();
+  final GlobalKey _clientDemographicsSectionKey = GlobalKey();
 
   final _fileNumberController = TextEditingController();
   final _districtController = TextEditingController();
@@ -308,6 +398,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   bool _restoringCachedState = false;
   bool _loadingExistingCase = false;
   bool _cacheWriteQueued = false;
+  bool _showMandatoryFieldErrors = false;
+  bool _forceOpenMandatorySections = false;
+  int _mandatoryExpansionRefresh = 0;
+  bool _countryPickerBusy = false;
 
   String _existingClientTeiId = '';
   String _existingFatherTeiId = '';
@@ -584,6 +678,119 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _Opt('FEMALE', 'Female'),
   ];
 
+  static const List<_MgysdCountryCodeOption> _phoneCountryOptions = [
+    _MgysdCountryCodeOption(
+      code: 'LS',
+      label: 'Lesotho (+266)',
+      dialCode: '+266',
+      minNationalDigits: 8,
+      maxNationalDigits: 8,
+      allowedNationalPrefixes: ['2', '5', '6'],
+      disallowedNationalPrefixes: ['54', '55'],
+      prefixHint: 'Lesotho numbers must start with 2, 5 or 6. Prefixes 54 and 55 are not allowed',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'ZA',
+      label: 'South Africa (+27)',
+      dialCode: '+27',
+      minNationalDigits: 9,
+      maxNationalDigits: 9,
+      allowedNationalPrefixes: [
+        '60', '61', '62', '63', '64', '65', '66', '67', '68',
+        '71', '72', '73', '74', '76', '78', '79', '81', '82', '83', '84',
+      ],
+      prefixHint: 'South African mobile numbers usually start with 6, 7 or 8 ranges such as 60, 71 or 82',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'ZW',
+      label: 'Zimbabwe (+263)',
+      dialCode: '+263',
+      minNationalDigits: 9,
+      maxNationalDigits: 9,
+      allowedNationalPrefixes: ['71', '73', '77', '78'],
+      prefixHint: 'Zimbabwe mobile numbers must start with 71, 73, 77 or 78',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'MZ',
+      label: 'Mozambique (+258)',
+      dialCode: '+258',
+      minNationalDigits: 8,
+      maxNationalDigits: 9,
+      allowedNationalPrefixes: ['82', '83', '84', '85', '86', '87'],
+      prefixHint: 'Mozambique mobile numbers must start with 82, 83, 84, 85, 86 or 87',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'BW',
+      label: 'Botswana (+267)',
+      dialCode: '+267',
+      minNationalDigits: 8,
+      maxNationalDigits: 8,
+      allowedNationalPrefixes: ['71', '72', '73', '74', '75', '76'],
+      prefixHint: 'Botswana mobile numbers must start with 71, 72, 73, 74, 75 or 76',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'NA',
+      label: 'Namibia (+264)',
+      dialCode: '+264',
+      minNationalDigits: 9,
+      maxNationalDigits: 9,
+      allowedNationalPrefixes: ['81', '82', '83', '84', '85'],
+      prefixHint: 'Namibia mobile/electronic communications numbers must start with 81, 82, 83, 84 or 85',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'SZ',
+      label: 'Eswatini (+268)',
+      dialCode: '+268',
+      minNationalDigits: 8,
+      maxNationalDigits: 8,
+      allowedNationalPrefixes: ['75', '76', '77', '78', '79'],
+      prefixHint: 'Eswatini mobile numbers must start with 75, 76, 77, 78 or 79',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'ZM',
+      label: 'Zambia (+260)',
+      dialCode: '+260',
+      minNationalDigits: 9,
+      maxNationalDigits: 9,
+      allowedNationalPrefixes: ['76', '77', '95', '96', '97'],
+      prefixHint: 'Zambia mobile numbers must start with 76, 77, 95, 96 or 97',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'MW',
+      label: 'Malawi (+265)',
+      dialCode: '+265',
+      minNationalDigits: 7,
+      maxNationalDigits: 9,
+      allowedNationalPrefixes: ['1', '3', '7', '8', '9'],
+      prefixHint: 'Malawi numbers must start with an allocated range such as 1, 3, 7, 8 or 9',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'US',
+      label: 'USA/Canada (+1)',
+      dialCode: '+1',
+      minNationalDigits: 10,
+      maxNationalDigits: 10,
+      useNanpRules: true,
+      prefixHint: 'USA/Canada numbers must follow NANP format: area code and exchange code start with 2-9',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'GB',
+      label: 'United Kingdom (+44)',
+      dialCode: '+44',
+      minNationalDigits: 10,
+      maxNationalDigits: 10,
+      allowedNationalPrefixes: ['7'],
+      prefixHint: 'UK mobile numbers must start with 7 after the +44 country code',
+    ),
+    _MgysdCountryCodeOption(
+      code: 'INTL',
+      label: 'Other country (use + code)',
+      dialCode: '+',
+      minNationalDigits: 8,
+      maxNationalDigits: 15,
+    ),
+  ];
+
   static const List<_Opt> nationalityOptions = [
     _Opt('MOSOTHO', 'Mosotho'),
     _Opt('SOUTH_AFRICAN', 'South African'),
@@ -835,6 +1042,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     _Opt('BLINDNESS', 'Blindness'),
     _Opt('SPEECH_IMPAIRMENT', 'Speech impairment'),
     _Opt('MOBILITY_IMPAIRMENT', 'Mobility impairment'),
+    _Opt('VISUAL_IMPAIRMENT', 'Visual impairment'),
+    _Opt('ALBINISM', 'Albinism'),
+    _Opt('DEAF', 'Deaf'),
     _Opt('OTHER', 'Other'),
   ];
 
@@ -2965,6 +3175,238 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     return age < 0 ? 0 : age;
   }
 
+  _MgysdCountryCodeOption _phoneCountryByCode(String code) {
+    for (final option in _phoneCountryOptions) {
+      if (option.code == code) return option;
+    }
+    return _phoneCountryOptions.first;
+  }
+
+  String _digitsOnly(String value) {
+    return value.replaceAll(RegExp(r'[^0-9]'), '');
+  }
+
+  bool _hasInvalidPhoneCharacters(String value) {
+    return RegExp(r'[^0-9+\s\-\(\)]').hasMatch(value);
+  }
+
+  bool _hasValidNationalLength(
+      String nationalDigits,
+      _MgysdCountryCodeOption country,
+      ) {
+    return nationalDigits.length >= country.minNationalDigits &&
+        nationalDigits.length <= country.maxNationalDigits;
+  }
+
+  bool _hasDisallowedNationalPrefix(
+      String nationalDigits,
+      _MgysdCountryCodeOption country,
+      ) {
+    if (country.code == 'INTL' || nationalDigits.isEmpty) return false;
+    return country.disallowedNationalPrefixes.any(nationalDigits.startsWith);
+  }
+
+  bool _hasPossibleNetworkPrefix(
+      String nationalDigits,
+      _MgysdCountryCodeOption country,
+      ) {
+    if (country.code == 'INTL' || nationalDigits.isEmpty) return true;
+
+    if (_hasDisallowedNationalPrefix(nationalDigits, country)) return false;
+
+    if (country.useNanpRules) {
+      if (nationalDigits.isNotEmpty &&
+          !RegExp(r'^[2-9]').hasMatch(nationalDigits)) {
+        return false;
+      }
+      if (nationalDigits.length >= 4 &&
+          !RegExp(r'^[2-9][0-9]{2}[2-9]').hasMatch(nationalDigits)) {
+        return false;
+      }
+      return true;
+    }
+
+    if (country.allowedNationalPrefixes.isEmpty) return true;
+
+    return country.allowedNationalPrefixes.any((prefix) {
+      return prefix.startsWith(nationalDigits) ||
+          nationalDigits.startsWith(prefix);
+    });
+  }
+
+  bool _hasValidNetworkPrefix(
+      String nationalDigits,
+      _MgysdCountryCodeOption country,
+      ) {
+    if (country.code == 'INTL') return true;
+
+    if (_hasDisallowedNationalPrefix(nationalDigits, country)) return false;
+
+    if (country.useNanpRules) {
+      return RegExp(r'^[2-9][0-9]{2}[2-9][0-9]{6}$')
+          .hasMatch(nationalDigits);
+    }
+
+    if (country.allowedNationalPrefixes.isEmpty) return true;
+
+    return country.allowedNationalPrefixes.any(nationalDigits.startsWith);
+  }
+
+  String _phonePrefixMessage(_MgysdCountryCodeOption country) {
+    return country.prefixHint.isNotEmpty
+        ? country.prefixHint
+        : 'Phone number prefix does not match selected country';
+  }
+
+  String _phoneLengthMessage(_MgysdCountryCodeOption country) {
+    if (country.minNationalDigits == country.maxNationalDigits) {
+      return '${country.label} numbers must have ${country.maxNationalDigits} digits after ${country.dialCode}';
+    }
+
+    return '${country.label} numbers must have ${country.minNationalDigits} to ${country.maxNationalDigits} digits after ${country.dialCode}';
+  }
+
+  void _validateNationalPhoneDigits(
+      String nationalDigits,
+      _MgysdCountryCodeOption country,
+      ) {
+    if (!_hasPossibleNetworkPrefix(nationalDigits, country)) {
+      throw FormatException(_phonePrefixMessage(country));
+    }
+
+    if (!_hasValidNationalLength(nationalDigits, country)) {
+      throw FormatException(_phoneLengthMessage(country));
+    }
+
+    if (!_hasValidNetworkPrefix(nationalDigits, country)) {
+      throw FormatException(_phonePrefixMessage(country));
+    }
+  }
+
+  String _normalisePhoneByCountryCode(String value, String countryCode) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return '';
+
+    final country = _phoneCountryByCode(countryCode);
+    final compact = trimmed.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+    final digits = _digitsOnly(compact);
+
+    if (digits.isEmpty) {
+      throw const FormatException('Phone number must contain digits');
+    }
+
+    if (country.code == 'INTL') {
+      if (!compact.startsWith('+')) {
+        throw const FormatException('International numbers must start with +');
+      }
+      if (digits.length < 8 || digits.length > 15) {
+        throw const FormatException('International numbers must have 8 to 15 digits');
+      }
+      return '+$digits';
+    }
+
+    final dialDigits = country.dialCode.replaceAll('+', '');
+
+    if (compact.startsWith('+')) {
+      if (!digits.startsWith(dialDigits)) {
+        throw const FormatException('Phone number country code does not match selected country');
+      }
+      final nationalDigits = digits.substring(dialDigits.length);
+      _validateNationalPhoneDigits(nationalDigits, country);
+      return '+$digits';
+    }
+
+    if (digits.startsWith(dialDigits)) {
+      final nationalDigits = digits.substring(dialDigits.length);
+      _validateNationalPhoneDigits(nationalDigits, country);
+      return '+$digits';
+    }
+
+    final localDigits = digits.replaceFirst(RegExp(r'^0+'), '');
+    _validateNationalPhoneDigits(localDigits, country);
+
+    return '${country.dialCode}$localDigits';
+  }
+
+  String _normalisedPhoneNumber(String value, String countryCode) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return '';
+
+    try {
+      return _normalisePhoneByCountryCode(trimmed, countryCode);
+    } catch (_) {
+      return trimmed;
+    }
+  }
+
+  String? _phoneValidator(
+      String? value, {
+        required bool requiredField,
+        required String countryCode,
+      }) {
+    final text = (value ?? '').trim();
+    if (!requiredField && text.isEmpty) return null;
+    if (text.isEmpty) return 'Required';
+
+    if (_hasInvalidPhoneCharacters(text)) {
+      return 'Use numbers only';
+    }
+
+    final country = _phoneCountryByCode(countryCode);
+
+    try {
+      _normalisePhoneByCountryCode(text, countryCode);
+      return null;
+    } on FormatException catch (e) {
+      if (country.code == 'INTL') {
+        return e.message.isNotEmpty
+            ? e.message
+            : 'Start with + country code, e.g. +266...';
+      }
+      return e.message.isNotEmpty
+          ? e.message
+          : 'Enter a valid ${country.label} phone number';
+    } catch (_) {
+      if (country.code == 'INTL') {
+        return 'Start with + country code, e.g. +266...';
+      }
+      return 'Enter a valid ${country.label} phone number';
+    }
+  }
+
+  String? _identityNumberValidator(String? value) {
+    final raw = (value ?? '').trim();
+    if (raw.isEmpty) return null;
+
+    final compact = raw.replaceAll(RegExp(r'[\s-]'), '').toUpperCase();
+
+    if (!RegExp(r'^[A-Z0-9]+$').hasMatch(compact)) {
+      return 'Use letters and numbers only';
+    }
+
+    if (compact.length < 6 || compact.length > 20) {
+      return 'Identity number must be 6 to 20 characters';
+    }
+
+    if (_nationality == 'SOUTH_AFRICAN' &&
+        RegExp(r'^\d+$').hasMatch(compact) &&
+        compact.length != 13) {
+      return 'South African identity number must have 13 digits';
+    }
+
+    return null;
+  }
+
+  List<String> _normalisedDynamicPhoneValues(List<_DynamicTextItem> items) {
+    return items
+        .map((item) => _normalisedPhoneNumber(
+      item.controller.text.trim(),
+      item.phoneCountryCode,
+    ))
+        .where((value) => value.isNotEmpty)
+        .toList();
+  }
+
   Future<void> _pickDateFor(TextEditingController controller) async {
     final now = DateTime.now();
     final initial = DateTime.tryParse(controller.text.trim()) ??
@@ -3002,10 +3444,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
         _clientDobController.text = _formatDate(picked);
         _clientAgeController.text = age.toString();
         _clientCategory = age < 18 ? 'CHILD' : 'ADULT_ELDERLY_PERSON';
-        if (!_isAdultOrElderly) {
-          _isAdultEmployed = '';
-          _employerNameController.clear();
-        }
+        _clearEmploymentFieldsForChild();
         if (_isAdultOrElderly) _grade = '';
         _removeHiddenReasonOptions();
       });
@@ -4046,37 +4485,133 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     return value == 'HIGH' || value == 'HIGHRISK';
   }
 
-  Future<void> _saveCase() async {
+  void _expandMandatorySectionsForValidation() {
+    _forceOpenMandatorySections = true;
+    _showMandatoryFieldErrors = true;
+    _mandatoryExpansionRefresh++;
+    _clearEmploymentFieldsForChild();
+
+    for (final nextOfKin in _nextOfKins) {
+      nextOfKin.isExpanded = true;
+    }
+
+    for (final caregiver in _caregivers) {
+      caregiver.isExpanded = true;
+    }
+
+    for (final member in _otherHouseholdMembers) {
+      member.isExpanded = true;
+    }
+  }
+
+  Future<void> _scrollToKey(GlobalKey key) async {
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+
+    final targetContext = key.currentContext;
+    if (targetContext == null) return;
+
+    await Scrollable.ensureVisible(
+      targetContext,
+      duration: const Duration(milliseconds: 550),
+      curve: Curves.easeInOut,
+      alignment: 0.12,
+    );
+  }
+
+  Future<void> _scrollToFirstInvalidFormField() async {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final formContext = _formKey.currentContext;
+      if (formContext == null) return;
+
+      FormFieldState<dynamic>? firstInvalidField;
+
+      void visit(Element element) {
+        if (firstInvalidField != null) return;
+
+        if (element is StatefulElement) {
+          final state = element.state;
+          if (state is FormFieldState<dynamic> && state.hasError) {
+            firstInvalidField = state;
+            return;
+          }
+        }
+
+        element.visitChildElements(visit);
+      }
+
+      (formContext as Element).visitChildElements(visit);
+
+      final invalidContext = firstInvalidField?.context;
+      if (invalidContext == null) return;
+
+      await Scrollable.ensureVisible(
+        invalidContext,
+        duration: const Duration(milliseconds: 550),
+        curve: Curves.easeInOut,
+        alignment: 0.12,
+      );
+
+    });
+  }
+
+  Future<bool> _validateBeforeSavingAndGoToFirstMissingField() async {
+    setState(_expandMandatorySectionsForValidation);
+
+    // Wait for collapsed Part sections and dynamic cards to rebuild in expanded mode
+    // before the validators run. This makes hidden mandatory fields visible first.
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+
     final isValid = _formKey.currentState?.validate() ?? false;
-    if (!isValid) return;
+    if (!isValid) {
+      _scrollToFirstInvalidFormField();
+      AppUtil.showToastMessage(
+        message: 'Please complete the highlighted mandatory field.',
+      );
+      return false;
+    }
 
     if (_selectedReasonOptions.isEmpty) {
+      await _scrollToKey(_reasonForEnrolmentSectionKey);
       AppUtil.showToastMessage(
         message: 'Please select at least one reason for enrolment.',
       );
-      return;
+      return false;
     }
 
     if (_reasonOtherSelected && _reasonOtherController.text.trim().isEmpty) {
+      await _scrollToKey(_reasonForEnrolmentSectionKey);
       AppUtil.showToastMessage(
         message: 'Please specify the other reason for enrolment.',
       );
-      return;
+      return false;
     }
 
     if (_clientCategory.trim().isEmpty) {
+      await _scrollToKey(_clientDemographicsSectionKey);
       AppUtil.showToastMessage(
         message: 'Please enter the client\'s date of birth to determine client category.',
       );
-      return;
+      return false;
     }
 
     if (_riskLevel.trim().isEmpty) {
+      _scrollToFirstInvalidFormField();
       AppUtil.showToastMessage(
         message: 'Please select the initial risk level.',
       );
-      return;
+      return false;
     }
+
+    _riskNextSteps
+      ..clear()
+      ..addAll(_socialInvestigationNextSteps());
+
+    return true;
+  }
+
+  Future<void> _saveCase() async {
+    final canSave = await _validateBeforeSavingAndGoToFirstMissingField();
+    if (!canSave) return;
 
     setState(() => _saving = true);
 
@@ -4676,6 +5211,421 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     );
   }
 
+  Widget _requiredInputLabel(String label, {required bool requiredField}) {
+    if (!requiredField) return Text(label);
+
+    return RichText(
+      text: TextSpan(
+        style: const TextStyle(
+          color: Colors.black87,
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+        ),
+        children: [
+          TextSpan(text: label),
+          const TextSpan(text: ' *', style: TextStyle(color: Colors.red)),
+        ],
+      ),
+    );
+  }
+
+  InputDecoration _phoneDecoration(
+      String label, {
+        required String hint,
+        required bool requiredField,
+      }) {
+    return InputDecoration(
+      label: _requiredInputLabel(label, requiredField: requiredField),
+      hintText: hint,
+      errorMaxLines: 4,
+      helperMaxLines: 4,
+      labelStyle: const TextStyle(
+        fontWeight: FontWeight.w700,
+        color: Colors.blueGrey,
+      ),
+      hintStyle: TextStyle(
+        color: Colors.blueGrey.withOpacity(0.82),
+        fontSize: 13,
+        fontWeight: FontWeight.w500,
+      ),
+      filled: true,
+      fillColor: const Color(0xFFF3F7FA),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.blueGrey.withOpacity(0.24)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(
+          color: Theme.of(context).colorScheme.primary,
+          width: 1.6,
+        ),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.red.withOpacity(0.65)),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.red.withOpacity(0.85), width: 1.4),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    );
+  }
+
+  String _countryDisplayName(_MgysdCountryCodeOption country) {
+    final label = country.label.trim();
+    final bracketIndex = label.indexOf(' (');
+    if (bracketIndex > 0) return label.substring(0, bracketIndex);
+    return label;
+  }
+
+  String _countryFlag(_MgysdCountryCodeOption country) {
+    switch (country.code) {
+      case 'LS':
+        return '🇱🇸';
+      case 'ZA':
+        return '🇿🇦';
+      case 'ZW':
+        return '🇿🇼';
+      case 'MZ':
+        return '🇲🇿';
+      case 'BW':
+        return '🇧🇼';
+      case 'NA':
+        return '🇳🇦';
+      case 'SZ':
+        return '🇸🇿';
+      case 'ZM':
+        return '🇿🇲';
+      case 'MW':
+        return '🇲🇼';
+      case 'US':
+        return '🇺🇸';
+      case 'GB':
+        return '🇬🇧';
+      case 'INTL':
+        return '🌐';
+      default:
+        return '🌐';
+    }
+  }
+
+  String _phoneFieldLabel(String label, _MgysdCountryCodeOption country) {
+    if (country.code == 'INTL') return label;
+
+    if (country.minNationalDigits == country.maxNationalDigits) {
+      return '$label (${country.maxNationalDigits} digits)';
+    }
+
+    return '$label (${country.minNationalDigits}-${country.maxNationalDigits} digits)';
+  }
+
+  String _formatPhoneTextForSelectedCountry(String value, String countryCode) {
+    final country = _phoneCountryByCode(countryCode);
+    return _MgysdPhoneNumberInputFormatter(country).formatEditUpdate(
+      const TextEditingValue(),
+      TextEditingValue(text: value),
+    ).text;
+  }
+
+  void _formatPhoneControllerForSelectedCountry(
+      TextEditingController controller,
+      String countryCode,
+      ) {
+    final formatted = _formatPhoneTextForSelectedCountry(
+      controller.text,
+      countryCode,
+    );
+
+    controller.value = TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+      composing: TextRange.empty,
+    );
+  }
+
+  Future<String?> _showCountryPicker({
+    required String selectedCode,
+  }) async {
+    String query = '';
+
+    return showDialog<String>(
+      context: context,
+      useRootNavigator: true,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setModalState) {
+            final normalizedQuery = query.trim().toLowerCase();
+            final countries = normalizedQuery.isEmpty
+                ? _phoneCountryOptions
+                : _phoneCountryOptions.where((country) {
+              final countryName = _countryDisplayName(country).toLowerCase();
+              final label = country.label.toLowerCase();
+              final dialCode = country.dialCode.toLowerCase();
+              final code = country.code.toLowerCase();
+
+              return countryName.contains(normalizedQuery) ||
+                  label.contains(normalizedQuery) ||
+                  dialCode.contains(normalizedQuery) ||
+                  code.contains(normalizedQuery);
+            }).toList();
+
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 24,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: 620,
+                  maxHeight: MediaQuery.of(dialogContext).size.height * 0.82,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Select Country',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () {
+                              FocusScope.of(dialogContext).unfocus();
+                              Navigator.of(dialogContext, rootNavigator: true).pop();
+                            },
+                            icon: const Icon(Icons.close),
+                            tooltip: 'Close',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        autofocus: false,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.search),
+                          hintText: 'Search by country or code (e.g. Lesotho or +266)',
+                          isDense: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: Colors.blueGrey.withOpacity(0.25),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: widget.color,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                        onChanged: (value) => setModalState(() {
+                          query = value;
+                        }),
+                      ),
+                      const SizedBox(height: 12),
+                      Flexible(
+                        child: countries.isEmpty
+                            ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Text('No countries found'),
+                          ),
+                        )
+                            : ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: countries.length,
+                          itemBuilder: (itemContext, index) {
+                            final country = countries[index];
+                            final selected = country.code == selectedCode;
+
+                            return Material(
+                              color: selected
+                                  ? widget.color.withOpacity(0.10)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(10),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(10),
+                                onTap: () {
+                                  FocusScope.of(dialogContext).unfocus();
+                                  Navigator.of(dialogContext, rootNavigator: true)
+                                      .pop(country.code);
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 12,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        _countryFlag(country),
+                                        style: const TextStyle(fontSize: 24),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          _countryDisplayName(country),
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: selected
+                                                ? FontWeight.w800
+                                                : FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                      Text(
+                                        country.dialCode,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.blueGrey,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _countryCodeSelectorButton({
+    required String value,
+    required void Function(String?) onChanged,
+  }) {
+    final country = _phoneCountryByCode(value);
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () async {
+        if (_countryPickerBusy) return;
+        _countryPickerBusy = true;
+
+        final selectedCode = await _showCountryPicker(
+          selectedCode: country.code,
+        );
+
+        _countryPickerBusy = false;
+
+        if (!mounted || selectedCode == null || selectedCode == value) return;
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          onChanged(selectedCode);
+        });
+      },
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.blueGrey.withOpacity(0.25)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _countryFlag(country),
+                style: const TextStyle(fontSize: 20),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                country.dialCode,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.keyboard_arrow_down, size: 18),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _phoneInputField({
+    required String label,
+    required TextEditingController controller,
+    required String countryCode,
+    required void Function(String?) onCountryChanged,
+    required bool requiredField,
+  }) {
+    final country = _phoneCountryByCode(countryCode);
+    final phoneHint = country.code == 'INTL'
+        ? 'Start with + country code'
+        : country.minNationalDigits == country.maxNationalDigits
+        ? 'Phone Number (${country.maxNationalDigits} digits)'
+        : 'Phone Number (${country.minNationalDigits}-${country.maxNationalDigits} digits)';
+
+    final phoneField = TextFormField(
+      controller: controller,
+      decoration: _phoneDecoration(
+        _phoneFieldLabel(label, country),
+        hint: phoneHint,
+        requiredField: requiredField,
+      ),
+      keyboardType: country.code == 'INTL'
+          ? TextInputType.phone
+          : TextInputType.number,
+      inputFormatters: [
+        _MgysdPhoneNumberInputFormatter(country),
+      ],
+      autovalidateMode: AutovalidateMode.onUserInteraction,
+      validator: (value) => _phoneValidator(
+        value,
+        requiredField: requiredField,
+        countryCode: countryCode,
+      ),
+    );
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 108,
+          child: _countryCodeSelectorButton(
+            value: countryCode,
+            onChanged: onCountryChanged,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(child: phoneField),
+      ],
+    );
+  }
+
   Widget _reasonGroupCard(_ReasonGroup group) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -4726,90 +5676,105 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     final visibleSingleReasons =
     singleReasons.where(_isVisibleSingleReason).toList();
 
-    return MaterialCard(
-      body: Container(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _titleRow(
-              color: primary,
-              title: 'Reason for Enrolment',
-              subtitle: 'Select all applicable reasons for this case.',
-              icon: Icons.fact_check_outlined,
-            ),
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: primary.withOpacity(0.10),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: primary.withOpacity(0.16)),
+    return KeyedSubtree(
+      key: _reasonForEnrolmentSectionKey,
+      child: MaterialCard(
+        body: Container(
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _titleRow(
+                color: primary,
+                title: 'Reason for Enrolment',
+                subtitle: 'Select all applicable reasons for this case.',
+                icon: Icons.fact_check_outlined,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Identified Concerns',
-                    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'These are the specific concerns identified for this client.',
-                    style: TextStyle(color: Colors.blueGrey, fontSize: 12.5, height: 1.3),
-                  ),
-                  const SizedBox(height: 12),
-                  ..._visibleGroupedReasons().map(_reasonGroupCard).toList(),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.blueGrey.withOpacity(0.18)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Other enrolment reasons',
-                    style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w800,
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: primary.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: primary.withOpacity(0.16)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Identified Concerns',
+                      style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children:
-                    visibleSingleReasons.map(_reasonChoiceChip).toList(),
-                  ),
-                  if (_reasonOtherSelected) ...[
+                    const SizedBox(height: 4),
+                    const Text(
+                      'These are the specific concerns identified for this client.',
+                      style: TextStyle(color: Colors.blueGrey, fontSize: 12.5, height: 1.3),
+                    ),
                     const SizedBox(height: 12),
-                    _Input(
-                      controller: _reasonOtherController,
-                      label: 'Specify other reason',
-                      hint: 'Describe other reason for enrolment',
-                      maxLines: 3,
-                      validator: (v) {
-                        if (_reasonOtherSelected &&
-                            (v == null || v.trim().isEmpty)) {
-                          return 'Please specify other reason';
-                        }
-                        return null;
-                      },
-                    ),
+                    ..._visibleGroupedReasons().map(_reasonGroupCard).toList(),
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.blueGrey.withOpacity(0.18)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Other enrolment reasons',
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children:
+                      visibleSingleReasons.map(_reasonChoiceChip).toList(),
+                    ),
+                    if (_showMandatoryFieldErrors &&
+                        _selectedReasonOptions.isEmpty) ...[
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Please select at least one reason for enrolment.',
+                        style: TextStyle(
+                          color: Colors.red,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ],
+                    if (_reasonOtherSelected) ...[
+                      const SizedBox(height: 12),
+                      _Input(
+                        controller: _reasonOtherController,
+                        label: 'Specify other reason',
+                        hint: 'Describe other reason for enrolment',
+                        maxLines: 3,
+                        validator: (v) {
+                          if (_reasonOtherSelected &&
+                              (v == null || v.trim().isEmpty)) {
+                            return 'Please specify other reason';
+                          }
+                          return null;
+                        },
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -5174,6 +6139,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
   }
 
   Widget _buildInitialRiskAssessmentSection(Color primary) {
+    final socialInvestigationPriority = _riskPriorityLabel();
+
     return MaterialCard(
       body: Padding(
         padding: const EdgeInsets.all(12.0),
@@ -5201,8 +6168,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               ),
               _Input(
                 controller: _riskSocialWorkerController,
-                label: 'Social Worker',
-                hint: 'Name of social worker',
+                label: 'Case Worker',
+                hint: 'Name of case worker',
               ),
             ),
             const SizedBox(height: 10),
@@ -5236,7 +6203,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               notesController: _riskExtendedFamilyNotesController,
             ),
             _riskDomainItem(
-              title: 'Client relationships',
+              title: 'Client relationship with HH members',
               value: _riskClientRelationships,
               options: riskRelationshipOptions,
               onChanged: (v) => setState(() => _riskClientRelationships = v ?? ''),
@@ -5291,13 +6258,20 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               onChanged: (v) => setState(() => _riskEducation = v ?? ''),
               notesController: _riskEducationNotesController,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             _dropdown(
               label: 'Decision on level of risk *',
               value: _riskLevel,
               options: riskLevelOptions,
               requiredField: true,
-              onChanged: (v) => setState(() => _riskLevel = v ?? ''),
+              onChanged: (v) {
+                setState(() {
+                  _riskLevel = v ?? '';
+                  _riskNextSteps
+                    ..clear()
+                    ..addAll(_socialInvestigationNextSteps());
+                });
+              },
             ),
             const SizedBox(height: 10),
             _Input(
@@ -5313,18 +6287,46 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               hint: 'Record immediate referrals needed or made',
               maxLines: 3,
             ),
-            const SizedBox(height: 12),
-            _riskMultiSelect(
-              title: 'Next steps',
-              options: riskNextStepOptions,
-              selectedValues: _riskNextSteps,
-            ),
-            const SizedBox(height: 12),
-            _Input(
-              controller: _riskAdditionalNotesController,
-              label: 'Additional notes',
-              hint: 'Any additional initial risk notes',
-              maxLines: 4,
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: primary.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: primary.withOpacity(0.18)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.travel_explore_outlined, color: primary, size: 21),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Social Investigation required for all cases',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 13.5,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          socialInvestigationPriority,
+                          style: const TextStyle(
+                            color: Colors.blueGrey,
+                            fontSize: 12.5,
+                            height: 1.3,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -5342,7 +6344,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             _titleRow(
               color: primary,
               title: 'Additional Assessment',
-              subtitle: 'Self-care, disability, assistive devices, rehabilitation and employability.',
+              subtitle: _showEmploymentQuestions
+                  ? 'Self-care, disability, assistive devices, rehabilitation and employability.'
+                  : 'Self-care, disability, assistive devices and rehabilitation.',
               icon: Icons.accessible_outlined,
             ),
             const SizedBox(height: 12),
@@ -5358,7 +6362,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             ),
             _yesNoGatedMultiSelect(
               title: 'Disability diagnosis',
-              subtitle: 'Have you ever been diagnosed with any form of disability? e.g. hearing loss, blindness, speech impairment, mobility impairment.',
+              subtitle: 'Any form of disability? e.g. hearing loss, blindness, speech impairment, mobility impairment, vision impairment, albinism, deaf.',
               gateValue: _hasDisabilityDiagnosis,
               onGateChanged: (v) => setState(() {
                 _hasDisabilityDiagnosis = v ?? '';
@@ -5552,6 +6556,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
     required void Function(String value) onLivingWithChildChanged,
     required TextEditingController whyNotLivingController,
     required TextEditingController phoneController,
+    required String phoneCountryCode,
+    required void Function(String value) onPhoneCountryChanged,
   }) {
     return Container(
       width: double.infinity,
@@ -5621,11 +6627,18 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 maxLines: 3,
               ),
               const SizedBox(height: 10),
-              _Input(
+              _phoneInputField(
                 controller: phoneController,
                 label: 'Phone Number',
-                hint: 'e.g. 5xxxxxxx',
-                keyboardType: TextInputType.phone,
+                countryCode: phoneCountryCode,
+                requiredField: false,
+                onCountryChanged: (value) {
+                  onPhoneCountryChanged(value ?? 'LS');
+                  _formatPhoneControllerForSelectedCountry(
+                    phoneController,
+                    value ?? 'LS',
+                  );
+                },
               ),
             ],
           ],
@@ -5730,13 +6743,18 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               ),
             ),
             const SizedBox(height: 10),
-            _Input(
+            _phoneInputField(
               controller: caregiver.phoneController,
               label: 'Phone Number',
-              hint: 'e.g. 5xxxxxxx',
-              keyboardType: TextInputType.phone,
+              countryCode: caregiver.phoneCountryCode,
               requiredField: true,
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+              onCountryChanged: (value) {
+                setState(() => caregiver.phoneCountryCode = value ?? 'LS');
+                _formatPhoneControllerForSelectedCountry(
+                  caregiver.phoneController,
+                  caregiver.phoneCountryCode,
+                );
+              },
             ),
           ],
         ],
@@ -5786,13 +6804,18 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
               ),
             ),
             const SizedBox(height: 10),
-            _Input(
+            _phoneInputField(
               controller: nextOfKin.phoneController,
               label: 'Phone Number',
-              hint: 'e.g. 5xxxxxxx',
-              keyboardType: TextInputType.phone,
+              countryCode: nextOfKin.phoneCountryCode,
               requiredField: true,
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+              onCountryChanged: (value) {
+                setState(() => nextOfKin.phoneCountryCode = value ?? 'LS');
+                _formatPhoneControllerForSelectedCountry(
+                  nextOfKin.phoneController,
+                  nextOfKin.phoneCountryCode,
+                );
+              },
             ),
             const SizedBox(height: 10),
             _Input(
@@ -5949,11 +6972,18 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             ),
           ),
           const SizedBox(height: 10),
-          _Input(
+          _phoneInputField(
             controller: _personalAssistantPhoneController,
             label: 'Phone Number',
-            hint: 'e.g. 5xxxxxxx',
-            keyboardType: TextInputType.phone,
+            countryCode: _personalAssistantPhoneCountryCode,
+            requiredField: false,
+            onCountryChanged: (value) {
+              setState(() => _personalAssistantPhoneCountryCode = value ?? 'LS');
+              _formatPhoneControllerForSelectedCountry(
+                _personalAssistantPhoneController,
+                _personalAssistantPhoneCountryCode,
+              );
+            },
           ),
         ],
       ),
@@ -6009,6 +7039,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 },
                 whyNotLivingController: _fatherWhyNotLivingController,
                 phoneController: _fatherPhoneController,
+                phoneCountryCode: _fatherPhoneCountryCode,
+                onPhoneCountryChanged: (value) {
+                  setState(() => _fatherPhoneCountryCode = value.isEmpty ? 'LS' : value);
+                },
               ),
               _parentSection(
                 title: 'Mother',
@@ -6043,6 +7077,10 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 },
                 whyNotLivingController: _motherWhyNotLivingController,
                 phoneController: _motherPhoneController,
+                phoneCountryCode: _motherPhoneCountryCode,
+                onPhoneCountryChanged: (value) {
+                  setState(() => _motherPhoneCountryCode = value.isEmpty ? 'LS' : value);
+                },
               ),
             ],
             _caregiverSection(),
@@ -6179,13 +7217,18 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                 requiredField: true,
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
               ),
-              _Input(
+              _phoneInputField(
                 controller: member.contactsController,
                 label: 'Contacts',
-                hint: 'Phone / contact details',
-                keyboardType: TextInputType.phone,
+                countryCode: member.contactsCountryCode,
                 requiredField: true,
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                onCountryChanged: (value) {
+                  setState(() => member.contactsCountryCode = value ?? 'LS');
+                  _formatPhoneControllerForSelectedCountry(
+                    member.contactsController,
+                    member.contactsCountryCode,
+                  );
+                },
               ),
             ),
             const SizedBox(height: 10),
@@ -6268,7 +7311,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       body: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          initiallyExpanded: initiallyExpanded,
+          key: ValueKey('part_${title}_$_mandatoryExpansionRefresh'),
+          initiallyExpanded: initiallyExpanded || _forceOpenMandatorySections,
           tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
           leading: CircleAvatar(
@@ -6315,6 +7359,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
+          key: ValueKey('subpart_${title}_$_mandatoryExpansionRefresh'),
+          initiallyExpanded: _forceOpenMandatorySections,
           tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
           leading: Icon(icon, color: color, size: 20),
@@ -6363,6 +7409,7 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
             margin: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 10.0),
             child: Form(
               key: _formKey,
+              onChanged: _scheduleCacheSave,
               child: Column(
                 children: [
                   if ((widget.reportedEventId ?? '').trim().isNotEmpty)
@@ -6385,39 +7432,8 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                     ),
                   const SizedBox(height: 12),
                   _partTile(
-                    title: 'Part 1: Risk Assessment and Reasons for Enrolment',
-                    subtitle: 'Start with assessment, then confirm why the client is enrolled.',
-                    icon: Icons.fact_check_outlined,
-                    color: primary,
-                    initiallyExpanded: true,
-                    children: [
-                      _subPartTile(
-                        title: '1.1 Initial Assessment',
-                        subtitle: 'Capture risk level and key assessment domains.',
-                        icon: Icons.health_and_safety_outlined,
-                        color: primary,
-                        child: _buildInitialRiskAssessmentSection(primary),
-                      ),
-                      _subPartTile(
-                        title: '1.2 Reasons for Enrolment',
-                        subtitle: 'Select only the reason(s) that apply.',
-                        icon: Icons.assignment_late_outlined,
-                        color: primary,
-                        child: _buildReasonSection(primary),
-                      ),
-                      _subPartTile(
-                        title: '1.3 Additional Assessment',
-                        subtitle: 'Disability, self-care, rehabilitation and employability.',
-                        icon: Icons.accessibility_new_outlined,
-                        color: primary,
-                        child: _buildAdditionalAssessmentSection(primary),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  _partTile(
-                    title: 'Part 2: Household, Client and Education',
-                    subtitle: 'Location, client identity, school and employment details.',
+                    title: 'Part 1: Demographics, Household and Education',
+                    subtitle: 'Capture household location, client demographics, education and applicable adult employment details.',
                     icon: Icons.home_work_outlined,
                     color: primary,
                     initiallyExpanded: true,
@@ -6507,196 +7523,221 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      MaterialCard(
-                        body: Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _titleRow(
-                                color: primary,
-                                title: 'Demographics and Reporting Information',
-                                subtitle:
-                                'Capture the main client information for this case.',
-                                icon: Icons.person_outline,
-                              ),
-                              const SizedBox(height: 12),
-                              _Input(
-                                controller: _identityNumberController,
-                                label: 'Identity Number',
-                                hint: 'National ID / document number',
-                              ),
-                              const SizedBox(height: 10),
-                              _row2(
+                      KeyedSubtree(
+                        key: _clientDemographicsSectionKey,
+                        child: MaterialCard(
+                          body: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _titleRow(
+                                  color: primary,
+                                  title: 'Demographics and Reporting Information',
+                                  subtitle:
+                                  'Capture the main client information for this case.',
+                                  icon: Icons.person_outline,
+                                ),
+                                const SizedBox(height: 12),
                                 _Input(
-                                  controller: _clientFirstNameController,
-                                  label: 'First name',
-                                  hint: 'Client first name',
-                                  validator: (v) =>
-                                  (v == null || v.trim().isEmpty)
-                                      ? 'First name is required'
-                                      : null,
-                                ),
-                                _Input(
-                                  controller: _clientSurnameController,
-                                  label: 'Surname',
-                                  hint: 'Client surname',
-                                  validator: (v) =>
-                                  (v == null || v.trim().isEmpty)
-                                      ? 'Surname is required'
-                                      : null,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              _row2(
-                                GestureDetector(
-                                  onTap: _pickDobForClient,
-                                  child: AbsorbPointer(
-                                    child: _Input(
-                                      controller: _clientDobController,
-                                      label: 'Date of Birth',
-                                      hint: 'Pick date',
-                                      suffixIcon: const Icon(Icons.date_range),
-                                      validator: (v) =>
-                                      (v == null || v.trim().isEmpty)
-                                          ? 'Date of birth is required'
-                                          : null,
-                                    ),
-                                  ),
-                                ),
-                                _Input(
-                                  controller: _clientAgeController,
-                                  label: 'Age',
-                                  hint: 'Auto-calculated',
-                                  readOnly: true,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              _dropdown(
-                                label: 'Sex',
-                                value: _sex,
-                                options: sexOptions,
-                                requiredField: true,
-                                onChanged: (v) {
-                                  setState(() {
-                                    _sex = v ?? '';
-                                    _removeHiddenReasonOptions();
-                                  });
-                                },
-                              ),
-                              const SizedBox(height: 10),
-                              _dropdown(
-                                label: 'Nationality',
-                                value: _nationality,
-                                options: nationalityOptions,
-                                requiredField: true,
-                                onChanged: (v) {
-                                  setState(() {
-                                    _nationality = v ?? '';
-                                    if (_nationality != 'OTHER') {
-                                      _nationalityOtherController.clear();
-                                    }
-                                  });
-                                },
-                              ),
-                              if (_nationality == 'OTHER') ...[
-                                const SizedBox(height: 10),
-                                _Input(
-                                  controller: _nationalityOtherController,
-                                  label: 'Specify other nationality',
-                                  hint: 'Enter nationality',
-                                  validator: (v) {
-                                    if (_nationality == 'OTHER' &&
-                                        (v == null || v.trim().isEmpty)) {
-                                      return 'Please specify nationality';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                              ],
-                              const SizedBox(height: 10),
-                              _dropdown(
-                                label: 'Home Language',
-                                value: _homeLanguage,
-                                options: homeLanguageOptions,
-                                requiredField: true,
-                                onChanged: (v) {
-                                  setState(() {
-                                    _homeLanguage = v ?? '';
-                                    if (_homeLanguage != 'OTHER') {
-                                      _homeLanguageOtherController.text = '';
-                                    }
-                                  });
-                                },
-                              ),
-                              if (_homeLanguage == 'OTHER') ...[
-                                const SizedBox(height: 10),
-                                _Input(
-                                  controller: _homeLanguageOtherController,
-                                  label: 'Specify other language',
-                                  hint: 'Enter language',
-                                ),
-                              ],
-                              const SizedBox(height: 10),
-                              _row2(
-                                _Input(
-                                  controller: _phoneController,
-                                  label: 'Phone Number',
-                                  hint: 'e.g. 5xxxxxxx',
-                                  keyboardType: TextInputType.phone,
-                                ),
-                                _Input(
-                                  controller: _alternativePhoneController,
-                                  label: 'Alternative Phone Number',
-                                  hint: 'e.g. 5xxxxxxx',
-                                  keyboardType: TextInputType.phone,
-                                ),
-                              ),
-
-                              const SizedBox(height: 10),
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFE7EEF4),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: Colors.blueGrey.withOpacity(0.22)),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      _clientCategory.isEmpty
-                                          ? Icons.info_outline
-                                          : Icons.check_circle_outline,
-                                      color: Colors.blueGrey,
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          const Text(
-                                            'Client category',
-                                            style: TextStyle(color: Colors.blueGrey, fontSize: 12.5),
-                                          ),
-                                          const SizedBox(height: 3),
-                                          Text(
-                                            _clientCategory.isEmpty
-                                                ? 'Not yet determined — pick the Date of Birth above'
-                                                : (_isChild ? 'Child' : 'Adult / Elderly Person'),
-                                            style: const TextStyle(
-                                              fontSize: 14.5,
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                                  controller: _identityNumberController,
+                                  label: 'Identity Number',
+                                  hint: 'National ID / document number',
+                                  keyboardType: TextInputType.text,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.allow(
+                                      RegExp(r'[A-Za-z0-9\s-]'),
                                     ),
                                   ],
+                                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                                  validator: _identityNumberValidator,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 10),
+                                _row2(
+                                  _Input(
+                                    controller: _clientFirstNameController,
+                                    label: 'First name',
+                                    hint: 'Client first name',
+                                    validator: (v) =>
+                                    (v == null || v.trim().isEmpty)
+                                        ? 'First name is required'
+                                        : null,
+                                  ),
+                                  _Input(
+                                    controller: _clientSurnameController,
+                                    label: 'Surname',
+                                    hint: 'Client surname',
+                                    validator: (v) =>
+                                    (v == null || v.trim().isEmpty)
+                                        ? 'Surname is required'
+                                        : null,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                _row2(
+                                  GestureDetector(
+                                    onTap: _pickDobForClient,
+                                    child: AbsorbPointer(
+                                      child: _Input(
+                                        controller: _clientDobController,
+                                        label: 'Date of Birth',
+                                        hint: 'Pick date',
+                                        suffixIcon: const Icon(Icons.date_range),
+                                        validator: (v) =>
+                                        (v == null || v.trim().isEmpty)
+                                            ? 'Date of birth is required'
+                                            : null,
+                                      ),
+                                    ),
+                                  ),
+                                  _Input(
+                                    controller: _clientAgeController,
+                                    label: 'Age',
+                                    hint: 'Auto-calculated',
+                                    readOnly: true,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                _dropdown(
+                                  label: 'Sex',
+                                  value: _sex,
+                                  options: sexOptions,
+                                  requiredField: true,
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _sex = v ?? '';
+                                      _removeHiddenReasonOptions();
+                                    });
+                                  },
+                                ),
+                                const SizedBox(height: 10),
+                                _dropdown(
+                                  label: 'Nationality',
+                                  value: _nationality,
+                                  options: nationalityOptions,
+                                  requiredField: true,
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _nationality = v ?? '';
+                                      if (_nationality != 'OTHER') {
+                                        _nationalityOtherController.clear();
+                                      }
+                                    });
+                                  },
+                                ),
+                                if (_nationality == 'OTHER') ...[
+                                  const SizedBox(height: 10),
+                                  _Input(
+                                    controller: _nationalityOtherController,
+                                    label: 'Specify other nationality',
+                                    hint: 'Enter nationality',
+                                    validator: (v) {
+                                      if (_nationality == 'OTHER' &&
+                                          (v == null || v.trim().isEmpty)) {
+                                        return 'Please specify nationality';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                ],
+                                const SizedBox(height: 10),
+                                _dropdown(
+                                  label: 'Home Language',
+                                  value: _homeLanguage,
+                                  options: homeLanguageOptions,
+                                  requiredField: true,
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _homeLanguage = v ?? '';
+                                      if (_homeLanguage != 'OTHER') {
+                                        _homeLanguageOtherController.text = '';
+                                      }
+                                    });
+                                  },
+                                ),
+                                if (_homeLanguage == 'OTHER') ...[
+                                  const SizedBox(height: 10),
+                                  _Input(
+                                    controller: _homeLanguageOtherController,
+                                    label: 'Specify other language',
+                                    hint: 'Enter language',
+                                  ),
+                                ],
+                                const SizedBox(height: 10),
+                                _row2(
+                                  _phoneInputField(
+                                    controller: _phoneController,
+                                    label: 'Phone Number',
+                                    countryCode: _clientPhoneCountryCode,
+                                    requiredField: false,
+                                    onCountryChanged: (value) {
+                                      setState(() => _clientPhoneCountryCode = value ?? 'LS');
+                                      _formatPhoneControllerForSelectedCountry(
+                                        _phoneController,
+                                        _clientPhoneCountryCode,
+                                      );
+                                    },
+                                  ),
+                                  _phoneInputField(
+                                    controller: _alternativePhoneController,
+                                    label: 'Alternative Phone Number',
+                                    countryCode: _clientAlternativePhoneCountryCode,
+                                    requiredField: false,
+                                    onCountryChanged: (value) {
+                                      setState(() => _clientAlternativePhoneCountryCode = value ?? 'LS');
+                                      _formatPhoneControllerForSelectedCountry(
+                                        _alternativePhoneController,
+                                        _clientAlternativePhoneCountryCode,
+                                      );
+                                    },
+                                  ),
+                                ),
+
+                                const SizedBox(height: 10),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE7EEF4),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(color: Colors.blueGrey.withOpacity(0.22)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        _clientCategory.isEmpty
+                                            ? Icons.info_outline
+                                            : Icons.check_circle_outline,
+                                        color: Colors.blueGrey,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Text(
+                                              'Client category',
+                                              style: TextStyle(color: Colors.blueGrey, fontSize: 12.5),
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              _clientCategory.isEmpty
+                                                  ? 'Not yet determined — pick the Date of Birth above'
+                                                  : (_isChild ? 'Child' : 'Adult / Elderly Person'),
+                                              style: const TextStyle(
+                                                fontSize: 14.5,
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -6877,10 +7918,9 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  const SizedBox(height: 12),
                   _partTile(
-                    title: 'Part 3: Family and Household Members',
-                    subtitle: 'Next of kin, parents, caregivers and household members.',
+                    title: 'Part 2: Family and Household Members',
+                    subtitle: 'Capture next of kin, parents, caregivers and household members after demographics.',
                     icon: Icons.family_restroom_outlined,
                     color: primary,
                     children: [
@@ -6922,18 +7962,102 @@ class _MgysdNewCasePageState extends State<MgysdNewCasePage> {
                     ],
                   ),
                   const SizedBox(height: 12),
+                  _partTile(
+                    title: 'Part 3: Initial Risk Assessment and Referrals',
+                    subtitle: 'Complete initial risk assessment, reasons for enrolment, then additional assessment.',
+                    icon: Icons.fact_check_outlined,
+                    color: primary,
+                    children: [
+                      _subPartTile(
+                        title: '3.1 Initial Risk Assessment',
+                        subtitle: 'Record assessment domains, decision on risk level, risk reason and referrals.',
+                        icon: Icons.health_and_safety_outlined,
+                        color: primary,
+                        child: _buildInitialRiskAssessmentSection(primary),
+                      ),
+                      _subPartTile(
+                        title: '3.2 Reasons for Enrolment',
+                        subtitle: 'Select only the reason(s) that apply.',
+                        icon: Icons.assignment_late_outlined,
+                        color: primary,
+                        child: _buildReasonSection(primary),
+                      ),
+                      _subPartTile(
+                        title: '3.3 Additional Assessment',
+                        subtitle: 'Disability, self-care, rehabilitation and employability.',
+                        icon: Icons.accessibility_new_outlined,
+                        color: primary,
+                        child: _buildAdditionalAssessmentSection(primary),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
                   const SizedBox(height: 16),
-                  EntryFormSaveButton(
-                    marginLeft: 20.0,
-                    marginRight: 20.0,
-                    label: _saving ? 'Saving...' : 'Save Intake and Initial Risk Assessment',
-                    svgIconPath: 'assets/icons/save-icon.svg',
-                    svgIconHeight: 16.0,
-                    svgIconWidth: 16.0,
-                    labelColor: Colors.white,
-                    buttonColor: primary,
-                    fontSize: 15.0,
-                    onPressButton: _saving ? () {} : _saveCase,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: (_saving || _loadingExistingCase)
+                            ? null
+                            : _saveDraftCacheManually,
+                        icon: const Icon(Icons.cloud_done_outlined),
+                        label: const Text('Save Draft / Cache'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: primary,
+                          side: BorderSide(color: primary.withOpacity(0.55)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: (_saving || _loadingExistingCase) ? null : _saveCase,
+                        icon: _saving
+                            ? const SizedBox(
+                          width: 17,
+                          height: 17,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                            : const Icon(Icons.save_outlined),
+                        label: Text(
+                          _saving
+                              ? 'Saving...'
+                              : widget.isEditing
+                              ? 'Update Intake and Initial Risk Assessment'
+                              : 'Save Intake and Initial Risk Assessment',
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primary,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: primary.withOpacity(0.65),
+                          disabledForegroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 15),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -6958,6 +8082,9 @@ class _Input extends StatelessWidget {
     this.readOnly = false,
     this.keyboardType,
     this.requiredField = false,
+    this.inputFormatters,
+    this.autovalidateMode,
+    this.onChanged,
   }) : super(key: key);
 
   final TextEditingController controller;
@@ -6969,6 +8096,9 @@ class _Input extends StatelessWidget {
   final bool readOnly;
   final TextInputType? keyboardType;
   final bool requiredField;
+  final List<TextInputFormatter>? inputFormatters;
+  final AutovalidateMode? autovalidateMode;
+  final void Function(String)? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -6978,6 +8108,9 @@ class _Input extends StatelessWidget {
       maxLines: maxLines,
       readOnly: readOnly,
       keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
+      autovalidateMode: autovalidateMode,
+      onChanged: onChanged,
       decoration: InputDecoration(
         label: requiredField
             ? RichText(
@@ -6992,6 +8125,8 @@ class _Input extends StatelessWidget {
             : null,
         labelText: requiredField ? null : label,
         labelStyle: const TextStyle(fontWeight: FontWeight.w700, color: Colors.blueGrey),
+        errorMaxLines: 4,
+        helperMaxLines: 4,
         hintText: hint,
         hintStyle: TextStyle(color: Colors.blueGrey.withOpacity(0.82), fontSize: 13, fontWeight: FontWeight.w500),
         suffixIcon: suffixIcon,

@@ -37,6 +37,7 @@ class LoginTopIcon extends StatelessWidget {
           Container(
             width: 78,
             height: 78,
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(24),
@@ -48,10 +49,9 @@ class LoginTopIcon extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(
-              Icons.health_and_safety_outlined,
-              size: 42,
-              color: LoginPageStyles.lncmisBlue,
+            child: Image.asset(
+              'assets/logos/lesotho_coat_of_arms.png',
+              fit: BoxFit.contain,
             ),
           ),
           const SizedBox(height: 14),
