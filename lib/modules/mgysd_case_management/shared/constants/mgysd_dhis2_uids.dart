@@ -147,6 +147,29 @@ class MgysdDhis2Uids {
 
   // Referral
   static const String deReferralServiceCategory = 'kZTkQlqucTY';
+
+  /// Option set ssC5kc87Fhg (Service Category Referred For): the form shows the
+  /// option name, but DHIS2 only accepts the option code.
+  static const Map<String, String> referralServiceCategoryCodes = {
+    'Social Protection Support': 'SOCIAL PROTECTION SUPPORT',
+    'Health Support': 'HEALTH SUPPORT',
+    'Community Development': 'COMMUNITY DEVELOPMENT',
+    'NICR': 'NICR',
+    'Education': 'EDUCATION',
+    'Mental Health': 'MENTAL HEALTH',
+    'Legal / Justice Services': 'LEGAL / JUSTICE SERVICES',
+  };
+
+  /// Returns the DHIS2 option code for a service category name. Values that
+  /// are already codes are returned unchanged.
+  static String referralServiceCategoryCode(String value) {
+    final v = value.trim();
+    if (referralServiceCategoryCodes.containsValue(v)) return v;
+    for (final entry in referralServiceCategoryCodes.entries) {
+      if (entry.key.toLowerCase() == v.toLowerCase()) return entry.value;
+    }
+    return v;
+  }
   static const String deReferralReceivingOrganisation = 'GbUlBfHYiQW';
   static const String deReferralContactPerson = 'ZaxqcBTBZlX';
   static const String deReferralContactPhone = 'cOZ76AfIzNR';

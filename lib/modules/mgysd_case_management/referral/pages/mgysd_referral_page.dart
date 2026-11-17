@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:lncmis_mobile_app/app_state/current_user_state/current_user_state.dart';
 import 'package:lncmis_mobile_app/core/offline_db/offline_db_provider.dart';
+import 'package:lncmis_mobile_app/core/utils/app_util.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/workflow/helpers/mgysd_program_stage_event_helper.dart';
 import 'package:lncmis_mobile_app/modules/mgysd_case_management/shared/models/mgysd_case.dart';
@@ -1133,6 +1134,28 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
     return dbClient;
   }
 
+  String? _resolvedReferralEventId;
+
+  /// DHIS2 event UID for this referral. Reuses the record ID when it already
+  /// is a UID, otherwise generates one once and keeps it for later saves.
+  String get _referralEventId {
+    final cached = _resolvedReferralEventId;
+    if (cached != null) return cached;
+
+    final rawId = widget.mgysdCase.id.trim();
+    final lastPart = rawId.split('__').last.trim();
+    final String resolved;
+    if (MgysdProgramStageEventHelper.isValidUid(rawId)) {
+      resolved = rawId;
+    } else if (rawId.contains('__') &&
+        MgysdProgramStageEventHelper.isValidUid(lastPart)) {
+      resolved = lastPart;
+    } else {
+      resolved = AppUtil.getUid();
+    }
+    return _resolvedReferralEventId = resolved;
+  }
+
   _ServiceCategory? get _category {
     for (final item in _serviceCategories) {
       if (item.label == _selectedCategory) return item;
@@ -1195,13 +1218,75 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
           ? _referralDateController.text.trim()
           : _today();
 
+      // The list page opens this form with a local placeholder ID
+      // (<case>__referral__<timestamp>). DHIS2 only accepts 11-character
+      // UIDs, so the referral is stored under a real UID and the placeholder
+      // context is moved across to it.
+      final placeholderId = widget.mgysdCase.id.trim();
+      final eventId = _referralEventId;
+      var stageContext = await MgysdProgramStageEventHelper.getContext(
+        db: db,
+        eventId: placeholderId,
+      );
+      if (stageContext.isEmpty && eventId != placeholderId) {
+        stageContext = await MgysdProgramStageEventHelper.getContext(
+          db: db,
+          eventId: eventId,
+        );
+      }
+      final householdTei = (widget.householdTei ?? '').trim().isNotEmpty
+          ? (widget.householdTei ?? '').trim()
+          : (stageContext['householdTei'] ?? '').trim();
+      final subjectTei =
+          (stageContext['trackedEntityInstance'] ?? '').trim().isNotEmpty
+              ? (stageContext['trackedEntityInstance'] ?? '').trim()
+              : householdTei;
+      final programStage = (stageContext['programStage'] ?? '').trim().isNotEmpty
+          ? (stageContext['programStage'] ?? '').trim()
+          : MgysdDhis2Uids.referralStage;
+      final parentCaseId = (stageContext['parentCaseId'] ?? '').trim().isNotEmpty
+          ? (stageContext['parentCaseId'] ?? '').trim()
+          : MgysdProgramStageEventHelper.rootCaseId(placeholderId);
+
+      if (subjectTei.isEmpty) {
+        throw StateError(
+          'The client/household for this referral could not be identified.',
+        );
+      }
+
+      await MgysdProgramStageEventHelper.saveContext(
+        db: db,
+        eventId: eventId,
+        parentCaseId: parentCaseId,
+        stageKey: 'referral',
+        tableName: 'mgysd_referral',
+        programStage: programStage,
+        trackedEntityInstance: subjectTei,
+        enrollment: (stageContext['enrollment'] ?? '').trim(),
+        householdTei: householdTei,
+        householdName: widget.householdName ?? stageContext['householdName'],
+        clientName: widget.clientName ?? stageContext['clientName'],
+        subjectName: stageContext['subjectName'] ?? widget.clientName,
+        subjectRole: stageContext['subjectRole'],
+      );
+      if (eventId != placeholderId) {
+        await db.delete(
+          MgysdProgramStageEventHelper.contextTable,
+          where: 'eventId = ?',
+          whereArgs: [placeholderId],
+        );
+      }
+
       await MgysdProgramStageEventHelper.saveProgramStageEvent(
         db: db,
-        eventId: widget.mgysdCase.id,
+        eventId: eventId,
         status: status,
         eventDate: eventDate,
+        programStage: programStage,
+        trackedEntityInstance: subjectTei,
         dataValues: {
-          MgysdDhis2Uids.deReferralServiceCategory: _selectedCategory,
+          MgysdDhis2Uids.deReferralServiceCategory:
+              MgysdDhis2Uids.referralServiceCategoryCode(_selectedCategory),
           MgysdDhis2Uids.deReferralReceivingOrganisation: _receivingOrganisationController.text,
           MgysdDhis2Uids.deReferralContactPerson: _contactPersonController.text,
           MgysdDhis2Uids.deReferralContactPhone: _contactPhoneController.text,
@@ -1215,13 +1300,14 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
       await db.insert(
         'mgysd_referral',
         {
-          'id': widget.mgysdCase.id,
-          'caseId': widget.mgysdCase.id,
-          'householdTei': (widget.householdTei ?? '').trim(),
+          'id': eventId,
+          'caseId': eventId,
+          'householdTei': householdTei,
           'referralDate': eventDate,
           'status': status,
           'payloadJson': jsonEncode(_payload()),
           'updatedAt': now.toIso8601String(),
+          'syncStatus': 'not-synced',
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
@@ -1237,8 +1323,8 @@ class _MgysdReferralPageState extends State<MgysdReferralPage> {
       Navigator.pop(context, {
         'referralSaved': true,
         'status': status,
-        'caseId': widget.mgysdCase.id,
-        'householdTei': (widget.householdTei ?? '').trim(),
+        'caseId': eventId,
+        'householdTei': householdTei,
       });
     } catch (e) {
       _showSnack('Failed to save referral: $e');

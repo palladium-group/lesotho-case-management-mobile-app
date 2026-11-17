@@ -9,6 +9,118 @@ class MgysdProgramStageEventHelper {
     return parts.isNotEmpty ? parts.first : id;
   }
 
+  /// A DHIS2 UID is exactly 11 characters: a letter followed by 10
+  /// letters/digits. Local placeholder IDs such as
+  /// `<case>__referral__<timestamp>` are NOT valid and are rejected by sync.
+  static bool isValidUid(String? value) {
+    return RegExp(r'^[A-Za-z][A-Za-z0-9]{10}$').hasMatch((value ?? '').trim());
+  }
+
+  /// Finds the enrollment UID of [trackedEntityInstance] in [program] from the
+  /// local enrollment table. Returns '' when nothing is found.
+  static Future<String> resolveEnrollment({
+    required Database db,
+    required String trackedEntityInstance,
+    required String program,
+  }) async {
+    final tei = trackedEntityInstance.trim();
+    if (tei.isEmpty || !await tableExists(db, 'enrollment')) return '';
+    try {
+      final rows = await db.query(
+        'enrollment',
+        columns: ['enrollment'],
+        where: 'trackedEntityInstance = ? AND program = ?',
+        whereArgs: [tei, program.trim()],
+        orderBy: 'enrollmentDate DESC',
+        limit: 1,
+      );
+      if (rows.isEmpty) return '';
+      return (rows.first['enrollment'] ?? '').toString().trim();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  /// Resolves the organisation unit an event must be reported under.
+  ///
+  /// Order: the event's enrollment -> the subject's enrollment in the event
+  /// program -> any enrollment of the subject -> the subject TEI itself ->
+  /// the same lookups for the household the subject belongs to.
+  /// Returns '' when no valid org unit UID is found.
+  static Future<String> resolveOrgUnit({
+    required Database db,
+    String? enrollment,
+    String? trackedEntityInstance,
+    String? program,
+    String? householdTei,
+  }) async {
+    Future<String> first(
+      String table,
+      String where,
+      List<Object?> args, {
+      String? orderBy,
+    }) async {
+      try {
+        if (!await tableExists(db, table)) return '';
+        final rows = await db.query(
+          table,
+          columns: ['orgUnit'],
+          where: where,
+          whereArgs: args,
+          orderBy: orderBy,
+        );
+        for (final row in rows) {
+          final value = (row['orgUnit'] ?? '').toString().trim();
+          if (isValidUid(value)) return value;
+        }
+      } catch (_) {}
+      return '';
+    }
+
+    final enrollmentId = (enrollment ?? '').trim();
+    final programId = (program ?? '').trim();
+
+    if (enrollmentId.isNotEmpty) {
+      final found = await first('enrollment', 'enrollment = ?', [enrollmentId]);
+      if (found.isNotEmpty) return found;
+    }
+
+    final owners = <String>[];
+    for (final candidate in [trackedEntityInstance, householdTei]) {
+      final value = (candidate ?? '').trim();
+      if (value.isNotEmpty && !owners.contains(value)) owners.add(value);
+    }
+
+    for (final tei in owners) {
+      if (programId.isNotEmpty) {
+        final found = await first(
+          'enrollment',
+          'trackedEntityInstance = ? AND program = ?',
+          [tei, programId],
+          orderBy: 'enrollmentDate DESC',
+        );
+        if (found.isNotEmpty) return found;
+      }
+
+      var found = await first(
+        'enrollment',
+        'trackedEntityInstance = ?',
+        [tei],
+        orderBy: 'enrollmentDate DESC',
+      );
+      if (found.isNotEmpty) return found;
+
+      found = await first(
+        'tracked_entity_instance',
+        'trackedEntityInstance = ?',
+        [tei],
+      );
+      if (found.isNotEmpty) return found;
+    }
+
+    return '';
+  }
+
   static Future<bool> tableExists(Database db, String tableName) async {
     final rows = await db.rawQuery(
       "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
@@ -213,7 +325,7 @@ class MgysdProgramStageEventHelper {
     final resolvedTei = (trackedEntityInstance ?? '').trim().isNotEmpty
         ? trackedEntityInstance!.trim()
         : (context['trackedEntityInstance'] ?? '').trim();
-    final resolvedEnrollment = (enrollment ?? '').trim().isNotEmpty
+    var resolvedEnrollment = (enrollment ?? '').trim().isNotEmpty
         ? enrollment!.trim()
         : (context['enrollment'] ?? '').trim();
     final parentCaseId = context['parentCaseId']?.trim().isNotEmpty == true
@@ -226,6 +338,31 @@ class MgysdProgramStageEventHelper {
         'Cannot save sync event $eventId: program, program stage, or tracked entity is missing.',
       );
     }
+
+    // Callers such as Service Provision and Referral do not always know the
+    // enrollment / organisation unit. Resolve them from the local database so
+    // the event is never stored with an empty orgUnit (DHIS2 rejects those).
+    if (!isValidUid(resolvedEnrollment)) {
+      final found = await resolveEnrollment(
+        db: db,
+        trackedEntityInstance: resolvedTei,
+        program: resolvedProgram,
+      );
+      if (found.isNotEmpty) resolvedEnrollment = found;
+    }
+
+    var resolvedOrgUnit = (orgUnit ?? '').trim();
+    if (!isValidUid(resolvedOrgUnit)) {
+      resolvedOrgUnit = await resolveOrgUnit(
+        db: db,
+        enrollment: resolvedEnrollment,
+        trackedEntityInstance: resolvedTei,
+        program: resolvedProgram,
+        householdTei: context['householdTei'],
+      );
+    }
+    // If it is still empty the record is kept locally; synchronization
+    // retries the lookup and logs the event when it cannot be repaired.
 
     await db.insert(
       'events',
@@ -240,7 +377,7 @@ class MgysdProgramStageEventHelper {
         'enrollment': resolvedEnrollment,
         'program': resolvedProgram,
         'programStage': resolvedStage,
-        'orgUnit': orgUnit ?? '',
+        'orgUnit': resolvedOrgUnit,
         'status': status,
         'eventDate': eventDate,
         'date': eventDate,
