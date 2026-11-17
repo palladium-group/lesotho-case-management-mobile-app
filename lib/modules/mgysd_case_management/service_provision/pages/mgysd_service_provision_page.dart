@@ -1235,18 +1235,46 @@ class _MgysdServiceProvisionPageState extends State<MgysdServiceProvisionPage> {
       final eventId = _newDhis2Uid();
       final date = serviceDate.trim().isNotEmpty ? serviceDate.trim() : _today();
 
+      final program = _isHouseholdTarget
+          ? MgysdDhis2Uids.enrolledHouseholdsProgram
+          : MgysdDhis2Uids.familyMemberTrackerProgram;
+      final programStage = _isHouseholdTarget
+          ? MgysdDhis2Uids.enrolledServiceProvisionStage
+          : MgysdDhis2Uids.familyServiceProvisionStage;
+      final enrollment = await MgysdProgramStageEventHelper.resolveEnrollment(
+        db: db,
+        trackedEntityInstance: _targetTei,
+        program: program,
+      );
+
+      // Register the event so that (a) its organisation unit can be resolved
+      // from the household when the member has none, and (b) the service row
+      // is flagged as synced once DHIS2 accepts the event.
+      await MgysdProgramStageEventHelper.saveContext(
+        db: db,
+        eventId: eventId,
+        parentCaseId: _caseRootId,
+        stageKey: 'service_provision',
+        tableName: 'mgysd_service_provision',
+        programStage: programStage,
+        trackedEntityInstance: _targetTei,
+        enrollment: enrollment,
+        householdTei: _householdTei,
+        householdName: widget.householdName,
+        clientName: widget.clientName,
+        subjectName: _targetName,
+        subjectRole: _targetRole,
+      );
+
       await MgysdProgramStageEventHelper.saveProgramStageEvent(
         db: db,
         eventId: eventId,
         status: 'COMPLETED',
         eventDate: date,
-        program: _isHouseholdTarget
-            ? MgysdDhis2Uids.enrolledHouseholdsProgram
-            : MgysdDhis2Uids.familyMemberTrackerProgram,
-        programStage: _isHouseholdTarget
-            ? MgysdDhis2Uids.enrolledServiceProvisionStage
-            : MgysdDhis2Uids.familyServiceProvisionStage,
+        program: program,
+        programStage: programStage,
         trackedEntityInstance: _targetTei,
+        enrollment: enrollment,
         dataValues: {
           MgysdDhis2Uids.deServiceProvided: serviceProvided,
           MgysdDhis2Uids.deServiceProvider: provider,

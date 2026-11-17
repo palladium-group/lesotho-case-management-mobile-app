@@ -17,6 +17,7 @@ import 'package:lncmis_mobile_app/core/offline_db/tracked_entity_instance_offlin
 import 'package:lncmis_mobile_app/core/offline_db/tracked_entity_instance_offline/tracked_entity_instance_offline_provider.dart';
 import 'package:lncmis_mobile_app/core/services/http_service.dart';
 import 'package:lncmis_mobile_app/core/services/local_notification_service.dart';
+import 'package:lncmis_mobile_app/core/utils/app_util.dart';
 import 'package:lncmis_mobile_app/core/utils/form_util.dart';
 import 'package:lncmis_mobile_app/core/utils/tracked_entity_instance_util.dart';
 import 'package:lncmis_mobile_app/models/app_logs.dart';
@@ -27,6 +28,7 @@ import 'package:lncmis_mobile_app/models/tei_relationship.dart';
 import 'package:lncmis_mobile_app/models/tracked_entity_instance.dart';
 
 import '../../modules/mgysd_case_management/shared/constants/mgysd_dhis2_uids.dart';
+import '../../modules/mgysd_case_management/workflow/helpers/mgysd_program_stage_event_helper.dart';
 
 class SynchronizationService {
   late HttpService httpClient;
@@ -364,16 +366,26 @@ class SynchronizationService {
         .getRelationshipCountBySyncStatus(offlineSyncStatus);
   }
 
+  /// Number of enrollments still waiting to be uploaded.
+  ///
+  /// This used to sum enrollments per (assigned org unit x program). MGYSD
+  /// cases are enrolled at community-council level, which is usually *below*
+  /// the user's assigned org unit, so the count came back 0 and the upload
+  /// step was skipped entirely. Count by sync status instead - the same rows
+  /// getTeiEnrollmentFromOfflineDb() actually uploads.
   Future<int> getOfflineEnrollmentCount(CurrentUser currentUser) async {
-    int enrollmentsCount = 0;
-    for (String? orgUnit in currentUser.userOrgUnitIds ?? []) {
-      for (String? program in currentUser.programs ?? []) {
-        int count = await EnrollmentOfflineProvider()
-            .getOfflineEnrollmentsCount(program, orgUnit);
-        enrollmentsCount += count;
-      }
+    try {
+      final db = await OfflineDbProvider().db;
+      if (db == null) return 0;
+      final rows = await db.rawQuery(
+        'SELECT COUNT(*) AS c FROM enrollment WHERE syncStatus = ?',
+        [offlineSyncStatus],
+      );
+      return int.tryParse('${rows.first['c'] ?? 0}') ?? 0;
+    } catch (error) {
+      await _addSyncLog('getOfflineEnrollmentCount: $error');
+      return 0;
     }
-    return enrollmentsCount;
   }
 
   Future<int> getTotalFromPaginator(String url,
@@ -644,11 +656,32 @@ class SynchronizationService {
         -1)
         .toList();
 
+    if (!ignoreUnsyncedTeiFilter) {
+      for (final enrollment in teiEnrollments) {
+        final teiId = (enrollment.trackedEntityInstance ?? '').trim();
+        final waitingForTei =
+            unsyncedTeis.any((tei) => tei.trackedEntityInstance == teiId);
+        if (waitingForTei) {
+          await _addSyncLog(
+            'ENROLLMENT SKIPPED [${enrollment.enrollment}]: tracked entity '
+                '"$teiId" is not uploaded yet (program ${enrollment.program}).',
+          );
+        }
+      }
+    }
+
     enrollments = _deduplicateEnrollments(enrollments);
 
     if (enrollments.isEmpty) {
       return false;
     }
+
+    final requestSummary = enrollments
+        .map((e) => '[${e.enrollment}] tei=${e.trackedEntityInstance} '
+            'program=${e.program} orgUnit=${e.orgUnit} '
+            'date=${e.enrollmentDate} status=${e.status}')
+        .join(' | ');
+    await _addSyncLog('ENROLLMENT SYNC REQUEST: $requestSummary');
 
     Map body = {};
     body['enrollments'] = enrollments
@@ -663,6 +696,9 @@ class SynchronizationService {
         url,
         json.encode(body),
         queryParameters: queryParameters,
+      );
+      await _addSyncLog(
+        'ENROLLMENT SYNC RESPONSE ${response.statusCode}: ${response.body}',
       );
       if (response.statusCode >= 400 && response.statusCode != 409) {
         var message = await _getHttpResponseAppLogs(response.body);
@@ -1049,17 +1085,7 @@ class SynchronizationService {
       if (rows.isEmpty) return;
 
       final tableName = (rows.first['tableName'] ?? '').toString().trim();
-      const allowedTables = <String>{
-        'mgysd_initial_risk_assessment',
-        'mgysd_social_investigation',
-        'mgysd_care_plan',
-        'mgysd_referral',
-        'mgysd_monitoring',
-        'mgysd_case_closure',
-        'mgysd_service_provision',
-      };
-
-      if (!allowedTables.contains(tableName)) return;
+      if (!_mgysdWorkflowTables.contains(tableName)) return;
 
       final tableExists = await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
@@ -1513,6 +1539,126 @@ class SynchronizationService {
     }
   }
 
+  static const Set<String> _mgysdWorkflowTables = <String>{
+    'mgysd_initial_risk_assessment',
+    'mgysd_social_investigation',
+    'mgysd_care_plan',
+    'mgysd_referral',
+    'mgysd_monitoring',
+    'mgysd_case_closure',
+    'mgysd_service_provision',
+  };
+
+  /// Repairs locally saved MGYSD workflow events that DHIS2 would reject:
+  ///
+  /// 1. Events stored under a local placeholder ID such as
+  ///    `<case>__referral__<timestamp>` are re-keyed to a real DHIS2 UID.
+  /// 2. Events saved without an organisation unit (older Service Provision
+  ///    and Referral records) get it from the client's enrollment/household.
+  ///
+  /// The [event] object is updated in place so the current upload uses the
+  /// repaired values.
+  Future<void> _repairMgysdEventBeforeUpload(Events event) async {
+    try {
+      final program = (event.program ?? '').trim();
+      if (!_eventRequiresTrackedEntity(program)) return;
+
+      var eventId = (event.event ?? '').trim();
+      if (eventId.isEmpty) return;
+
+      final needsUid = _isInvalidDhis2Uid(eventId) && eventId.contains('__');
+      final needsOrgUnit = _isInvalidDhis2Uid((event.orgUnit ?? '').trim());
+      if (!needsUid && !needsOrgUnit) return;
+
+      final db = await OfflineDbProvider().db;
+      if (db == null) return;
+
+      if (needsUid) {
+        final oldId = eventId;
+        final newId = AppUtil.getUid();
+        final oldContext = await MgysdProgramStageEventHelper.getContext(
+          db: db,
+          eventId: oldId,
+        );
+
+        await _reconcileLocalEventUid(
+          localEventId: oldId,
+          serverEventId: newId,
+        );
+
+        final tableName = (oldContext['tableName'] ?? '').trim();
+        if (_mgysdWorkflowTables.contains(tableName) &&
+            await MgysdProgramStageEventHelper.tableExists(db, tableName)) {
+          final columns =
+              await MgysdProgramStageEventHelper.tableColumns(db, tableName);
+          for (final column in const ['caseId', 'eventId', 'id']) {
+            if (!columns.contains(column)) continue;
+            await db.update(
+              tableName,
+              {column: newId},
+              where: '$column = ?',
+              whereArgs: [oldId],
+            );
+          }
+        }
+
+        event.event = newId;
+        eventId = newId;
+        await _addSyncLog(
+          'EVENT [$oldId]: local placeholder ID replaced with DHIS2 UID '
+              '"$newId" before upload.',
+        );
+      }
+
+      if (needsOrgUnit) {
+        final context = await MgysdProgramStageEventHelper.getContext(
+          db: db,
+          eventId: eventId,
+        );
+        final rows = await db.query(
+          'events',
+          where: 'event = ?',
+          whereArgs: [eventId],
+          limit: 1,
+        );
+        final storedEnrollment = rows.isEmpty
+            ? ''
+            : (rows.first['enrollment'] ?? '').toString().trim();
+        final enrollment = (event.enrollment ?? '').trim().isNotEmpty
+            ? (event.enrollment ?? '').trim()
+            : storedEnrollment.isNotEmpty
+                ? storedEnrollment
+                : (context['enrollment'] ?? '').trim();
+
+        final orgUnit = await MgysdProgramStageEventHelper.resolveOrgUnit(
+          db: db,
+          enrollment: enrollment,
+          trackedEntityInstance: event.trackedEntityInstance,
+          program: program,
+          householdTei: context['householdTei'],
+        );
+
+        if (orgUnit.isNotEmpty) {
+          await db.update(
+            'events',
+            {'orgUnit': orgUnit},
+            where: 'event = ?',
+            whereArgs: [eventId],
+          );
+          event.orgUnit = orgUnit;
+          await _addSyncLog(
+            'EVENT [$eventId]: missing orgUnit repaired with "$orgUnit" '
+                'before upload.',
+          );
+        }
+      }
+    } catch (error) {
+      await _addSyncLog(
+        'EVENT REPAIR FAILED [${event.event}]: $error',
+      );
+    }
+  }
+
   Future<bool> uploadTeiEventsToTheServer(
       List<Events> teiEvents, {
         bool checkEnrollments = true,
@@ -1533,6 +1679,8 @@ class SynchronizationService {
     var initialRiskUpdateFailed = false;
 
     for (final event in teiEvents) {
+      await _repairMgysdEventBeforeUpload(event);
+
       final eventId = (event.event ?? '').trim();
       final program = (event.program ?? '').trim();
       final programStage = (event.programStage ?? '').trim();
@@ -1624,9 +1772,16 @@ class SynchronizationService {
             continue;
           }
 
+          // Referrals saved before the option-code fix stored the category
+          // name ("Health Support"); DHIS2 only accepts the code.
+          final uploadValue =
+              dataElement == MgysdDhis2Uids.deReferralServiceCategory
+                  ? MgysdDhis2Uids.referralServiceCategoryCode(value)
+                  : value;
+
           cleanDataValues.add({
             'dataElement': dataElement,
-            'value': value,
+            'value': uploadValue,
           });
         }
       }
