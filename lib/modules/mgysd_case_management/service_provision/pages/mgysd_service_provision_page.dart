@@ -1138,25 +1138,6 @@ class _MgysdServiceProvisionPageState extends State<MgysdServiceProvisionPage> {
                             ),
                           ),
                           const SizedBox(height: 10),
-                          DropdownButtonFormField<String>(
-                            value: goalStatus,
-                            isExpanded: true,
-                            items: _goalStatusOptions.map((item) {
-                              return DropdownMenuItem<String>(
-                                value: item['value'],
-                                child: Text(item['label']!),
-                              );
-                            }).toList(),
-                            onChanged: (value) {
-                              if (value == null) return;
-                              setSheetState(() => goalStatus = value);
-                            },
-                            decoration: const InputDecoration(
-                              labelText: 'Goal status after service',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
                           TextFormField(
                             controller: notes,
                             maxLines: 3,

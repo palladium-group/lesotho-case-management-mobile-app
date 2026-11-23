@@ -146,7 +146,7 @@ class _HeroHeader extends StatelessWidget {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
                   child: Image.asset(
-                    'assets/logos/app-logo.png',
+                    'assets/logos/lesotho_coat_of_arms.png',
                     fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) {
                       return const Icon(
